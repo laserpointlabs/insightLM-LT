@@ -1,0 +1,3 @@
+provider: "openai"
+apiKey: "${OPENAI_API_KEY}"
+model: "gpt-4"

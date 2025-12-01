@@ -1,0 +1,2 @@
+dataDir: "%APPDATA%/insightLM-LT"
+llmProvider: "openai"

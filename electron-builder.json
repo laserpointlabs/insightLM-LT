@@ -1,0 +1,22 @@
+{
+  "appId": "com.insightlm.lt",
+  "productName": "insightLM-LT",
+  "directories": {
+    "output": "out"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*",
+    "config/**/*",
+    "mcp-servers/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": "nsis",
+    "icon": "build/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}

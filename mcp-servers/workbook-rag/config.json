@@ -1,0 +1,7 @@
+{
+  "name": "workbook-rag",
+  "description": "Vector search for workbook documents",
+  "command": "python",
+  "args": ["server.py"],
+  "enabled": true
+}
