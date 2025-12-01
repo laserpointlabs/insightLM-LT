@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as yaml from "js-yaml";
+import { app } from "electron";
 
 export interface AppConfig {
   dataDir: string;
@@ -34,11 +35,24 @@ function expandPath(pathStr: string): string {
 }
 
 function getConfigDir(): string {
-  const isDev = process.env.NODE_ENV === "development";
-  if (isDev) {
-    return path.join(process.cwd(), "config");
+  // Check if config directory exists in project root (development)
+  const projectConfigDir = path.join(process.cwd(), "config");
+  if (fs.existsSync(projectConfigDir)) {
+    return projectConfigDir;
   }
-  return path.join(process.resourcesPath || process.cwd(), "config");
+
+  // In production (packaged), use resourcesPath/config
+  // Also check app.isPackaged if app is available
+  try {
+    if (app && app.isPackaged && process.resourcesPath) {
+      return path.join(process.resourcesPath, "config");
+    }
+  } catch (e) {
+    // app might not be available in some contexts
+  }
+
+  // Fallback to project root
+  return projectConfigDir;
 }
 
 export class ConfigService {

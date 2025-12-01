@@ -57,7 +57,21 @@ export class MCPService {
       return;
     }
 
-    const fullCommandPath = path.join(serverPath, config.command);
+    // Check if command is a system executable (like python, python3, node)
+    // or a relative/absolute path
+    let fullCommandPath: string;
+    if (path.isAbsolute(config.command)) {
+      // Absolute path - use as is
+      fullCommandPath = config.command;
+    } else if (config.command.includes(path.sep) || config.command.includes("/")) {
+      // Relative path - join with serverPath
+      fullCommandPath = path.join(serverPath, config.command);
+    } else {
+      // System command (python, python3, node, etc.) - use as is
+      // spawn will find it in PATH
+      fullCommandPath = config.command;
+    }
+
     const args = config.args.map((arg) =>
       arg === "server.py" ? path.join(serverPath, "server.py") : arg,
     );
@@ -71,6 +85,7 @@ export class MCPService {
       cwd: serverPath,
       env,
       stdio: "pipe",
+      shell: process.platform === "win32", // Use shell on Windows to find python in PATH
     });
 
     proc.on("error", (error) => {

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import * as path from "path";
 import * as fs from "fs";
+import * as http from "http";
 import { setupWorkbookIPC } from "./ipc/workbooks";
 import { setupFileIPC } from "./ipc/files";
 import { setupArchiveIPC } from "./ipc/archive";
@@ -11,7 +12,38 @@ import { setupUpdater } from "./updater";
 
 let mainWindow: BrowserWindow | null = null;
 
-function createWindow() {
+// Function to check if a port is available (Vite is running)
+function checkPort(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(`http://localhost:${port}`, (res) => {
+      resolve(res.statusCode === 200 || res.statusCode === 304);
+    });
+    req.on("error", () => resolve(false));
+    req.setTimeout(500, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+// Function to find Vite dev server port
+async function findVitePort(): Promise<number> {
+  // Try common Vite ports
+  const portsToTry = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180];
+
+  for (const port of portsToTry) {
+    if (await checkPort(port)) {
+      console.log(`Found Vite dev server on port ${port}`);
+      return port;
+    }
+  }
+
+  // Default fallback
+  console.warn("Could not find Vite dev server, using default port 5173");
+  return 5173;
+}
+
+async function createWindow() {
   // Determine preload path - in dev, __dirname is dist-electron, in prod it's the app.asar
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
   const preloadPath = path.join(__dirname, "preload.js");
@@ -28,11 +60,13 @@ function createWindow() {
       nodeIntegration: false,
     },
     titleBarStyle: "default",
+    show: false, // Don't show until ready
   });
 
   // Log when the window is ready
   mainWindow.webContents.once("did-finish-load", () => {
     console.log("Window finished loading");
+    mainWindow?.show(); // Show window when content is loaded
     // Check if electronAPI is available in the renderer
     mainWindow?.webContents.executeJavaScript(`
       console.log("electronAPI available:", typeof window.electronAPI !== 'undefined');
@@ -42,10 +76,22 @@ function createWindow() {
 
   // Load the app
   if (isDev) {
-    mainWindow.loadURL("http://localhost:5173");
-    mainWindow.webContents.openDevTools();
+    // Wait for Vite to be ready, then load
+    try {
+      const port = await findVitePort();
+      const url = `http://localhost:${port}`;
+      console.log(`Loading dev server from ${url}`);
+      await mainWindow.loadURL(url);
+      mainWindow.webContents.openDevTools();
+    } catch (error) {
+      console.error("Error finding Vite port:", error);
+      // Fallback to default port
+      await mainWindow.loadURL("http://localhost:5173");
+      mainWindow.webContents.openDevTools();
+    }
   } else {
-    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    await mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    mainWindow.show();
   }
 
   mainWindow.on("closed", () => {
@@ -99,7 +145,12 @@ app.whenReady().then(() => {
 
   // LLM IPC handlers
   ipcMain.handle("llm:chat", async (_, messages: any[]) => {
-    return await llmService.chat(messages);
+    try {
+      return await llmService.chat(messages);
+    } catch (error) {
+      console.error("Error in LLM chat:", error);
+      throw error;
+    }
   });
 
   // File dialog handlers
@@ -117,11 +168,15 @@ app.whenReady().then(() => {
     return result.canceled ? [] : result.filePaths;
   });
 
-  createWindow();
+  createWindow().catch((error) => {
+    console.error("Error creating window:", error);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow().catch((error) => {
+        console.error("Error creating window:", error);
+      });
     }
   });
 

@@ -4,17 +4,24 @@ import { Chat } from "./components/Sidebar/Chat";
 import { DocumentViewer } from "./components/DocumentViewer/DocumentViewer";
 import { SimpleStats } from "./components/SimpleStats";
 import { DashboardBuilder } from "./components/Dashboard/DashboardBuilder";
+import { ResizablePane } from "./components/ResizablePane";
 import { useDocumentStore } from "./store/documentStore";
+import { useLayoutStore } from "./store/layoutStore";
 
 function App() {
   const { openDocuments, closeDocument } = useDocumentStore();
+  const { sidebarWidth, chatHeight, setSidebarWidth, setChatHeight } = useLayoutStore();
   const [activeView, setActiveView] = useState<"documents" | "dashboard">(
     "documents",
   );
 
   return (
     <div className="flex h-screen w-screen bg-gray-50">
-      <div className="flex w-64 flex-col border-r border-gray-200 bg-white">
+      {/* Left Sidebar */}
+      <div
+        className="flex flex-col border-r border-gray-200 bg-white"
+        style={{ width: `${sidebarWidth}px` }}
+      >
         <div className="border-b border-gray-200 p-3">
           <h1 className="text-lg font-bold">insightLM-LT</h1>
         </div>
@@ -41,10 +48,25 @@ function App() {
           </button>
         </div>
         <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Workbooks View */}
           <div className="flex-1 overflow-hidden">
             <WorkbooksView />
           </div>
-          <div className="flex h-64 flex-col border-t border-gray-200">
+
+          {/* Vertical Resizable Separator */}
+          <ResizablePane
+            direction="vertical"
+            onResize={setChatHeight}
+            initialSize={chatHeight}
+            minSize={150}
+            maxSize={600}
+          />
+
+          {/* Chat and Stats Area */}
+          <div
+            className="flex flex-col border-t border-gray-200"
+            style={{ height: `${chatHeight}px` }}
+          >
             <div className="flex-1 overflow-hidden">
               <Chat />
             </div>
@@ -52,6 +74,17 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* Horizontal Resizable Separator */}
+      <ResizablePane
+        direction="horizontal"
+        onResize={setSidebarWidth}
+        initialSize={sidebarWidth}
+        minSize={200}
+        maxSize={800}
+      />
+
+      {/* Main Content Area */}
       <div className="flex-1 p-4">
         <div className="h-full rounded-lg border border-gray-200 bg-white shadow-sm">
           {activeView === "dashboard" ? (

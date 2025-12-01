@@ -9,7 +9,12 @@ export function setupWorkbookIPC(configService: any) {
   workbookService.initialize(appConfig.dataDir);
 
   ipcMain.handle("workbook:create", async (_, name: string) => {
-    return workbookService.createWorkbook(name);
+    try {
+      return await workbookService.createWorkbook(name);
+    } catch (error) {
+      console.error("Error creating workbook:", error);
+      throw error;
+    }
   });
 
   ipcMain.handle("workbook:getAll", async () => {
@@ -23,15 +28,30 @@ export function setupWorkbookIPC(configService: any) {
   });
 
   ipcMain.handle("workbook:get", async (_, id: string) => {
-    return workbookService.getWorkbook(id);
+    try {
+      return await workbookService.getWorkbook(id);
+    } catch (error) {
+      console.error("Error getting workbook:", error);
+      throw error;
+    }
   });
 
   ipcMain.handle("workbook:rename", async (_, id: string, newName: string) => {
-    workbookService.renameWorkbook(id, newName);
+    try {
+      await workbookService.renameWorkbook(id, newName);
+    } catch (error) {
+      console.error("Error renaming workbook:", error);
+      throw error;
+    }
   });
 
   ipcMain.handle("workbook:delete", async (_, id: string) => {
-    workbookService.deleteWorkbook(id);
+    try {
+      await workbookService.deleteWorkbook(id);
+    } catch (error) {
+      console.error("Error deleting workbook:", error);
+      throw error;
+    }
   });
 }
 

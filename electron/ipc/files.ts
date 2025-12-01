@@ -10,28 +10,48 @@ export function setupFileIPC() {
   ipcMain.handle(
     "file:add",
     async (_, workbookId: string, sourcePath: string, filename?: string) => {
-      fileService.addDocument(workbookId, sourcePath, filename);
+      try {
+        await fileService.addDocument(workbookId, sourcePath, filename);
+      } catch (error) {
+        console.error("Error adding file:", error);
+        throw error;
+      }
     },
   );
 
   ipcMain.handle(
     "file:read",
     async (_, workbookId: string, relativePath: string) => {
-      return fileService.readDocument(workbookId, relativePath);
+      try {
+        return await fileService.readDocument(workbookId, relativePath);
+      } catch (error) {
+        console.error("Error reading file:", error);
+        throw error;
+      }
     },
   );
 
   ipcMain.handle(
     "file:rename",
     async (_, workbookId: string, oldPath: string, newName: string) => {
-      fileService.renameDocument(workbookId, oldPath, newName);
+      try {
+        await fileService.renameDocument(workbookId, oldPath, newName);
+      } catch (error) {
+        console.error("Error renaming file:", error);
+        throw error;
+      }
     },
   );
 
   ipcMain.handle(
     "file:delete",
     async (_, workbookId: string, relativePath: string) => {
-      fileService.deleteDocument(workbookId, relativePath);
+      try {
+        await fileService.deleteDocument(workbookId, relativePath);
+      } catch (error) {
+        console.error("Error deleting file:", error);
+        throw error;
+      }
     },
   );
 
@@ -43,11 +63,16 @@ export function setupFileIPC() {
       relativePath: string,
       targetWorkbookId: string,
     ) => {
-      fileService.moveDocument(
-        sourceWorkbookId,
-        relativePath,
-        targetWorkbookId,
-      );
+      try {
+        await fileService.moveDocument(
+          sourceWorkbookId,
+          relativePath,
+          targetWorkbookId,
+        );
+      } catch (error) {
+        console.error("Error moving file:", error);
+        throw error;
+      }
     },
   );
 }
