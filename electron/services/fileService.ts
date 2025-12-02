@@ -63,6 +63,58 @@ export class FileService {
     return fs.readFileSync(filePath, "utf-8");
   }
 
+  getFilePath(workbookId: string, relativePath: string): string {
+    const workbookPath = path.join(
+      this.workbookService["workbooksDir"],
+      workbookId,
+    );
+    const filePath = path.join(workbookPath, relativePath);
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found: ${relativePath}`);
+    }
+
+    return filePath;
+  }
+
+  readBinary(workbookId: string, relativePath: string): Buffer {
+    const workbookPath = path.join(
+      this.workbookService["workbooksDir"],
+      workbookId,
+    );
+    const filePath = path.join(workbookPath, relativePath);
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found: ${relativePath}`);
+    }
+
+    return fs.readFileSync(filePath);
+  }
+
+  writeDocument(
+    workbookId: string,
+    relativePath: string,
+    content: string,
+  ): void {
+    const workbookPath = path.join(
+      this.workbookService["workbooksDir"],
+      workbookId,
+    );
+    const filePath = path.join(workbookPath, relativePath);
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found: ${relativePath}`);
+    }
+
+    fs.writeFileSync(filePath, content, "utf-8");
+
+    // Update workbook metadata timestamp
+    this.updateWorkbookMetadata(workbookId, (metadata) => {
+      metadata.updated = new Date().toISOString();
+      return metadata;
+    });
+  }
+
   renameDocument(
     workbookId: string,
     oldRelativePath: string,

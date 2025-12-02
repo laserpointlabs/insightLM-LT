@@ -24,3 +24,6 @@ Thumbs.db
 # Electron
 out/
 build/
+
+# Specstory
+.specstory/

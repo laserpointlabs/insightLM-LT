@@ -52,6 +52,12 @@
 - ✅ Document type detection
 - ✅ Archive system
 - ✅ Simple stats (workbook count, document count)
+- ✅ VSCode-style editing (text files editable by default)
+- ✅ Save with Ctrl+S keyboard shortcut
+- ✅ Unsaved changes indicator
+- ✅ Mermaid diagram rendering in markdown
+- ✅ Dual-pane markdown editor (edit/preview split view like VSCode)
+- ✅ Port cleanup utility (automatically kills stale Vite ports before dev start)
 
 ### Integration
 
@@ -71,10 +77,11 @@
 
 ### Document Viewers
 
-- 🟡 PDF viewer (placeholder - needs react-pdf integration)
-- ✅ Markdown viewer (working)
+- ✅ PDF viewer (working with react-pdf, page navigation, and zoom controls)
+- ✅ Markdown viewer (working with Mermaid diagram support, dual-pane edit/preview mode, and Tailwind Typography styling)
 - ✅ CSV viewer (working)
-- ✅ Text viewer (working)
+- ✅ Text viewer (working with syntax highlighting for multiple languages)
+- ✅ File editing (all text-based files editable by default, binary files read-only)
 
 ### MCP Servers
 

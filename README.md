@@ -8,7 +8,9 @@ A lightweight desktop application for workbook management and AI chat.
 - **Document Management**: Add, view, rename, delete, and move documents
 - **Archive System**: Archive workbooks and files for later access
 - **AI Chat**: Chat with your documents using OpenAI, Claude, or Ollama
-- **Document Viewers**: View markdown, CSV, PDF, and text files
+- **Document Viewers**: View markdown (with Mermaid diagrams), CSV, PDF, and text files
+- **File Editing**: Edit text-based files directly (markdown, code, config files, etc.) with syntax highlighting
+- **Markdown Preview**: Dual-pane markdown editor with live preview (edit/preview split view like VSCode)
 - **Drag and Drop**: Easily add files by dragging from Windows Explorer
 - **MCP Server Support**: Pluggable MCP servers for extensibility
 - **Simple UI**: Clean, intuitive interface with minimal clicks
@@ -35,6 +37,9 @@ cd ../..
 
 # Run in development mode
 npm run dev
+
+# If you get port conflicts, clean up ports manually:
+npm run clean
 ```
 
 ### Configuration

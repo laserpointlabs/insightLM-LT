@@ -20,6 +20,12 @@ try {
       ipcRenderer.invoke("file:add", workbookId, sourcePath, filename),
     read: (workbookId: string, relativePath: string) =>
       ipcRenderer.invoke("file:read", workbookId, relativePath),
+    write: (
+      workbookId: string,
+      relativePath: string,
+      content: string,
+    ) =>
+      ipcRenderer.invoke("file:write", workbookId, relativePath, content),
     rename: (workbookId: string, oldPath: string, newName: string) =>
       ipcRenderer.invoke("file:rename", workbookId, oldPath, newName),
     delete: (workbookId: string, relativePath: string) =>
@@ -35,6 +41,10 @@ try {
         relativePath,
         targetWorkbookId,
       ),
+    getPath: (workbookId: string, relativePath: string) =>
+      ipcRenderer.invoke("file:getPath", workbookId, relativePath),
+    readBinary: (workbookId: string, relativePath: string) =>
+      ipcRenderer.invoke("file:readBinary", workbookId, relativePath),
   },
 
   // Archive operations

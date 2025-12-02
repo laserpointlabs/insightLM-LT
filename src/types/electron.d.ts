@@ -14,6 +14,11 @@ export interface ElectronAPI {
       filename?: string,
     ) => Promise<void>;
     read: (workbookId: string, relativePath: string) => Promise<string>;
+    write: (
+      workbookId: string,
+      relativePath: string,
+      content: string,
+    ) => Promise<void>;
     rename: (
       workbookId: string,
       oldPath: string,
@@ -25,6 +30,8 @@ export interface ElectronAPI {
       relativePath: string,
       targetWorkbookId: string,
     ) => Promise<void>;
+    getPath: (workbookId: string, relativePath: string) => Promise<string>;
+    readBinary: (workbookId: string, relativePath: string) => Promise<string>;
   };
   archive: {
     workbook: (workbookId: string) => Promise<void>;

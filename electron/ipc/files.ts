@@ -75,4 +75,47 @@ export function setupFileIPC() {
       }
     },
   );
+
+  ipcMain.handle(
+    "file:write",
+    async (
+      _,
+      workbookId: string,
+      relativePath: string,
+      content: string,
+    ) => {
+      try {
+        await fileService.writeDocument(workbookId, relativePath, content);
+      } catch (error) {
+        console.error("Error writing file:", error);
+        throw error;
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "file:getPath",
+    async (_, workbookId: string, relativePath: string) => {
+      try {
+        return fileService.getFilePath(workbookId, relativePath);
+      } catch (error) {
+        console.error("Error getting file path:", error);
+        throw error;
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "file:readBinary",
+    async (_, workbookId: string, relativePath: string) => {
+      try {
+        const buffer = fileService.readBinary(workbookId, relativePath);
+        // Convert buffer to base64 for transmission
+        return buffer.toString("base64");
+      } catch (error) {
+        console.error("Error reading binary file:", error);
+        throw error;
+      }
+    },
+  );
 }
