@@ -79,7 +79,7 @@ export function DashboardViewer({ dashboardId }: DashboardViewerProps) {
           : shortTitle || fullQuestion.substring(0, 20);
       };
 
-      addQuery(dashboard.id, {
+      await addQuery(dashboard.id, {
         question: question.trim(),
         title: generateShortTitle(question.trim()), // Add auto-generated short title
         queryType: parsed.queryType || "count",
@@ -113,8 +113,8 @@ export function DashboardViewer({ dashboardId }: DashboardViewerProps) {
     setIsCreating(true);
     try {
       for (const query of dashboard.queries) {
-        await dashboardService.executeQuery(query, workbooks).then(result => {
-          updateQuery(dashboard.id, query.id, {
+        await dashboardService.executeQuery(query, workbooks).then(async (result) => {
+          await updateQuery(dashboard.id, query.id, {
             result,
             lastRun: new Date().toISOString(),
           });

@@ -83,9 +83,13 @@ export function ResizablePane({
       className={`relative flex-shrink-0 ${className}`}
       style={{
         width: isHorizontal ? "4px" : "100%",
-        height: isHorizontal ? "100%" : "4px",
+        height: isHorizontal ? "100%" : "6px",
         cursor: isHorizontal ? "col-resize" : "row-resize",
-        backgroundColor: isDragging ? "#3b82f6" : "transparent",
+        backgroundColor: isDragging ? "#3b82f6" : "#f3f4f6",
+        borderTop: !isHorizontal ? (isDragging ? "none" : "1px solid #e5e7eb") : "none",
+        borderBottom: !isHorizontal ? (isDragging ? "none" : "1px solid #e5e7eb") : "none",
+        borderLeft: isHorizontal ? (isDragging ? "none" : "1px solid #e5e7eb") : "none",
+        borderRight: isHorizontal ? (isDragging ? "none" : "1px solid #e5e7eb") : "none",
         zIndex: isDragging ? 50 : 10,
       }}
       onMouseDown={handleMouseDown}

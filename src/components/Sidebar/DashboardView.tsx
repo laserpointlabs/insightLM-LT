@@ -1,13 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useDashboardStore } from "../../store/dashboardStore";
 import { useDocumentStore } from "../../store/documentStore";
 import { InputDialog } from "../InputDialog";
 import { ConfirmDialog } from "../ConfirmDialog";
+import { AddIcon } from "../Icons";
 
-export function DashboardView() {
+interface DashboardViewProps {
+  onActionButton?: (button: React.ReactNode) => void;
+}
+
+export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
   const {
     dashboards,
     createDashboard,
+    renameDashboard,
     deleteDashboard,
     loadDashboards,
   } = useDashboardStore();
@@ -45,23 +51,7 @@ export function DashboardView() {
     loadDashboards();
   }, [loadDashboards]);
 
-  const handleCreateDashboard = () => {
-    setInputDialog({
-      isOpen: true,
-      title: "Create Dashboard",
-      defaultValue: "",
-      onConfirm: (name: string) => {
-        setInputDialog({ ...inputDialog, isOpen: false });
-        if (name.trim()) {
-          const dashboard = createDashboard(name.trim());
-          // Open the newly created dashboard
-          handleDashboardClick(dashboard.id);
-        }
-      },
-    });
-  };
-
-  const handleDashboardClick = (dashboardId: string) => {
+  const handleDashboardClick = useCallback((dashboardId: string) => {
     const dashboard = dashboards.find((d) => d.id === dashboardId);
     if (dashboard) {
       openDocument({
@@ -71,11 +61,80 @@ export function DashboardView() {
         content: "",
       });
     }
-  };
+  }, [dashboards, openDocument]);
+
+  const openDashboard = useCallback((dashboard: { id: string; name: string }) => {
+    openDocument({
+      type: "dashboard",
+      dashboardId: dashboard.id,
+      filename: dashboard.name,
+      content: "",
+    });
+  }, [openDocument]);
+
+  const handleCreateDashboard = useCallback(() => {
+    setInputDialog({
+      isOpen: true,
+      title: "Create Dashboard",
+      defaultValue: "",
+      onConfirm: async (name: string) => {
+        setInputDialog((prev) => ({ ...prev, isOpen: false }));
+        if (name.trim()) {
+          try {
+            const dashboard = await createDashboard(name.trim());
+            // Open the newly created dashboard directly without looking it up
+            openDashboard(dashboard);
+          } catch (error) {
+            console.error("Failed to create dashboard:", error);
+            alert(`Failed to create dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+          }
+        }
+      },
+    });
+  }, [createDashboard, openDashboard]);
+
+  useEffect(() => {
+    if (onActionButton) {
+      onActionButton(
+        <button
+          onClick={handleCreateDashboard}
+          className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+          title="Create New Dashboard"
+        >
+          <AddIcon className="h-4 w-4" />
+        </button>
+      );
+    }
+  }, [onActionButton, handleCreateDashboard]);
+
 
   const handleContextMenu = (e: React.MouseEvent, dashboardId: string) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, dashboardId });
+  };
+
+  const handleRenameDashboard = (dashboardId: string) => {
+    const dashboard = dashboards.find((d) => d.id === dashboardId);
+    if (!dashboard) return;
+
+    setContextMenu(null);
+
+    setInputDialog({
+      isOpen: true,
+      title: "Rename Dashboard",
+      defaultValue: dashboard.name,
+      onConfirm: async (newName: string) => {
+        setInputDialog((prev) => ({ ...prev, isOpen: false }));
+        if (!newName.trim() || newName.trim() === dashboard.name) return;
+
+        try {
+          await renameDashboard(dashboardId, newName.trim());
+        } catch (error) {
+          console.error("Failed to rename dashboard:", error);
+          alert(`Failed to rename dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+        }
+      },
+    });
   };
 
   const handleDeleteDashboard = (dashboardId: string) => {
@@ -88,10 +147,15 @@ export function DashboardView() {
       message: `Are you sure you want to delete "${dashboard.name}"? This action cannot be undone.`,
       confirmText: "Delete",
       cancelText: "Cancel",
-      onConfirm: () => {
-        deleteDashboard(dashboardId);
-        setConfirmDialog({ ...confirmDialog, isOpen: false });
-        setContextMenu(null);
+      onConfirm: async () => {
+        try {
+          await deleteDashboard(dashboardId);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          setContextMenu(null);
+        } catch (error) {
+          console.error("Failed to delete dashboard:", error);
+          alert(`Failed to delete dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+        }
       },
     });
   };
@@ -108,17 +172,6 @@ export function DashboardView() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
-        <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Dashboards</h2>
-        <button
-          onClick={handleCreateDashboard}
-          className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600"
-          title="Create New Dashboard"
-        >
-          +
-        </button>
-      </div>
-
       <div className="flex-1 overflow-y-auto p-2">
         {dashboards.length === 0 ? (
           <div className="mt-4 text-xs text-gray-500">
@@ -154,6 +207,14 @@ export function DashboardView() {
         >
           <button
             onClick={() => {
+              handleRenameDashboard(contextMenu.dashboardId);
+            }}
+            className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+          >
+            Rename Dashboard
+          </button>
+          <button
+            onClick={() => {
               handleDeleteDashboard(contextMenu.dashboardId);
             }}
             className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
@@ -178,7 +239,7 @@ export function DashboardView() {
         confirmText={confirmDialog.confirmText}
         cancelText={confirmDialog.cancelText}
         onConfirm={confirmDialog.onConfirm}
-        onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
       />
     </div>
   );

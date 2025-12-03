@@ -5,6 +5,7 @@ import * as http from "http";
 import { setupWorkbookIPC } from "./ipc/workbooks";
 import { setupFileIPC } from "./ipc/files";
 import { setupArchiveIPC } from "./ipc/archive";
+import { setupDashboardIPC } from "./ipc/dashboards";
 import { ConfigService } from "./services/configService";
 import { MCPService } from "./services/mcpService";
 import { LLMService } from "./services/llmService";
@@ -142,6 +143,7 @@ app.whenReady().then(() => {
   setupWorkbookIPC(configService);
   setupFileIPC();
   setupArchiveIPC(configService);
+  setupDashboardIPC(configService);
 
   // LLM IPC handlers
   ipcMain.handle("llm:chat", async (_, messages: any[]) => {

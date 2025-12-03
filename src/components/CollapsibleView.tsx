@@ -1,10 +1,12 @@
 import { ReactNode } from "react";
+import { ChevronRightIcon } from "./Icons";
 
 interface CollapsibleViewProps {
   title: string;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   children: ReactNode;
+  actionButton?: ReactNode;
 }
 
 export function CollapsibleView({
@@ -12,6 +14,7 @@ export function CollapsibleView({
   isCollapsed,
   onToggleCollapse,
   children,
+  actionButton,
 }: CollapsibleViewProps) {
   return (
     <div className="flex h-full flex-col border-b border-gray-200">
@@ -21,22 +24,16 @@ export function CollapsibleView({
           onClick={onToggleCollapse}
           className="flex items-center gap-1 text-xs font-semibold text-gray-700 uppercase tracking-wide hover:text-gray-900"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
+          <ChevronRightIcon
             className={`h-3 w-3 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
+          />
           {title}
         </button>
+        {!isCollapsed && actionButton && (
+          <div className="flex items-center gap-0.5">
+            {actionButton}
+          </div>
+        )}
       </div>
 
       {/* Content */}

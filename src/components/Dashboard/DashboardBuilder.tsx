@@ -44,11 +44,16 @@ export function DashboardBuilder() {
       isOpen: true,
       title: "Create Dashboard",
       defaultValue: "",
-      onConfirm: (name: string) => {
+      onConfirm: async (name: string) => {
         setInputDialog({ ...inputDialog, isOpen: false });
         if (name) {
-          const dashboard = createDashboard(name);
-          setSelectedDashboardId(dashboard.id);
+          try {
+            const dashboard = await createDashboard(name);
+            setSelectedDashboardId(dashboard.id);
+          } catch (error) {
+            console.error("Failed to create dashboard:", error);
+            alert(`Failed to create dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+          }
         }
       },
     });
@@ -61,7 +66,7 @@ export function DashboardBuilder() {
     try {
       const parsed = await dashboardService.parseQuestion(question, workbooks);
 
-      addQuery(activeDashboard.id, {
+      await addQuery(activeDashboard.id, {
         question: question.trim(),
         queryType: parsed.queryType || "count",
         workbookId: parsed.workbookId,

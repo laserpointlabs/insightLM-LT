@@ -63,7 +63,13 @@ export function DashboardQueryCard({
             {isRunning ? "..." : "↻"}
           </button>
           <button
-            onClick={() => removeQuery(dashboardId, query.id)}
+            onClick={async () => {
+              try {
+                await removeQuery(dashboardId, query.id);
+              } catch (err) {
+                console.error("Failed to remove query:", err);
+              }
+            }}
             className="rounded px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50"
             title="Remove"
           >

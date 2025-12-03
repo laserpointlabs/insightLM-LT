@@ -14,6 +14,20 @@ try {
     delete: (id: string) => ipcRenderer.invoke("workbook:delete", id),
   },
 
+  // Dashboard operations
+  dashboard: {
+    getAll: () => ipcRenderer.invoke("dashboard:getAll"),
+    create: (name: string) => ipcRenderer.invoke("dashboard:create", name),
+    update: (dashboardId: string, updates: any) =>
+      ipcRenderer.invoke("dashboard:update", dashboardId, updates),
+    rename: (dashboardId: string, newName: string) =>
+      ipcRenderer.invoke("dashboard:rename", dashboardId, newName),
+    delete: (dashboardId: string) =>
+      ipcRenderer.invoke("dashboard:delete", dashboardId),
+    saveAll: (dashboards: any[]) =>
+      ipcRenderer.invoke("dashboard:saveAll", dashboards),
+  },
+
   // File operations
   file: {
     add: (workbookId: string, sourcePath: string, filename?: string) =>

@@ -6,19 +6,20 @@ interface DashboardStore {
   dashboards: Dashboard[];
   activeDashboardId: string | null;
 
-  createDashboard: (name: string) => Dashboard;
+  createDashboard: (name: string) => Promise<Dashboard>;
   addQuery: (
     dashboardId: string,
     query: Omit<DashboardQuery, "id" | "createdAt">,
-  ) => void;
-  removeQuery: (dashboardId: string, queryId: string) => void;
+  ) => Promise<void>;
+  removeQuery: (dashboardId: string, queryId: string) => Promise<void>;
   updateQuery: (
     dashboardId: string,
     queryId: string,
     updates: Partial<DashboardQuery>,
-  ) => void;
+  ) => Promise<void>;
   setActiveDashboard: (id: string | null) => void;
-  deleteDashboard: (id: string) => void;
+  renameDashboard: (id: string, newName: string) => Promise<void>;
+  deleteDashboard: (id: string) => Promise<void>;
   loadDashboards: () => Promise<void>;
   saveDashboards: () => Promise<void>;
 }
@@ -27,7 +28,21 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
   dashboards: [],
   activeDashboardId: null,
 
-  createDashboard: (name) => {
+  createDashboard: async (name) => {
+    if (window.electronAPI?.dashboard) {
+      try {
+        const dashboard = await window.electronAPI.dashboard.create(name);
+        set((state) => ({
+          dashboards: [...state.dashboards, dashboard],
+          activeDashboardId: dashboard.id,
+        }));
+        return dashboard;
+      } catch (error) {
+        console.error("Failed to create dashboard:", error);
+        throw error;
+      }
+    }
+    // Fallback to localStorage if IPC not available
     const dashboard: Dashboard = {
       id: uuidv4(),
       name,
@@ -39,11 +54,11 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
       dashboards: [...state.dashboards, dashboard],
       activeDashboardId: dashboard.id,
     }));
-    get().saveDashboards();
+    await get().saveDashboards();
     return dashboard;
   },
 
-  addQuery: (dashboardId, query) => {
+  addQuery: async (dashboardId, query) => {
     const dashboard = get().dashboards.find((d) => d.id === dashboardId);
     const existingQueries = dashboard?.queries || [];
 
@@ -133,7 +148,7 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
             : d,
         ),
       }));
-      get().saveDashboards();
+      await get().saveDashboards();
       return; // Early return for full-width tiles
     }
 
@@ -237,10 +252,10 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
           : d,
       ),
     }));
-    get().saveDashboards();
+    await get().saveDashboards();
   },
 
-  removeQuery: (dashboardId, queryId) => {
+  removeQuery: async (dashboardId, queryId) => {
     set((state) => ({
       dashboards: state.dashboards.map((d) =>
         d.id === dashboardId
@@ -252,10 +267,10 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
           : d,
       ),
     }));
-    get().saveDashboards();
+    await get().saveDashboards();
   },
 
-  updateQuery: (dashboardId, queryId, updates) => {
+  updateQuery: async (dashboardId, queryId, updates) => {
     set((state) => ({
       dashboards: state.dashboards.map((d) =>
         d.id === dashboardId
@@ -269,22 +284,116 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
           : d,
       ),
     }));
-    get().saveDashboards();
+    await get().saveDashboards();
   },
 
   setActiveDashboard: (id) => set({ activeDashboardId: id }),
 
-  deleteDashboard: (id) => {
+  renameDashboard: async (id, newName) => {
+    if (window.electronAPI?.dashboard) {
+      try {
+        await window.electronAPI.dashboard.rename(id, newName);
+        set((state) => ({
+          dashboards: state.dashboards.map((d) =>
+            d.id === id
+              ? { ...d, name: newName, updatedAt: new Date().toISOString() }
+              : d
+          ),
+        }));
+        return;
+      } catch (error) {
+        console.error("Failed to rename dashboard:", error);
+        throw error;
+      }
+    }
+    // Fallback to localStorage if IPC not available
+    set((state) => ({
+      dashboards: state.dashboards.map((d) =>
+        d.id === id
+          ? { ...d, name: newName, updatedAt: new Date().toISOString() }
+          : d
+      ),
+    }));
+    await get().saveDashboards();
+  },
+
+  deleteDashboard: async (id) => {
+    if (window.electronAPI?.dashboard) {
+      try {
+        await window.electronAPI.dashboard.delete(id);
+        set((state) => ({
+          dashboards: state.dashboards.filter((d) => d.id !== id),
+          activeDashboardId:
+            state.activeDashboardId === id ? null : state.activeDashboardId,
+        }));
+        return;
+      } catch (error) {
+        console.error("Failed to delete dashboard:", error);
+        throw error;
+      }
+    }
+    // Fallback to localStorage if IPC not available
     set((state) => ({
       dashboards: state.dashboards.filter((d) => d.id !== id),
       activeDashboardId:
         state.activeDashboardId === id ? null : state.activeDashboardId,
     }));
-    get().saveDashboards();
+    await get().saveDashboards();
   },
 
   loadDashboards: async () => {
-    // Load from localStorage or IPC
+    // Load from IPC (file system) or fallback to localStorage
+    if (window.electronAPI?.dashboard) {
+      try {
+        const dashboards = await window.electronAPI.dashboard.getAll();
+        // If no dashboards in file system, try to migrate from localStorage
+        if (dashboards.length === 0) {
+          try {
+            const stored = localStorage.getItem("insightlm-dashboards");
+            if (stored) {
+              const localDashboards = JSON.parse(stored) as Dashboard[];
+              if (localDashboards.length > 0) {
+                // Migrate dashboards from localStorage to file system
+                await window.electronAPI.dashboard.saveAll(localDashboards);
+                // Clear localStorage after successful migration
+                localStorage.removeItem("insightlm-dashboards");
+                set({ dashboards: localDashboards });
+                return;
+              }
+            }
+          } catch (migrationError) {
+            console.error("Failed to migrate dashboards from localStorage:", migrationError);
+            // Fall back to loading from localStorage if migration fails
+            try {
+              const stored = localStorage.getItem("insightlm-dashboards");
+              if (stored) {
+                const localDashboards = JSON.parse(stored) as Dashboard[];
+                set({ dashboards: localDashboards });
+                return;
+              }
+            } catch (localStorageError) {
+              console.error("Failed to load dashboards from localStorage after migration failure:", localStorageError);
+            }
+          }
+        }
+        set({ dashboards: Array.isArray(dashboards) ? dashboards : [] });
+        return;
+      } catch (error) {
+        console.error("Failed to load dashboards from IPC:", error);
+        // Fall back to localStorage if IPC load fails
+        try {
+          const stored = localStorage.getItem("insightlm-dashboards");
+          if (stored) {
+            const localDashboards = JSON.parse(stored) as Dashboard[];
+            set({ dashboards: localDashboards });
+            return;
+          }
+        } catch (localStorageError) {
+          console.error("Failed to load dashboards from localStorage after IPC failure:", localStorageError);
+        }
+      }
+    }
+    // Fallback to localStorage if IPC not available
     try {
       const stored = localStorage.getItem("insightlm-dashboards");
       if (stored) {
@@ -296,7 +405,17 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
   },
 
   saveDashboards: async () => {
-    // Save to localStorage or IPC
+    // Save via IPC (file system) - save all dashboards at once
+    if (window.electronAPI?.dashboard) {
+      try {
+        const dashboards = get().dashboards;
+        await window.electronAPI.dashboard.saveAll(dashboards);
+        return;
+      } catch (error) {
+        console.error("Failed to save dashboards via IPC:", error);
+      }
+    }
+    // Fallback to localStorage if IPC not available
     try {
       localStorage.setItem(
         "insightlm-dashboards",

@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useDocumentStore } from "../../store/documentStore";
 import { useWorkbookStore } from "../../store/workbookStore";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { InputDialog } from "../InputDialog";
+import { AddIcon, RefreshIcon, CollapseAllIcon, FileIcon, NotebookIcon } from "../Icons";
 
-export function WorkbooksView() {
+interface WorkbooksViewProps {
+  onActionButton?: (button: React.ReactNode) => void;
+}
+
+export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
   const { workbooks, setWorkbooks, loading, setLoading, error, setError } =
     useWorkbookStore();
   const [contextMenu, setContextMenu] = useState<{
@@ -46,24 +51,7 @@ export function WorkbooksView() {
     onConfirm: () => {},
   });
 
-  useEffect(() => {
-    // Wait for electronAPI to be available
-    if (window.electronAPI) {
-      loadWorkbooks();
-    } else {
-      // Retry after a short delay if electronAPI isn't ready yet
-      const timer = setTimeout(() => {
-        if (window.electronAPI) {
-          loadWorkbooks();
-        } else {
-          setError("Electron API not available");
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
-  const loadWorkbooks = async () => {
+  const loadWorkbooks = useCallback(async () => {
     if (!window.electronAPI?.workbook) {
       setError("Electron API not available");
       return;
@@ -95,14 +83,31 @@ export function WorkbooksView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setLoading, setError, setWorkbooks]);
+
+  useEffect(() => {
+    // Wait for electronAPI to be available
+    if (window.electronAPI) {
+      loadWorkbooks();
+    } else {
+      // Retry after a short delay if electronAPI isn't ready yet
+      const timer = setTimeout(() => {
+        if (window.electronAPI) {
+          loadWorkbooks();
+        } else {
+          setError("Electron API not available");
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [loadWorkbooks, setError]);
 
   const handleContextMenu = (e: React.MouseEvent, workbookId: string) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, workbookId });
   };
 
-  const handleCreateWorkbook = () => {
+  const handleCreateWorkbook = useCallback(() => {
     if (!window.electronAPI?.workbook) {
       alert("Electron API not available");
       return;
@@ -113,7 +118,7 @@ export function WorkbooksView() {
       title: "Create Workbook",
       defaultValue: "",
       onConfirm: async (name: string) => {
-        setInputDialog({ ...inputDialog, isOpen: false });
+        setInputDialog((prev) => ({ ...prev, isOpen: false }));
         try {
           await window.electronAPI.workbook.create(name);
           await loadWorkbooks();
@@ -124,7 +129,45 @@ export function WorkbooksView() {
         }
       },
     });
-  };
+  }, [loadWorkbooks]);
+
+  const handleRefreshWorkbooks = useCallback(async () => {
+    await loadWorkbooks();
+  }, [loadWorkbooks]);
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandedWorkbooks(new Set());
+  }, []);
+
+  useEffect(() => {
+    if (onActionButton) {
+      onActionButton(
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={handleCreateWorkbook}
+            className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+            title="Create New Workbook"
+          >
+            <AddIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleRefreshWorkbooks}
+            className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+            title="Refresh Workbooks"
+          >
+            <RefreshIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleCollapseAll}
+            className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+            title="Collapse All"
+          >
+            <CollapseAllIcon className="h-4 w-4" />
+          </button>
+        </div>
+      );
+    }
+  }, [onActionButton, handleCreateWorkbook, handleRefreshWorkbooks, handleCollapseAll]);
 
   const handleRenameWorkbook = (workbookId: string) => {
     if (!window.electronAPI?.workbook) {
@@ -354,17 +397,6 @@ export function WorkbooksView() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
-        <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Workbooks</h2>
-        <button
-          onClick={handleCreateWorkbook}
-          className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600"
-          title="Create New Workbook"
-        >
-          +
-        </button>
-      </div>
-
       <div className="flex-1 overflow-y-auto p-2">
         {loading && <div className="text-sm text-gray-500">Loading...</div>}
         {error && <div className="text-sm text-red-500">{error}</div>}
@@ -383,53 +415,63 @@ export function WorkbooksView() {
             onDragOver={handleDragOver}
           >
             <div
-              className="flex cursor-pointer items-center justify-between rounded p-1 hover:bg-gray-100"
+              className="group flex cursor-pointer items-center justify-between rounded p-1 hover:bg-gray-100"
               onContextMenu={(e) => handleContextMenu(e, workbook.id)}
-              onClick={() => toggleWorkbook(workbook.id)}
             >
-              <span className="flex items-center gap-1 text-sm">
+              <span
+                className="flex items-center gap-1 text-sm flex-1"
+                onClick={() => toggleWorkbook(workbook.id)}
+              >
                 {expandedWorkbooks.has(workbook.id) ? "▼" : "▶"}{" "}
                 {workbook.name}
               </span>
-              {workbook.archived && (
+              {workbook.archived ? (
                 <span className="text-xs text-gray-400">(archived)</span>
+              ) : (
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAddFile(workbook.id);
+                    }}
+                    className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                    title="Create New Document"
+                  >
+                    <FileIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // TODO: Implement notebook creation
+                      console.log("Create notebook for workbook:", workbook.id);
+                    }}
+                    className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                    title="Create New Notebook"
+                  >
+                    <NotebookIcon className="h-4 w-4" />
+                  </button>
+                </div>
               )}
             </div>
             {expandedWorkbooks.has(workbook.id) && (
               <div className="ml-4 mt-1">
                 {workbook.documents.length === 0 ? (
-                  <>
-                    <div className="text-xs text-gray-400">No documents</div>
-                    <button
-                      onClick={() => handleAddFile(workbook.id)}
-                      className="mt-1 px-1 text-xs text-blue-500 hover:text-blue-600"
-                    >
-                      + Add File
-                    </button>
-                  </>
+                  <div className="text-xs text-gray-400">No documents</div>
                 ) : (
-                  <>
-                    {workbook.documents
-                      .filter((doc) => !doc.archived)
-                      .map((doc, idx) => (
-                        <div
-                          key={idx}
-                          className="flex cursor-pointer items-center justify-between rounded px-1 py-0.5 text-xs text-gray-600 hover:bg-gray-100"
-                          onClick={() => handleDocumentClick(workbook.id, doc)}
-                          onContextMenu={(e) =>
-                            handleDocumentContextMenu(e, workbook.id, doc)
-                          }
-                        >
-                          <span>📄 {doc.filename}</span>
-                        </div>
-                      ))}
-                    <button
-                      onClick={() => handleAddFile(workbook.id)}
-                      className="mt-1 px-1 text-xs text-blue-500 hover:text-blue-600"
-                    >
-                      + Add File
-                    </button>
-                  </>
+                  workbook.documents
+                    .filter((doc) => !doc.archived)
+                    .map((doc, idx) => (
+                      <div
+                        key={idx}
+                        className="flex cursor-pointer items-center justify-between rounded px-1 py-0.5 text-xs text-gray-600 hover:bg-gray-100"
+                        onClick={() => handleDocumentClick(workbook.id, doc)}
+                        onContextMenu={(e) =>
+                          handleDocumentContextMenu(e, workbook.id, doc)
+                        }
+                      >
+                        <span>📄 {doc.filename}</span>
+                      </div>
+                    ))
                 )}
               </div>
             )}

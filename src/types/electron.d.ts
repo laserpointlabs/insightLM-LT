@@ -7,6 +7,14 @@ export interface ElectronAPI {
     rename: (id: string, newName: string) => Promise<void>;
     delete: (id: string) => Promise<void>;
   };
+  dashboard: {
+    getAll: () => Promise<any[]>;
+    create: (name: string) => Promise<any>;
+    update: (dashboardId: string, updates: any) => Promise<any>;
+    rename: (dashboardId: string, newName: string) => Promise<void>;
+    delete: (dashboardId: string) => Promise<void>;
+    saveAll: (dashboards: any[]) => Promise<void>;
+  };
   file: {
     add: (
       workbookId: string,

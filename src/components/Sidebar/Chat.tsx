@@ -1,12 +1,62 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ChatMessage } from "./ChatMessage";
+import { AddIcon, HistoryIcon, GearIcon } from "../Icons";
 
-export function Chat() {
+interface ChatProps {
+  onActionButton?: (button: React.ReactNode) => void;
+}
+
+export function Chat({ onActionButton }: ChatProps = {}) {
   const [messages, setMessages] = useState<
     Array<{ role: "user" | "assistant"; content: string }>
   >([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const handleNewChat = useCallback(() => {
+    setMessages([]);
+    setInput("");
+  }, []);
+
+  const handleShowHistory = useCallback(() => {
+    // TODO: Implement chat history view
+    console.log("Show chat history");
+  }, []);
+
+  const handleShowSettings = useCallback(() => {
+    // TODO: Implement chat settings
+    console.log("Show chat settings");
+  }, []);
+
+  useEffect(() => {
+    if (onActionButton) {
+      onActionButton(
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={handleNewChat}
+            className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+            title="New Chat"
+          >
+            <AddIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleShowHistory}
+            className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+            title="Chat History"
+          >
+            <HistoryIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleShowSettings}
+            className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+            title="Chat Settings"
+          >
+            <GearIcon className="h-4 w-4" />
+          </button>
+        </div>
+      );
+    }
+  }, [onActionButton, handleNewChat, handleShowHistory, handleShowSettings]);
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -41,10 +91,6 @@ export function Chat() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-gray-200 px-3 py-2">
-        <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Chat</h2>
-      </div>
-
       <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
         {messages.length === 0 && (
           <div className="mt-4 text-center text-sm text-gray-500">

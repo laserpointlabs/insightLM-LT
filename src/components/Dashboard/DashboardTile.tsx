@@ -270,7 +270,9 @@ export function DashboardTile({
       // Check if this tile's container is focused or hovered
       if (tileRef.current?.matches(':hover') && e.key === 'Delete') {
         e.preventDefault();
-        removeQuery(dashboardId, query.id);
+        removeQuery(dashboardId, query.id).catch(err => {
+          console.error("Failed to remove query:", err);
+        });
       }
     };
 
@@ -355,9 +357,13 @@ export function DashboardTile({
             {isRunning ? "..." : "↻"}
           </button>
           <button
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation();
-              removeQuery(dashboardId, query.id);
+              try {
+                await removeQuery(dashboardId, query.id);
+              } catch (err) {
+                console.error("Failed to remove query:", err);
+              }
             }}
             className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
             title="Remove"

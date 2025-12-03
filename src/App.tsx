@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { WorkbooksView } from "./components/Sidebar/WorkbooksView";
 import { Chat } from "./components/Sidebar/Chat";
 import { DashboardView } from "./components/Sidebar/DashboardView";
@@ -10,6 +11,9 @@ import { useLayoutStore } from "./store/layoutStore";
 import { useWorkbenchStore } from "./store/workbenchStore";
 
 function App() {
+  const [dashboardActionButton, setDashboardActionButton] = useState<React.ReactNode>(null);
+  const [workbookActionButton, setWorkbookActionButton] = useState<React.ReactNode>(null);
+  const [chatActionButton, setChatActionButton] = useState<React.ReactNode>(null);
   const { openDocuments, closeDocument } = useDocumentStore();
   const {
     sidebarWidth,
@@ -33,99 +37,95 @@ function App() {
       return (
         <div className="flex h-full flex-col">
           {/* Dashboards View - First */}
-          {!isDashboardsCollapsed && (
-            <>
-              <div
-                style={{
-                  flexBasis: `${viewHeights.dashboards}px`,
-                  flexShrink: 0,
-                  minHeight: "50px",
-                }}
-                className="overflow-hidden"
+          {!isDashboardsCollapsed ? (
+            <div
+              style={{
+                flexBasis: `${viewHeights.dashboards}px`,
+                flexShrink: 0,
+                minHeight: "50px",
+              }}
+              className="overflow-hidden"
+            >
+              <CollapsibleView
+                title="Dashboards"
+                isCollapsed={isDashboardsCollapsed}
+                onToggleCollapse={() => toggleViewCollapse("dashboards")}
+                actionButton={dashboardActionButton}
               >
-                <CollapsibleView
-                  title="Dashboards"
-                  isCollapsed={isDashboardsCollapsed}
-                  onToggleCollapse={() => toggleViewCollapse("dashboards")}
-                >
-                  <DashboardView />
-                </CollapsibleView>
-              </div>
-
-              {/* Resizable Separator between Dashboards and Workbooks */}
-              {!isWorkbooksCollapsed && (
-                <ResizablePane
-                  direction="vertical"
-                  onResize={(height) => {
-                    setViewHeight("dashboards", height);
-                  }}
-                  initialSize={viewHeights.dashboards}
-                  minSize={50}
-                  maxSize={800}
-                />
-              )}
-            </>
-          )}
-
-          {/* Dashboards collapsed header */}
-          {isDashboardsCollapsed && (
+                <DashboardView onActionButton={setDashboardActionButton} />
+              </CollapsibleView>
+            </div>
+          ) : (
             <div className="border-b border-gray-200">
               <CollapsibleView
                 title="Dashboards"
                 isCollapsed={isDashboardsCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("dashboards")}
+                actionButton={dashboardActionButton}
               >
                 <div />
               </CollapsibleView>
             </div>
           )}
 
-          {/* Workbooks View - Second */}
-          {!isWorkbooksCollapsed && (
-            <>
-              <div
-                style={{
-                  flexBasis: `${viewHeights.workbooks}px`,
-                  flexShrink: 0,
-                  minHeight: "50px",
-                }}
-                className="overflow-hidden"
-              >
-                <CollapsibleView
-                  title="Workbooks"
-                  isCollapsed={isWorkbooksCollapsed}
-                  onToggleCollapse={() => toggleViewCollapse("workbooks")}
-                >
-                  <WorkbooksView />
-                </CollapsibleView>
-              </div>
-
-              {/* Resizable Separator between Workbooks and Chat */}
-              {!isChatCollapsed && (
-                <ResizablePane
-                  direction="vertical"
-                  onResize={(height) => {
-                    setViewHeight("workbooks", height);
-                  }}
-                  initialSize={viewHeights.workbooks}
-                  minSize={50}
-                  maxSize={800}
-                />
-              )}
-            </>
+          {/* Resizable Separator between Dashboards and Workbooks */}
+          {/* Show separator if Dashboards is expanded (regardless of Workbooks state) */}
+          {!isDashboardsCollapsed && (
+            <ResizablePane
+              direction="vertical"
+              onResize={(height) => {
+                setViewHeight("dashboards", height);
+              }}
+              initialSize={viewHeights.dashboards}
+              minSize={50}
+              maxSize={800}
+            />
           )}
 
-          {/* Workbooks collapsed header */}
-          {isWorkbooksCollapsed && (
+          {/* Workbooks View - Second */}
+          {!isWorkbooksCollapsed ? (
+            <div
+              style={{
+                flexBasis: `${viewHeights.workbooks}px`,
+                flexShrink: 0,
+                minHeight: "50px",
+              }}
+              className="overflow-hidden"
+            >
+              <CollapsibleView
+                title="Workbooks"
+                isCollapsed={isWorkbooksCollapsed}
+                onToggleCollapse={() => toggleViewCollapse("workbooks")}
+                actionButton={workbookActionButton}
+              >
+                <WorkbooksView onActionButton={setWorkbookActionButton} />
+              </CollapsibleView>
+            </div>
+          ) : (
             <div className="border-b border-gray-200">
               <CollapsibleView
                 title="Workbooks"
                 isCollapsed={isWorkbooksCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("workbooks")}
+                actionButton={workbookActionButton}
               >
                 <div />
               </CollapsibleView>
             </div>
+          )}
+
+          {/* Resizable Separator between Workbooks and Chat */}
+          {/* Show separator if Workbooks is expanded (regardless of Chat state) */}
+          {!isWorkbooksCollapsed && (
+            <ResizablePane
+              direction="vertical"
+              onResize={(height) => {
+                setViewHeight("workbooks", height);
+              }}
+              initialSize={viewHeights.workbooks}
+              minSize={50}
+              maxSize={800}
+            />
           )}
 
           {/* Chat View - Third */}
@@ -134,8 +134,9 @@ function App() {
               title="Chat"
               isCollapsed={isChatCollapsed}
               onToggleCollapse={() => toggleViewCollapse("chat")}
+              actionButton={chatActionButton}
             >
-              <Chat />
+              <Chat onActionButton={setChatActionButton} />
             </CollapsibleView>
           </div>
         </div>
