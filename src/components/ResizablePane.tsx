@@ -38,14 +38,11 @@ export function ResizablePane({
     const handleMouseMove = (e: MouseEvent) => {
       const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
       // Calculate delta: positive = drag right/down
-      let delta = currentPos - startPosRef.current;
-
-      // Invert vertical only (horizontal is correct as-is)
-      if (direction === "vertical") {
-        delta = -delta;
-      }
+      const delta = currentPos - startPosRef.current;
 
       // Calculate new size from the starting size (captured at drag start)
+      // For vertical: dragging down (positive delta) increases the view above
+      // For horizontal: dragging right (positive delta) increases the view on left
       const newSize = Math.max(
         minSize,
         Math.min(maxSize, startSizeRef.current + delta)
