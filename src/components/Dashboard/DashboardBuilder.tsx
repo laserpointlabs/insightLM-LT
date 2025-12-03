@@ -3,7 +3,6 @@ import { useDashboardStore } from "../../store/dashboardStore";
 import { useWorkbookStore } from "../../store/workbookStore";
 import { dashboardService } from "../../services/dashboardService";
 import { DashboardQueryCard } from "./DashboardQueryCard";
-import { DashboardResults } from "./DashboardResults";
 import { InputDialog } from "../InputDialog";
 
 export function DashboardBuilder() {
@@ -12,7 +11,6 @@ export function DashboardBuilder() {
     activeDashboardId,
     createDashboard,
     addQuery,
-    setActiveDashboard,
     loadDashboards,
   } = useDashboardStore();
   const { workbooks } = useWorkbookStore();
@@ -62,16 +60,11 @@ export function DashboardBuilder() {
     setIsCreating(true);
     try {
       const parsed = await dashboardService.parseQuestion(question, workbooks);
-      const workbook = workbooks.find((w) =>
-        parsed.workbookName
-          ? w.name.toLowerCase().includes(parsed.workbookName.toLowerCase())
-          : !w.archived,
-      );
 
       addQuery(activeDashboard.id, {
         question: question.trim(),
         queryType: parsed.queryType || "count",
-        workbookId: workbook?.id,
+        workbookId: parsed.workbookId,
         filters: parsed.filters,
       });
 

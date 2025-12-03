@@ -7,9 +7,9 @@ interface DashboardResultsProps {
 export function DashboardResults({ result }: DashboardResultsProps) {
   if (result.chartType === "card") {
     return (
-      <div className="mt-3 rounded border border-blue-200 bg-blue-50 p-4">
-        <div className="text-3xl font-bold text-blue-600">{result.value}</div>
-        <div className="mt-1 text-sm text-gray-600">
+      <div className="mt-2 rounded border border-blue-200 bg-blue-50 p-2">
+        <div className="text-2xl font-bold text-blue-600">{result.value}</div>
+        <div className="mt-1 text-xs text-gray-600">
           {result.metadata?.workbookName &&
             `${result.metadata.workbookName} • `}
           {result.metadata?.totalDocuments &&
@@ -23,9 +23,9 @@ export function DashboardResults({ result }: DashboardResultsProps) {
     const columns = result.data.length > 0 ? Object.keys(result.data[0]) : [];
 
     return (
-      <div className="mt-3">
+      <div className="mt-2">
         {result.value !== undefined && (
-          <div className="mb-2 text-sm font-semibold text-gray-700">
+          <div className="mb-1 text-xs font-semibold text-gray-700">
             Total: {result.value}
           </div>
         )}

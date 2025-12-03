@@ -154,7 +154,7 @@ Checking package.json for NODE_ENV settings:
 
 <tool-use data-tool-type="generic" data-tool-name="list_dir">
 <details>
-            <summary>Tool use: **list_directory** • Listed directory undefined • **0** results</summary>
+            <summary>Tool use: **list_dir** • Listed directory undefined • **0** results</summary>
         
 No results found
 </details>
@@ -204,16 +204,16 @@ Fixing both issues:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/services/configService.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/services/configService.ts</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
 
 ```diff
 @@ -2,4 +2,5 @@
-  import * as path from &quot;path&quot;;
-  import * as yaml from &quot;js-yaml&quot;;
-+ import { app } from &quot;electron&quot;;
+  import * as path from "path";
+  import * as yaml from "js-yaml";
++ import { app } from "electron";
   
   export interface AppConfig {
 ```
@@ -225,12 +225,12 @@ Lines added: 3, lines removed: 1
 @@ -35,5 +36,7 @@
   
   function getConfigDir(): string {
--   const isDev = process.env.NODE_ENV === &quot;development&quot;;
+-   const isDev = process.env.NODE_ENV === "development";
 +   // In development (not packaged), use project root config directory
 +   // In production (packaged), use resourcesPath/config
-+   const isDev = !app.isPackaged || process.env.NODE_ENV === &quot;development&quot;;
++   const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
     if (isDev) {
-      return path.join(process.cwd(), &quot;config&quot;);
+      return path.join(process.cwd(), "config");
 ```
 
 </details>
@@ -241,7 +241,7 @@ Lines added: 3, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/services/mcpService.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/services/mcpService.ts</summary>
 
 **Chunk 1**
 Lines added: 15, lines removed: 1
@@ -257,7 +257,7 @@ Lines added: 15, lines removed: 1
 +     if (path.isAbsolute(config.command)) {
 +       // Absolute path - use as is
 +       fullCommandPath = config.command;
-+     } else if (config.command.includes(path.sep) || config.command.includes(&quot;/&quot;)) {
++     } else if (config.command.includes(path.sep) || config.command.includes("/")) {
 +       // Relative path - join with serverPath
 +       fullCommandPath = path.join(serverPath, config.command);
 +     } else {
@@ -267,7 +267,7 @@ Lines added: 15, lines removed: 1
 +     }
 + 
       const args = config.args.map((arg) =&gt;
-        arg === &quot;server.py&quot; ? path.join(serverPath, &quot;server.py&quot;) : arg,
+        arg === "server.py" ? path.join(serverPath, "server.py") : arg,
 ```
 
 **Chunk 2**
@@ -276,8 +276,8 @@ Lines added: 1, lines removed: undefined
 ```diff
 @@ -72,4 +86,5 @@
         env,
-        stdio: &quot;pipe&quot;,
-+       shell: process.platform === &quot;win32&quot;, // Use shell on Windows to find python in PATH
+        stdio: "pipe",
++       shell: process.platform === "win32", // Use shell on Windows to find python in PATH
       });
   
 ```
@@ -354,7 +354,7 @@ Using a safer approach: checking if the config directory exists in the project r
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/services/configService.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/services/configService.ts</summary>
 
 **Chunk 1**
 Lines added: 17, lines removed: 6
@@ -365,21 +365,21 @@ Lines added: 17, lines removed: 6
   function getConfigDir(): string {
 -   // In development (not packaged), use project root config directory
 +   // Check if config directory exists in project root (development)
-+   const projectConfigDir = path.join(process.cwd(), &quot;config&quot;);
++   const projectConfigDir = path.join(process.cwd(), "config");
 +   if (fs.existsSync(projectConfigDir)) {
 +     return projectConfigDir;
 +   }
 +   
     // In production (packaged), use resourcesPath/config
--   const isDev = !app.isPackaged || process.env.NODE_ENV === &quot;development&quot;;
+-   const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
 -   if (isDev) {
--     return path.join(process.cwd(), &quot;config&quot;);
+-     return path.join(process.cwd(), "config");
 -   }
--   return path.join(process.resourcesPath || process.cwd(), &quot;config&quot;);
+-   return path.join(process.resourcesPath || process.cwd(), "config");
 +   // Also check app.isPackaged if app is available
 +   try {
 +     if (app &amp;&amp; app.isPackaged &amp;&amp; process.resourcesPath) {
-+       return path.join(process.resourcesPath, &quot;config&quot;);
++       return path.join(process.resourcesPath, "config");
 +     }
 +   } catch (e) {
 +     // app might not be available in some contexts
@@ -461,7 +461,7 @@ Rebuilding the Electron TypeScript files, then we can test:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: cd C:\Users\JohnDeHart\working\insightLM-LT && npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: cd C:\Users\JohnDeHart\working\insightLM-LT && npm run build:electron</summary>
 
 ```bash
 cd C:\Users\JohnDeHart\working\insightLM-LT && npm run build:electron
@@ -487,7 +487,7 @@ Checking if the build completed, then testing the application:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -497,7 +497,7 @@ npm run build:electron
 (base) PS C:\Users\JohnDeHart\working\insightLM-LT&gt; npm run dev
 
 &gt; insightlm-lt@1.0.0 dev
-&gt; concurrently &quot;npm run dev:electron&quot; &quot;npm run dev:react&quot;
+&gt; concurrently "npm run dev:electron" "npm run dev:react"
 
 [0] 
 [0] &gt; insightlm-lt@1.0.0 dev:electron
@@ -507,7 +507,7 @@ npm run build:electron
 [1] &gt; insightlm-lt@1.0.0 dev:react
 [1] &gt; vite
 [1] 
-[1] The CJS build of Vite&#39;s Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.              
+[1] The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.              
 [1] Port 5173 is in use, trying another one...
 [1] Port 5174 is in use, trying another one...
 [1] Port 5175 is in use, trying another one...
@@ -516,12 +516,12 @@ npm run build:electron
 [1] 
 [1]   ➜  Local:   http://localhost:5176/
 [1]   ➜  Network: use --host to expose
-[1] (node:38236) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn&#39;t parse as CommonJS.                                                   
+[1] (node:38236) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn't parse as CommonJS.                                                   
 [1] Reparsing as ES module because module syntax was detected. This incurs a performance overhead.                                                              
-[1] To eliminate this warning, add &quot;type&quot;: &quot;module&quot; to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                   
+[1] To eliminate this warning, add "type": "module" to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                   
 [1] (Use &#96;node --trace-warnings ...&#96; to show where the warning was created)     
 [0] 
-[0] Failed to load app config: Error: ENOENT: no such file or directory, open &#39;C:\Users\JohnDeHart\working\insightLM-LT\node_modules\electron\dist\resources\config\app.yaml&#39;                                                                   
+[0] Failed to load app config: Error: ENOENT: no such file or directory, open 'C:\Users\JohnDeHart\working\insightLM-LT\node_modules\electron\dist\resources\config\app.yaml'                                                                   
 [0]     at Object.openSync (node:fs:603:3)
 [0]     at Object.func [as openSync] (node:electron/js2c/node_init:2:2214)      
 [0]     at Object.readFileSync (node:fs:471:35)
@@ -529,11 +529,11 @@ npm run build:electron
 [0]     at ConfigService.loadAppConfig (C:\Users\JohnDeHart\working\insightLM-LT\dist-electron\services\configService.js:73:32)                                 
 [0]     at C:\Users\JohnDeHart\working\insightLM-LT\dist-electron\main.js:91:37 {                                                                               
 [0]   errno: -4058,
-[0]   syscall: &#39;open&#39;,
-[0]   code: &#39;ENOENT&#39;,
-[0]   path: &#39;C:\\Users\\JohnDeHart\\working\\insightLM-LT\\node_modules\\electron\\dist\\resources\\config\\app.yaml&#39;                                           
+[0]   syscall: 'open',
+[0]   code: 'ENOENT',
+[0]   path: 'C:\\Users\\JohnDeHart\\working\\insightLM-LT\\node_modules\\electron\\dist\\resources\\config\\app.yaml'                                           
 [0] }
-[0] Failed to load LLM config: Error: ENOENT: no such file or directory, open &#39;C:\Users\JohnDeHart\working\insightLM-LT\node_modules\electron\dist\resources\config\llm.yaml&#39;                                                                   
+[0] Failed to load LLM config: Error: ENOENT: no such file or directory, open 'C:\Users\JohnDeHart\working\insightLM-LT\node_modules\electron\dist\resources\config\llm.yaml'                                                                   
 [0]     at Object.openSync (node:fs:603:3)
 [0]     at Object.func [as openSync] (node:electron/js2c/node_init:2:2214)      
 [0]     at Object.readFileSync (node:fs:471:35)
@@ -541,9 +541,9 @@ npm run build:electron
 [0]     at ConfigService.loadLLMConfig (C:\Users\JohnDeHart\working\insightLM-LT\dist-electron\services\configService.js:94:32)                                 
 [0]     at C:\Users\JohnDeHart\working\insightLM-LT\dist-electron\main.js:92:37 {                                                                               
 [0]   errno: -4058,
-[0]   syscall: &#39;open&#39;,
-[0]   code: &#39;ENOENT&#39;,
-[0]   path: &#39;C:\\Users\\JohnDeHart\\working\\insightLM-LT\\node_modules\\electron\\dist\\resources\\config\\llm.yaml&#39;                                           
+[0]   syscall: 'open',
+[0]   code: 'ENOENT',
+[0]   path: 'C:\\Users\\JohnDeHart\\working\\insightLM-LT\\node_modules\\electron\\dist\\resources\\config\\llm.yaml'                                           
 [0] }
 [0] Preload path: C:\Users\JohnDeHart\working\insightLM-LT\dist-electron\preload.js                                                                             
 [0] Preload exists: true
@@ -552,11 +552,11 @@ npm run build:electron
 [0]     at onErrorNT (node:internal/child_process:477:16)
 [0]     at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {                                                                        
 [0]   errno: -4058,
-[0]   code: &#39;ENOENT&#39;,
-[0]   syscall: &#39;spawn C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\document-parser\\python&#39;,                                                      
-[0]   path: &#39;C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\document-parser\\python&#39;,                                                               
+[0]   code: 'ENOENT',
+[0]   syscall: 'spawn C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\document-parser\\python',                                                      
+[0]   path: 'C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\document-parser\\python',                                                               
 [0]   spawnargs: [
-[0]     &#39;C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\document-parser\\server.py&#39;                                                                 
+[0]     'C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\document-parser\\server.py'                                                                 
 [0]   ]
 [0] }
 [0] MCP server workbook-manager error: Error: spawn C:\Users\JohnDeHart\working\insightLM-LT\mcp-servers\workbook-manager\python ENOENT                         
@@ -564,11 +564,11 @@ npm run build:electron
 [0]     at onErrorNT (node:internal/child_process:477:16)
 [0]     at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {                                                                        
 [0]   errno: -4058,
-[0]   code: &#39;ENOENT&#39;,
-[0]   syscall: &#39;spawn C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-manager\\python&#39;,                                                     
-[0]   path: &#39;C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-manager\\python&#39;,                                                              
+[0]   code: 'ENOENT',
+[0]   syscall: 'spawn C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-manager\\python',                                                     
+[0]   path: 'C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-manager\\python',                                                              
 [0]   spawnargs: [
-[0]     &#39;C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-manager\\server.py&#39;                                                                
+[0]     'C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-manager\\server.py'                                                                
 [0]   ]
 [0] }
 [0] MCP server workbook-rag error: Error: spawn C:\Users\JohnDeHart\working\insightLM-LT\mcp-servers\workbook-rag\python ENOENT                                 
@@ -576,11 +576,11 @@ npm run build:electron
 [0]     at onErrorNT (node:internal/child_process:477:16)
 [0]     at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {                                                                        
 [0]   errno: -4058,
-[0]   code: &#39;ENOENT&#39;,
-[0]   syscall: &#39;spawn C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-rag\\python&#39;,                                                         
-[0]   path: &#39;C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-rag\\python&#39;,                                                                  
+[0]   code: 'ENOENT',
+[0]   syscall: 'spawn C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-rag\\python',                                                         
+[0]   path: 'C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-rag\\python',                                                                  
 [0]   spawnargs: [
-[0]     &#39;C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-rag\\server.py&#39;                                                                    
+[0]     'C:\\Users\\JohnDeHart\\working\\insightLM-LT\\mcp-servers\\workbook-rag\\server.py'                                                                    
 [0]   ]
 [0] }
 [0] Window finished loading
@@ -630,14 +630,14 @@ The compiled JavaScript is outdated. Rebuilding the TypeScript files:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: tsc -p electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: tsc -p electron</summary>
 
 ```bash
 tsc -p electron
 ```
 
 ```
-tsc : The term &#39;tsc&#39; is not recognized as the name of a cmdlet, function, 
+tsc : The term 'tsc' is not recognized as the name of a cmdlet, function, 
 script file, or operable program. Check the spelling of the name, or if a path  
 was included, verify that the path is correct and try again.
 At line:1 char:1
@@ -663,7 +663,7 @@ Using npm to run the build:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -747,7 +747,7 @@ Compiled code includes the fixes. Starting the dev server to verify the errors a
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run dev</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run dev</summary>
 
 ```bash
 npm run dev
@@ -768,7 +768,7 @@ Waiting a few seconds for the app to start, then checking the output:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: timeout /t 5 /nobreak >nul 2>&1 || ping 127.0.0.1 -n 6 >nul</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: timeout /t 5 /nobreak >nul 2>&1 || ping 127.0.0.1 -n 6 >nul</summary>
 
 ```bash
 timeout /t 5 /nobreak >nul 2>&1 || ping 127.0.0.1 -n 6 >nul
@@ -779,7 +779,7 @@ timeout /t 5 /nobreak >nul 2>&1 || ping 127.0.0.1 -n 6 >nul
 At line:1 char:33
 + timeout /t 5 /nobreak &gt;nul 2&gt;&amp;1 || ping 127.0.0.1 -n 6 &gt;nul
 +                                 ~~
-The token &#39;||&#39; is not a valid statement separator in this version.
+The token '||' is not a valid statement separator in this version.
     + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordEx  
    ception
     + FullyQualifiedErrorId : InvalidEndOfLine
@@ -800,7 +800,7 @@ Checking if Python is available on the system:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: python --version</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: python --version</summary>
 
 ```bash
 python --version
@@ -1012,18 +1012,18 @@ Fixing port detection to wait for Vite and try common ports:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/main.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/main.ts</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
 
 ```diff
 @@ -2,4 +2,5 @@
-  import * as path from &quot;path&quot;;
-  import * as fs from &quot;fs&quot;;
-+ import * as http from &quot;http&quot;;
-  import { setupWorkbookIPC } from &quot;./ipc/workbooks&quot;;
-  import { setupFileIPC } from &quot;./ipc/files&quot;;
+  import * as path from "path";
+  import * as fs from "fs";
++ import * as http from "http";
+  import { setupWorkbookIPC } from "./ipc/workbooks";
+  import { setupFileIPC } from "./ipc/files";
 ```
 
 **Chunk 2**
@@ -1040,7 +1040,7 @@ Lines added: 31, lines removed: undefined
 +     const req = http.get(&#96;http://localhost:${port}&#96;, (res) =&gt; {
 +       resolve(res.statusCode === 200 || res.statusCode === 304);
 +     });
-+     req.on(&quot;error&quot;, () =&gt; resolve(false));
++     req.on("error", () =&gt; resolve(false));
 +     req.setTimeout(500, () =&gt; {
 +       req.destroy();
 +       resolve(false);
@@ -1061,7 +1061,7 @@ Lines added: 31, lines removed: undefined
 +   }
 +   
 +   // Default fallback
-+   console.warn(&quot;Could not find Vite dev server, using default port 5173&quot;);
++   console.warn("Could not find Vite dev server, using default port 5173");
 +   return 5173;
 + }
   
@@ -1075,7 +1075,7 @@ Lines added: 12, lines removed: 2
 @@ -43,6 +75,16 @@
     // Load the app
     if (isDev) {
--     mainWindow.loadURL(&quot;http://localhost:5173&quot;);
+-     mainWindow.loadURL("http://localhost:5173");
 -     mainWindow.webContents.openDevTools();
 +     // Wait for Vite to be ready, then load
 +     findVitePort().then((port) =&gt; {
@@ -1084,13 +1084,13 @@ Lines added: 12, lines removed: 2
 +       mainWindow?.loadURL(url);
 +       mainWindow?.webContents.openDevTools();
 +     }).catch((error) =&gt; {
-+       console.error(&quot;Error finding Vite port:&quot;, error);
++       console.error("Error finding Vite port:", error);
 +       // Fallback to default port
-+       mainWindow?.loadURL(&quot;http://localhost:5173&quot;);
++       mainWindow?.loadURL("http://localhost:5173");
 +       mainWindow?.webContents.openDevTools();
 +     });
     } else {
-      mainWindow.loadFile(path.join(__dirname, &quot;../dist/index.html&quot;));
+      mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
 ```
 
 </details>
@@ -1128,7 +1128,7 @@ Rebuilding and testing. Improving the implementation to handle the async port de
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/main.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/main.ts</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -1139,8 +1139,8 @@ Lines added: 1, lines removed: 1
   
 - function createWindow() {
 + async function createWindow() {
-    // Determine preload path - in dev, __dirname is dist-electron, in prod it&#39;s the app.asar
-    const isDev = process.env.NODE_ENV === &quot;development&quot; || !app.isPackaged;
+    // Determine preload path - in dev, __dirname is dist-electron, in prod it's the app.asar
+    const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 ```
 
 **Chunk 2**
@@ -1149,13 +1149,13 @@ Lines added: 2, lines removed: undefined
 ```diff
 @@ -61,9 +61,11 @@
       },
-      titleBarStyle: &quot;default&quot;,
-+     show: false, // Don&#39;t show until ready
+      titleBarStyle: "default",
++     show: false, // Don't show until ready
     });
   
     // Log when the window is ready
-    mainWindow.webContents.once(&quot;did-finish-load&quot;, () =&gt; {
-      console.log(&quot;Window finished loading&quot;);
+    mainWindow.webContents.once("did-finish-load", () =&gt; {
+      console.log("Window finished loading");
 +     mainWindow?.show(); // Show window when content is loaded
       // Check if electronAPI is available in the renderer
       mainWindow?.webContents.executeJavaScript(&#96;
@@ -1179,17 +1179,17 @@ Lines added: 10, lines removed: 8
 +       await mainWindow.loadURL(url);
 +       mainWindow.webContents.openDevTools();
 +     } catch (error) {
-        console.error(&quot;Error finding Vite port:&quot;, error);
+        console.error("Error finding Vite port:", error);
         // Fallback to default port
--       mainWindow?.loadURL(&quot;http://localhost:5173&quot;);
+-       mainWindow?.loadURL("http://localhost:5173");
 -       mainWindow?.webContents.openDevTools();
 -     });
-+       await mainWindow.loadURL(&quot;http://localhost:5173&quot;);
++       await mainWindow.loadURL("http://localhost:5173");
 +       mainWindow.webContents.openDevTools();
 +     }
     } else {
--     mainWindow.loadFile(path.join(__dirname, &quot;../dist/index.html&quot;));
-+     await mainWindow.loadFile(path.join(__dirname, &quot;../dist/index.html&quot;));
+-     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
++     await mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
 +     mainWindow.show();
     }
   
@@ -1206,7 +1206,7 @@ The model provided an ambiguous search string to replace.
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -1298,7 +1298,7 @@ Output mode: content
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/main.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/main.ts</summary>
 
 **Chunk 1**
 Lines added: 6, lines removed: 2
@@ -1309,14 +1309,14 @@ Lines added: 6, lines removed: 2
   
 -   createWindow();
 +   createWindow().catch((error) =&gt; {
-+     console.error(&quot;Error creating window:&quot;, error);
++     console.error("Error creating window:", error);
 +   });
   
-    app.on(&quot;activate&quot;, () =&gt; {
+    app.on("activate", () =&gt; {
       if (BrowserWindow.getAllWindows().length === 0) {
 -       createWindow();
 +       createWindow().catch((error) =&gt; {
-+         console.error(&quot;Error creating window:&quot;, error);
++         console.error("Error creating window:", error);
 +       });
       }
     });
@@ -1329,7 +1329,7 @@ Lines added: 6, lines removed: 2
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -1357,7 +1357,7 @@ Testing the application. Stopping any running instances first, then starting fre
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: taskkill /F /IM electron.exe 2>$null; Start-Sleep -Seconds 2</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: taskkill /F /IM electron.exe 2>$null; Start-Sleep -Seconds 2</summary>
 
 ```bash
 taskkill /F /IM electron.exe 2>$null; Start-Sleep -Seconds 2
@@ -1368,7 +1368,7 @@ taskkill /F /IM electron.exe 2>$null; Start-Sleep -Seconds 2
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run dev</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run dev</summary>
 
 ```bash
 npm run dev
@@ -1538,7 +1538,7 @@ Adding error handling to all IPC handlers to prevent 500 errors:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/ipc/workbooks.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/ipc/workbooks.ts</summary>
 
 **Chunk 1**
 Lines added: 6, lines removed: 1
@@ -1546,12 +1546,12 @@ Lines added: 6, lines removed: 1
 ```diff
 @@ -10,5 +10,10 @@
   
-    ipcMain.handle(&quot;workbook:create&quot;, async (_, name: string) =&gt; {
+    ipcMain.handle("workbook:create", async (_, name: string) =&gt; {
 -     return workbookService.createWorkbook(name);
 +     try {
 +       return await workbookService.createWorkbook(name);
 +     } catch (error) {
-+       console.error(&quot;Error creating workbook:&quot;, error);
++       console.error("Error creating workbook:", error);
 +       throw error;
 +     }
     });
@@ -1564,32 +1564,32 @@ Lines added: 18, lines removed: 3
 ```diff
 @@ -24,13 +29,28 @@
   
-    ipcMain.handle(&quot;workbook:get&quot;, async (_, id: string) =&gt; {
+    ipcMain.handle("workbook:get", async (_, id: string) =&gt; {
 -     return workbookService.getWorkbook(id);
 +     try {
 +       return await workbookService.getWorkbook(id);
 +     } catch (error) {
-+       console.error(&quot;Error getting workbook:&quot;, error);
++       console.error("Error getting workbook:", error);
 +       throw error;
 +     }
     });
   
-    ipcMain.handle(&quot;workbook:rename&quot;, async (_, id: string, newName: string) =&gt; {
+    ipcMain.handle("workbook:rename", async (_, id: string, newName: string) =&gt; {
 -     workbookService.renameWorkbook(id, newName);
 +     try {
 +       await workbookService.renameWorkbook(id, newName);
 +     } catch (error) {
-+       console.error(&quot;Error renaming workbook:&quot;, error);
++       console.error("Error renaming workbook:", error);
 +       throw error;
 +     }
     });
   
-    ipcMain.handle(&quot;workbook:delete&quot;, async (_, id: string) =&gt; {
+    ipcMain.handle("workbook:delete", async (_, id: string) =&gt; {
 -     workbookService.deleteWorkbook(id);
 +     try {
 +       await workbookService.deleteWorkbook(id);
 +     } catch (error) {
-+       console.error(&quot;Error deleting workbook:&quot;, error);
++       console.error("Error deleting workbook:", error);
 +       throw error;
 +     }
     });
@@ -1604,20 +1604,20 @@ Lines added: 18, lines removed: 3
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/ipc/files.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/ipc/files.ts</summary>
 
 **Chunk 1**
 Lines added: 6, lines removed: 1
 
 ```diff
 @@ -11,5 +11,10 @@
-      &quot;file:add&quot;,
+      "file:add",
       async (_, workbookId: string, sourcePath: string, filename?: string) =&gt; {
 -       fileService.addDocument(workbookId, sourcePath, filename);
 +       try {
 +         await fileService.addDocument(workbookId, sourcePath, filename);
 +       } catch (error) {
-+         console.error(&quot;Error adding file:&quot;, error);
++         console.error("Error adding file:", error);
 +         throw error;
 +       }
       },
@@ -1629,13 +1629,13 @@ Lines added: 6, lines removed: 1
 
 ```diff
 @@ -18,5 +23,10 @@
-      &quot;file:read&quot;,
+      "file:read",
       async (_, workbookId: string, relativePath: string) =&gt; {
 -       return fileService.readDocument(workbookId, relativePath);
 +       try {
 +         return await fileService.readDocument(workbookId, relativePath);
 +       } catch (error) {
-+         console.error(&quot;Error reading file:&quot;, error);
++         console.error("Error reading file:", error);
 +         throw error;
 +       }
       },
@@ -1647,13 +1647,13 @@ Lines added: 6, lines removed: 1
 
 ```diff
 @@ -25,5 +35,10 @@
-      &quot;file:rename&quot;,
+      "file:rename",
       async (_, workbookId: string, oldPath: string, newName: string) =&gt; {
 -       fileService.renameDocument(workbookId, oldPath, newName);
 +       try {
 +         await fileService.renameDocument(workbookId, oldPath, newName);
 +       } catch (error) {
-+         console.error(&quot;Error renaming file:&quot;, error);
++         console.error("Error renaming file:", error);
 +         throw error;
 +       }
       },
@@ -1665,13 +1665,13 @@ Lines added: 6, lines removed: 1
 
 ```diff
 @@ -32,5 +47,10 @@
-      &quot;file:delete&quot;,
+      "file:delete",
       async (_, workbookId: string, relativePath: string) =&gt; {
 -       fileService.deleteDocument(workbookId, relativePath);
 +       try {
 +         await fileService.deleteDocument(workbookId, relativePath);
 +       } catch (error) {
-+         console.error(&quot;Error deleting file:&quot;, error);
++         console.error("Error deleting file:", error);
 +         throw error;
 +       }
       },
@@ -1697,7 +1697,7 @@ Lines added: 10, lines removed: 5
 +           targetWorkbookId,
 +         );
 +       } catch (error) {
-+         console.error(&quot;Error moving file:&quot;, error);
++         console.error("Error moving file:", error);
 +         throw error;
 +       }
       },
@@ -1712,7 +1712,7 @@ Lines added: 10, lines removed: 5
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/ipc/archive.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/ipc/archive.ts</summary>
 
 **Chunk 1**
 Lines added: 18, lines removed: 3
@@ -1720,34 +1720,34 @@ Lines added: 18, lines removed: 3
 ```diff
 @@ -11,15 +11,30 @@
   
-    ipcMain.handle(&quot;archive:workbook&quot;, async (_, workbookId: string) =&gt; {
+    ipcMain.handle("archive:workbook", async (_, workbookId: string) =&gt; {
 -     archiveService.archiveWorkbook(workbookId);
 +     try {
 +       await archiveService.archiveWorkbook(workbookId);
 +     } catch (error) {
-+       console.error(&quot;Error archiving workbook:&quot;, error);
++       console.error("Error archiving workbook:", error);
 +       throw error;
 +     }
     });
   
-    ipcMain.handle(&quot;archive:unarchiveWorkbook&quot;, async (_, workbookId: string) =&gt; {
+    ipcMain.handle("archive:unarchiveWorkbook", async (_, workbookId: string) =&gt; {
 -     archiveService.unarchiveWorkbook(workbookId);
 +     try {
 +       await archiveService.unarchiveWorkbook(workbookId);
 +     } catch (error) {
-+       console.error(&quot;Error unarchiving workbook:&quot;, error);
++       console.error("Error unarchiving workbook:", error);
 +       throw error;
 +     }
     });
   
     ipcMain.handle(
-      &quot;archive:file&quot;,
+      "archive:file",
       async (_, workbookId: string, relativePath: string) =&gt; {
 -       archiveService.archiveFile(workbookId, relativePath);
 +       try {
 +         await archiveService.archiveFile(workbookId, relativePath);
 +       } catch (error) {
-+         console.error(&quot;Error archiving file:&quot;, error);
++         console.error("Error archiving file:", error);
 +         throw error;
 +       }
       },
@@ -1759,13 +1759,13 @@ Lines added: 6, lines removed: 1
 
 ```diff
 @@ -28,5 +43,10 @@
-      &quot;archive:unarchiveFile&quot;,
+      "archive:unarchiveFile",
       async (_, workbookId: string, filename: string) =&gt; {
 -       archiveService.unarchiveFile(workbookId, filename);
 +       try {
 +         await archiveService.unarchiveFile(workbookId, filename);
 +       } catch (error) {
-+         console.error(&quot;Error unarchiving file:&quot;, error);
++         console.error("Error unarchiving file:", error);
 +         throw error;
 +       }
       },
@@ -1780,7 +1780,7 @@ Lines added: 6, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/main.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/main.ts</summary>
 
 **Chunk 1**
 Lines added: 6, lines removed: 1
@@ -1788,12 +1788,12 @@ Lines added: 6, lines removed: 1
 ```diff
 @@ -146,5 +146,10 @@
     // LLM IPC handlers
-    ipcMain.handle(&quot;llm:chat&quot;, async (_, messages: any[]) =&gt; {
+    ipcMain.handle("llm:chat", async (_, messages: any[]) =&gt; {
 -     return await llmService.chat(messages);
 +     try {
 +       return await llmService.chat(messages);
 +     } catch (error) {
-+       console.error(&quot;Error in LLM chat:&quot;, error);
++       console.error("Error in LLM chat:", error);
 +       throw error;
 +     }
     });
@@ -1807,7 +1807,7 @@ Lines added: 6, lines removed: 1
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -2267,7 +2267,7 @@ The `IdeMessenger.ts` error is from an external source (likely a browser extensi
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: vite.config.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: vite.config.ts</summary>
 
 **Chunk 1**
 Lines added: 18, lines removed: 1
@@ -2281,11 +2281,11 @@ Lines added: 18, lines removed: 1
 +     react(),
 +     // Middleware to handle requests for non-existent files gracefully
 +     {
-+       name: &quot;handle-missing-files&quot;,
++       name: "handle-missing-files",
 +       configureServer(server) {
 +         server.middlewares.use((req, res, next) =&gt; {
 +           // Ignore requests for IdeMessenger and other dev tool files
-+           if (req.url?.includes(&quot;IdeMessenger&quot;) || req.url?.includes(&quot;ide-messenger&quot;)) {
++           if (req.url?.includes("IdeMessenger") || req.url?.includes("ide-messenger")) {
 +             res.statusCode = 404;
 +             res.end();
 +             return;
@@ -2306,7 +2306,7 @@ Lines added: 18, lines removed: 1
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -2426,7 +2426,7 @@ Vite is resolving a file from a different project (`insightLM/gui` instead of `i
 
 <tool-use data-tool-type="generic" data-tool-name="list_dir">
 <details>
-            <summary>Tool use: **list_directory** • Listed directory undefined • **0** results</summary>
+            <summary>Tool use: **list_dir** • Listed directory undefined • **0** results</summary>
         
 No results found
 </details>
@@ -2552,7 +2552,7 @@ Restricting Vite to this project's directory and preventing it from resolving fi
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: vite.config.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: vite.config.ts</summary>
 
 **Chunk 1**
 Lines added: 5, lines removed: 2
@@ -2562,12 +2562,12 @@ Lines added: 5, lines removed: 2
         configureServer(server) {
           server.middlewares.use((req, res, next) =&gt; {
 -           // Ignore requests for IdeMessenger and other dev tool files
--           if (req.url?.includes(&quot;IdeMessenger&quot;) || req.url?.includes(&quot;ide-messenger&quot;)) {
+-           if (req.url?.includes("IdeMessenger") || req.url?.includes("ide-messenger")) {
 +           // Block requests for files outside this project
-+           if (req.url?.includes(&quot;IdeMessenger&quot;) || 
-+               req.url?.includes(&quot;ide-messenger&quot;) ||
-+               req.url?.includes(&quot;/insightLM/gui/&quot;) ||
-+               req.url?.includes(&quot;vscode-webview&quot;)) {
++           if (req.url?.includes("IdeMessenger") || 
++               req.url?.includes("ide-messenger") ||
++               req.url?.includes("/insightLM/gui/") ||
++               req.url?.includes("vscode-webview")) {
               res.statusCode = 404;
               res.end();
 ```
@@ -2577,12 +2577,12 @@ Lines added: 11, lines removed: undefined
 
 ```diff
 @@ -26,13 +29,24 @@
-        &quot;@&quot;: path.resolve(__dirname, &quot;./src&quot;),
+        "@": path.resolve(__dirname, "./src"),
       },
 +     // Prevent Vite from resolving modules outside this project
 +     dedupe: [],
     },
-    base: &quot;./&quot;,
+    base: "./",
     server: {
       port: 5173,
 +     // Restrict file serving to this directory only
@@ -2592,12 +2592,12 @@ Lines added: 11, lines removed: undefined
 +     },
     },
     build: {
-      outDir: &quot;dist&quot;,
+      outDir: "dist",
       emptyOutDir: true,
     },
 +   // Explicitly exclude files from other projects
 +   optimizeDeps: {
-+     exclude: [&quot;vscode-webview&quot;],
++     exclude: ["vscode-webview"],
 +   },
   });
   
@@ -2619,7 +2619,7 @@ Lines added: 11, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: tsconfig.json</summary>
+<details><summary>Tool use: **search_replace** • Edit file: tsconfig.json</summary>
 
 **Chunk 1**
 Lines added: 7, lines removed: undefined
@@ -2627,15 +2627,15 @@ Lines added: 7, lines removed: undefined
 ```diff
 @@ -22,4 +22,11 @@
     },
-    &quot;include&quot;: [&quot;src&quot;],
-+   &quot;exclude&quot;: [
-+     &quot;node_modules&quot;,
-+     &quot;dist&quot;,
-+     &quot;**/insightLM/gui/**&quot;,
-+     &quot;**/IdeMessenger.ts&quot;,
-+     &quot;**/vscode-webview&quot;
+    "include": ["src"],
++   "exclude": [
++     "node_modules",
++     "dist",
++     "**/insightLM/gui/**",
++     "**/IdeMessenger.ts",
++     "**/vscode-webview"
 +   ],
-    &quot;references&quot;: [{ &quot;path&quot;: &quot;./tsconfig.node.json&quot; }]
+    "references": [{ "path": "./tsconfig.node.json" }]
   }
 ```
 
@@ -2646,7 +2646,7 @@ Lines added: 7, lines removed: undefined
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -2794,7 +2794,7 @@ Reading the file and fixing it properly:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: vite.config.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: vite.config.ts</summary>
 
 **Chunk 1**
 Lines added: 12, lines removed: undefined
@@ -2805,12 +2805,12 @@ Lines added: 12, lines removed: undefined
       react(),
 +     // Plugin to block processing files from other projects
 +     {
-+       name: &quot;block-external-files&quot;,
-+       enforce: &quot;pre&quot;,
++       name: "block-external-files",
++       enforce: "pre",
 +       resolveId(id) {
 +         // Block any file from the other project
-+         if (id.includes(&quot;insightLM/gui/&quot;) || id.includes(&quot;IdeMessenger&quot;) || id.includes(&quot;vscode-webview&quot;)) {
-+           return null; // Don&#39;t process this file
++         if (id.includes("insightLM/gui/") || id.includes("IdeMessenger") || id.includes("vscode-webview")) {
++           return null; // Don't process this file
 +         }
 +         return null;
 +       },
@@ -2923,7 +2923,7 @@ Creating resizable separators with saved positions. Adding a layout store and a 
 
 <tool-use data-tool-type="write" data-tool-name="write">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/store/layoutStore.ts</summary>
+<details><summary>Tool use: **write** • Edit file: src/store/layoutStore.ts</summary>
 
 **Chunk 1**
 Lines added: 34, lines removed: 1
@@ -2931,8 +2931,8 @@ Lines added: 34, lines removed: 1
 ```diff
 @@ -1,1 +1,34 @@
 - 
-+ import { create } from &quot;zustand&quot;;
-+ import { persist } from &quot;zustand/middleware&quot;;
++ import { create } from "zustand";
++ import { persist } from "zustand/middleware";
 + 
 + interface LayoutStore {
 +   sidebarWidth: number; // Width of left sidebar in pixels
@@ -2960,7 +2960,7 @@ Lines added: 34, lines removed: 1
 +       }),
 +     }),
 +     {
-+       name: &quot;insightlm-layout-storage&quot;,
++       name: "insightlm-layout-storage",
 +     }
 +   )
 + );
@@ -2975,7 +2975,7 @@ Lines added: 34, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="write">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **write** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 90, lines removed: 1
@@ -2983,10 +2983,10 @@ Lines added: 90, lines removed: 1
 ```diff
 @@ -1,1 +1,90 @@
 - 
-+ import { useEffect, useRef, useState } from &quot;react&quot;;
++ import { useEffect, useRef, useState } from "react";
 + 
 + interface ResizablePaneProps {
-+   direction: &quot;horizontal&quot; | &quot;vertical&quot;;
++   direction: "horizontal" | "vertical";
 +   onResize: (size: number) =&gt; void;
 +   initialSize: number;
 +   minSize?: number;
@@ -3000,7 +3000,7 @@ Lines added: 90, lines removed: 1
 +   initialSize,
 +   minSize = 100,
 +   maxSize = Infinity,
-+   className = &quot;&quot;,
++   className = "",
 + }: ResizablePaneProps) {
 +   const [isDragging, setIsDragging] = useState(false);
 +   const [size, setSize] = useState(initialSize);
@@ -3016,7 +3016,7 @@ Lines added: 90, lines removed: 1
 +     if (!isDragging) return;
 + 
 +     const handleMouseMove = (e: MouseEvent) =&gt; {
-+       const delta = direction === &quot;horizontal&quot; 
++       const delta = direction === "horizontal" 
 +         ? e.clientX - startPosRef.current
 +         : startPosRef.current - e.clientY; // Invert for vertical (grows from bottom)
 + 
@@ -3033,40 +3033,40 @@ Lines added: 90, lines removed: 1
 +       setIsDragging(false);
 +     };
 + 
-+     document.addEventListener(&quot;mousemove&quot;, handleMouseMove);
-+     document.addEventListener(&quot;mouseup&quot;, handleMouseUp);
++     document.addEventListener("mousemove", handleMouseMove);
++     document.addEventListener("mouseup", handleMouseUp);
 + 
 +     return () =&gt; {
-+       document.removeEventListener(&quot;mousemove&quot;, handleMouseMove);
-+       document.removeEventListener(&quot;mouseup&quot;, handleMouseUp);
++       document.removeEventListener("mousemove", handleMouseMove);
++       document.removeEventListener("mouseup", handleMouseUp);
 +     };
 +   }, [isDragging, direction, minSize, maxSize, onResize]);
 + 
 +   const handleMouseDown = (e: React.MouseEvent) =&gt; {
 +     e.preventDefault();
 +     setIsDragging(true);
-+     startPosRef.current = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
++     startPosRef.current = direction === "horizontal" ? e.clientX : e.clientY;
 +     startSizeRef.current = size;
 +   };
 + 
-+   const isHorizontal = direction === &quot;horizontal&quot;;
++   const isHorizontal = direction === "horizontal";
 + 
 +   return (
 +     &lt;div
 +       ref={containerRef}
-+       className={&#96;group relative flex-shrink-0 ${isHorizontal ? &quot;w-1&quot; : &quot;h-1&quot;} ${className}&#96;}
++       className={&#96;group relative flex-shrink-0 ${isHorizontal ? "w-1" : "h-1"} ${className}&#96;}
 +       style={{
-+         [isHorizontal ? &quot;width&quot; : &quot;height&quot;]: isDragging ? &quot;4px&quot; : &quot;4px&quot;,
++         [isHorizontal ? "width" : "height"]: isDragging ? "4px" : "4px",
 +       }}
 +     &gt;
 +       &lt;div
 +         onMouseDown={handleMouseDown}
-+         className={&#96;absolute inset-0 cursor-${isHorizontal ? &quot;col&quot; : &quot;row&quot;}-resize bg-transparent transition-colors hover:bg-blue-500 ${
-+           isDragging ? &quot;bg-blue-500&quot; : &quot;&quot;
-+         } ${isHorizontal ? &quot;cursor-col-resize&quot; : &quot;cursor-row-resize&quot;}&#96;}
++         className={&#96;absolute inset-0 cursor-${isHorizontal ? "col" : "row"}-resize bg-transparent transition-colors hover:bg-blue-500 ${
++           isDragging ? "bg-blue-500" : ""
++         } ${isHorizontal ? "cursor-col-resize" : "cursor-row-resize"}&#96;}
 +         style={{
-+           [isHorizontal ? &quot;width&quot; : &quot;height&quot;]: &quot;100%&quot;,
-+           [isHorizontal ? &quot;height&quot; : &quot;width&quot;]: &quot;100%&quot;,
++           [isHorizontal ? "width" : "height"]: "100%",
++           [isHorizontal ? "height" : "width"]: "100%",
 +         }}
 +       /&gt;
 +     &lt;/div&gt;
@@ -3101,15 +3101,15 @@ Updating the layout store to use localStorage directly (Zustand persist may requ
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/store/layoutStore.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/store/layoutStore.ts</summary>
 
 **Chunk 1**
 Lines added: undefined, lines removed: 1
 
 ```diff
 @@ -1,4 +1,3 @@
-  import { create } from &quot;zustand&quot;;
-- import { persist } from &quot;zustand/middleware&quot;;
+  import { create } from "zustand";
+- import { persist } from "zustand/middleware";
   
   interface LayoutStore {
 ```
@@ -3135,11 +3135,11 @@ Lines added: 62, lines removed: 18
 -       }),
 -     }),
 -     {
--       name: &quot;insightlm-layout-storage&quot;,
+-       name: "insightlm-layout-storage",
 -     }
 -   )
 - );
-+ const STORAGE_KEY = &quot;insightlm-layout-storage&quot;;
++ const STORAGE_KEY = "insightlm-layout-storage";
 + 
 + // Load from localStorage
 + const loadLayout = (): { sidebarWidth: number; chatHeight: number } =&gt; {
@@ -3153,7 +3153,7 @@ Lines added: 62, lines removed: 18
 +       };
 +     }
 +   } catch (e) {
-+     console.error(&quot;Failed to load layout from localStorage:&quot;, e);
++     console.error("Failed to load layout from localStorage:", e);
 +   }
 +   return {
 +     sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
@@ -3169,7 +3169,7 @@ Lines added: 62, lines removed: 18
 +       JSON.stringify({ sidebarWidth, chatHeight })
 +     );
 +   } catch (e) {
-+     console.error(&quot;Failed to save layout to localStorage:&quot;, e);
++     console.error("Failed to save layout to localStorage:", e);
 +   }
 + };
 + 
@@ -3226,7 +3226,7 @@ Lines added: 62, lines removed: 18
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 3
@@ -3264,16 +3264,16 @@ Lines added: 4, lines removed: undefined
 
 ```diff
 @@ -51,8 +48,12 @@
-      document.addEventListener(&quot;mousemove&quot;, handleMouseMove);
-      document.addEventListener(&quot;mouseup&quot;, handleMouseUp);
-+     document.body.style.cursor = direction === &quot;horizontal&quot; ? &quot;col-resize&quot; : &quot;row-resize&quot;;
-+     document.body.style.userSelect = &quot;none&quot;;
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
++     document.body.style.cursor = direction === "horizontal" ? "col-resize" : "row-resize";
++     document.body.style.userSelect = "none";
   
       return () =&gt; {
-        document.removeEventListener(&quot;mousemove&quot;, handleMouseMove);
-        document.removeEventListener(&quot;mouseup&quot;, handleMouseUp);
-+       document.body.style.cursor = &quot;&quot;;
-+       document.body.style.userSelect = &quot;&quot;;
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
++       document.body.style.cursor = "";
++       document.body.style.userSelect = "";
       };
     }, [isDragging, direction, minSize, maxSize, onResize]);
 ```
@@ -3284,7 +3284,7 @@ Lines added: 1, lines removed: 1
 ```diff
 @@ -62,5 +63,5 @@
       setIsDragging(true);
-      startPosRef.current = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
+      startPosRef.current = direction === "horizontal" ? e.clientX : e.clientY;
 -     startSizeRef.current = size;
 +     startSizeRef.current = initialSize;
     };
@@ -3299,25 +3299,25 @@ Lines added: 6, lines removed: 6
     return (
       &lt;div
 -       ref={containerRef}
--       className={&#96;group relative flex-shrink-0 ${isHorizontal ? &quot;w-1&quot; : &quot;h-1&quot;} ${className}&#96;}
+-       className={&#96;group relative flex-shrink-0 ${isHorizontal ? "w-1" : "h-1"} ${className}&#96;}
 +       className={&#96;group relative flex-shrink-0 ${className}&#96;}
         style={{
--         [isHorizontal ? &quot;width&quot; : &quot;height&quot;]: isDragging ? &quot;4px&quot; : &quot;4px&quot;,
-+         width: isHorizontal ? &quot;4px&quot; : &quot;100%&quot;,
-+         height: isHorizontal ? &quot;100%&quot; : &quot;4px&quot;,
+-         [isHorizontal ? "width" : "height"]: isDragging ? "4px" : "4px",
++         width: isHorizontal ? "4px" : "100%",
++         height: isHorizontal ? "100%" : "4px",
         }}
       &gt;
         &lt;div
           onMouseDown={handleMouseDown}
--         className={&#96;absolute inset-0 cursor-${isHorizontal ? &quot;col&quot; : &quot;row&quot;}-resize bg-transparent transition-colors hover:bg-blue-500 ${
+-         className={&#96;absolute inset-0 cursor-${isHorizontal ? "col" : "row"}-resize bg-transparent transition-colors hover:bg-blue-500 ${
 +         className={&#96;absolute inset-0 bg-transparent transition-colors hover:bg-blue-500 ${
-            isDragging ? &quot;bg-blue-500&quot; : &quot;&quot;
-          } ${isHorizontal ? &quot;cursor-col-resize&quot; : &quot;cursor-row-resize&quot;}&#96;}
+            isDragging ? "bg-blue-500" : ""
+          } ${isHorizontal ? "cursor-col-resize" : "cursor-row-resize"}&#96;}
           style={{
--           [isHorizontal ? &quot;width&quot; : &quot;height&quot;]: &quot;100%&quot;,
--           [isHorizontal ? &quot;height&quot; : &quot;width&quot;]: &quot;100%&quot;,
-+           width: &quot;100%&quot;,
-+           height: &quot;100%&quot;,
+-           [isHorizontal ? "width" : "height"]: "100%",
+-           [isHorizontal ? "height" : "width"]: "100%",
++           width: "100%",
++           height: "100%",
           }}
         /&gt;
 ```
@@ -3343,24 +3343,24 @@ Lines added: 6, lines removed: 6
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/App.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/App.tsx</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: undefined
 
 ```diff
 @@ -5,8 +5,11 @@
-  import { SimpleStats } from &quot;./components/SimpleStats&quot;;
-  import { DashboardBuilder } from &quot;./components/Dashboard/DashboardBuilder&quot;;
-+ import { ResizablePane } from &quot;./components/ResizablePane&quot;;
-  import { useDocumentStore } from &quot;./store/documentStore&quot;;
-+ import { useLayoutStore } from &quot;./store/layoutStore&quot;;
+  import { SimpleStats } from "./components/SimpleStats";
+  import { DashboardBuilder } from "./components/Dashboard/DashboardBuilder";
++ import { ResizablePane } from "./components/ResizablePane";
+  import { useDocumentStore } from "./store/documentStore";
++ import { useLayoutStore } from "./store/layoutStore";
   
   function App() {
     const { openDocuments, closeDocument } = useDocumentStore();
 +   const { sidebarWidth, chatHeight, setSidebarWidth, setChatHeight } = useLayoutStore();
-    const [activeView, setActiveView] = useState&lt;&quot;documents&quot; | &quot;dashboard&quot;&gt;(
-      &quot;documents&quot;,
+    const [activeView, setActiveView] = useState&lt;"documents" | "dashboard"&gt;(
+      "documents",
 ```
 
 **Chunk 2**
@@ -3369,15 +3369,15 @@ Lines added: 5, lines removed: 1
 ```diff
 @@ -15,5 +18,9 @@
     return (
-      &lt;div className=&quot;flex h-screen w-screen bg-gray-50&quot;&gt;
--       &lt;div className=&quot;flex w-64 flex-col border-r border-gray-200 bg-white&quot;&gt;
+      &lt;div className="flex h-screen w-screen bg-gray-50"&gt;
+-       &lt;div className="flex w-64 flex-col border-r border-gray-200 bg-white"&gt;
 +       {/* Left Sidebar */}
 +       &lt;div 
-+         className=&quot;flex flex-col border-r border-gray-200 bg-white&quot;
++         className="flex flex-col border-r border-gray-200 bg-white"
 +         style={{ width: &#96;${sidebarWidth}px&#96; }}
 +       &gt;
-          &lt;div className=&quot;border-b border-gray-200 p-3&quot;&gt;
-            &lt;h1 className=&quot;text-lg font-bold&quot;&gt;insightLM-LT&lt;/h1&gt;
+          &lt;div className="border-b border-gray-200 p-3"&gt;
+            &lt;h1 className="text-lg font-bold"&gt;insightLM-LT&lt;/h1&gt;
 ```
 
 **Chunk 3**
@@ -3386,16 +3386,16 @@ Lines added: 16, lines removed: 1
 ```diff
 @@ -42,8 +49,23 @@
           &lt;/div&gt;
-          &lt;div className=&quot;flex flex-1 flex-col overflow-hidden&quot;&gt;
+          &lt;div className="flex flex-1 flex-col overflow-hidden"&gt;
 +           {/* Workbooks View */}
-            &lt;div className=&quot;flex-1 overflow-hidden&quot;&gt;
+            &lt;div className="flex-1 overflow-hidden"&gt;
               &lt;WorkbooksView /&gt;
             &lt;/div&gt;
--           &lt;div className=&quot;flex h-64 flex-col border-t border-gray-200&quot;&gt;
+-           &lt;div className="flex h-64 flex-col border-t border-gray-200"&gt;
 +           
 +           {/* Vertical Resizable Separator */}
 +           &lt;ResizablePane
-+             direction=&quot;vertical&quot;
++             direction="vertical"
 +             onResize={setChatHeight}
 +             initialSize={chatHeight}
 +             minSize={150}
@@ -3404,10 +3404,10 @@ Lines added: 16, lines removed: 1
 +           
 +           {/* Chat and Stats Area */}
 +           &lt;div 
-+             className=&quot;flex flex-col border-t border-gray-200&quot;
++             className="flex flex-col border-t border-gray-200"
 +             style={{ height: &#96;${chatHeight}px&#96; }}
 +           &gt;
-              &lt;div className=&quot;flex-1 overflow-hidden&quot;&gt;
+              &lt;div className="flex-1 overflow-hidden"&gt;
                 &lt;Chat /&gt;
 ```
 
@@ -3421,7 +3421,7 @@ Lines added: 11, lines removed: undefined
 +       
 +       {/* Horizontal Resizable Separator */}
 +       &lt;ResizablePane
-+         direction=&quot;horizontal&quot;
++         direction="horizontal"
 +         onResize={setSidebarWidth}
 +         initialSize={sidebarWidth}
 +         minSize={200}
@@ -3429,8 +3429,8 @@ Lines added: 11, lines removed: undefined
 +       /&gt;
 +       
 +       {/* Main Content Area */}
-        &lt;div className=&quot;flex-1 p-4&quot;&gt;
-          &lt;div className=&quot;h-full rounded-lg border border-gray-200 bg-white shadow-sm&quot;&gt;
+        &lt;div className="flex-1 p-4"&gt;
+          &lt;div className="h-full rounded-lg border border-gray-200 bg-white shadow-sm"&gt;
 ```
 
 </details>
@@ -3470,14 +3470,14 @@ Fixing the vertical separator logic:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
 
 ```diff
 @@ -32,5 +32,5 @@
-        const delta = direction === &quot;horizontal&quot; 
+        const delta = direction === "horizontal" 
           ? e.clientX - startPosRef.current
 -         : startPosRef.current - e.clientY; // Invert for vertical (grows from bottom)
 +         : e.clientY - startPosRef.current; // For vertical: dragging down increases size
@@ -3605,7 +3605,7 @@ Fixing sensitivity and direction issues using best practices:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: undefined
@@ -3627,7 +3627,7 @@ Lines added: 37, lines removed: 9
 @@ -30,38 +32,66 @@
   
       const handleMouseMove = (e: MouseEvent) =&gt; {
--       const delta = direction === &quot;horizontal&quot;
+-       const delta = direction === "horizontal"
 -         ? e.clientX - startPosRef.current
 -         : e.clientY - startPosRef.current; // For vertical: dragging down increases size
 +       // Throttle updates using requestAnimationFrame for smoother performance
@@ -3646,7 +3646,7 @@ Lines added: 37, lines removed: 9
 +         // Calculate delta based on direction
 +         // Horizontal: dragging right increases size (positive delta)
 +         // Vertical: dragging down increases size (positive delta)
-+         const delta = direction === &quot;horizontal&quot;
++         const delta = direction === "horizontal"
 +           ? e.clientX - startPosRef.current
 +           : e.clientY - startPosRef.current;
   
@@ -3672,22 +3672,22 @@ Lines added: 37, lines removed: 9
         setIsDragging(false);
       };
   
--     document.addEventListener(&quot;mousemove&quot;, handleMouseMove);
-+     document.addEventListener(&quot;mousemove&quot;, handleMouseMove, { passive: true });
-      document.addEventListener(&quot;mouseup&quot;, handleMouseUp);
-      document.body.style.cursor = direction === &quot;horizontal&quot; ? &quot;col-resize&quot; : &quot;row-resize&quot;;
-      document.body.style.userSelect = &quot;none&quot;;
-+     document.body.style.pointerEvents = &quot;none&quot;; // Prevent text selection during drag
+-     document.addEventListener("mousemove", handleMouseMove);
++     document.addEventListener("mousemove", handleMouseMove, { passive: true });
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = direction === "horizontal" ? "col-resize" : "row-resize";
+      document.body.style.userSelect = "none";
++     document.body.style.pointerEvents = "none"; // Prevent text selection during drag
   
       return () =&gt; {
 +       if (rafRef.current !== null) {
 +         cancelAnimationFrame(rafRef.current);
 +       }
-        document.removeEventListener(&quot;mousemove&quot;, handleMouseMove);
-        document.removeEventListener(&quot;mouseup&quot;, handleMouseUp);
-        document.body.style.cursor = &quot;&quot;;
-        document.body.style.userSelect = &quot;&quot;;
-+       document.body.style.pointerEvents = &quot;&quot;;
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
++       document.body.style.pointerEvents = "";
       };
     }, [isDragging, direction, minSize, maxSize, onResize]);
   
@@ -3695,7 +3695,7 @@ Lines added: 37, lines removed: 9
       e.preventDefault();
 +     e.stopPropagation();
       setIsDragging(true);
-      startPosRef.current = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
+      startPosRef.current = direction === "horizontal" ? e.clientX : e.clientY;
       startSizeRef.current = initialSize;
 +     lastUpdateRef.current = Date.now();
     };
@@ -3709,10 +3709,10 @@ Lines added: 24, lines removed: 4
 @@ -72,16 +102,36 @@
         className={&#96;group relative flex-shrink-0 ${className}&#96;}
         style={{
--         width: isHorizontal ? &quot;4px&quot; : &quot;100%&quot;,
--         height: isHorizontal ? &quot;100%&quot; : &quot;4px&quot;,
-+         width: isHorizontal ? &quot;6px&quot; : &quot;100%&quot;,
-+         height: isHorizontal ? &quot;100%&quot; : &quot;6px&quot;,
+-         width: isHorizontal ? "4px" : "100%",
+-         height: isHorizontal ? "100%" : "4px",
++         width: isHorizontal ? "6px" : "100%",
++         height: isHorizontal ? "100%" : "6px",
 +         zIndex: isDragging ? 10 : 1,
         }}
       &gt;
@@ -3720,31 +3720,31 @@ Lines added: 24, lines removed: 4
         &lt;div
           onMouseDown={handleMouseDown}
 -         className={&#96;absolute inset-0 bg-transparent transition-colors hover:bg-blue-500 ${
--           isDragging ? &quot;bg-blue-500&quot; : &quot;&quot;
+-           isDragging ? "bg-blue-500" : ""
 +         className={&#96;absolute inset-0 bg-transparent transition-colors ${
-+           isDragging ? &quot;bg-blue-500&quot; : &quot;hover:bg-blue-400&quot;
-          } ${isHorizontal ? &quot;cursor-col-resize&quot; : &quot;cursor-row-resize&quot;}&#96;}
++           isDragging ? "bg-blue-500" : "hover:bg-blue-400"
+          } ${isHorizontal ? "cursor-col-resize" : "cursor-row-resize"}&#96;}
           style={{
-            width: &quot;100%&quot;,
-            height: &quot;100%&quot;,
+            width: "100%",
+            height: "100%",
 +           // Extend hit area slightly beyond visual bounds for easier grabbing
-+           [isHorizontal ? &quot;marginLeft&quot; : &quot;marginTop&quot;]: &quot;-2px&quot;,
-+           [isHorizontal ? &quot;marginRight&quot; : &quot;marginBottom&quot;]: &quot;-2px&quot;,
++           [isHorizontal ? "marginLeft" : "marginTop"]: "-2px",
++           [isHorizontal ? "marginRight" : "marginBottom"]: "-2px",
 +         }}
 +       /&gt;
 +       {/* Visual separator line */}
 +       &lt;div
 +         className={&#96;absolute ${
-+           isHorizontal ? &quot;left-0 right-0 top-0 bottom-0&quot; : &quot;top-0 bottom-0 left-0 right-0&quot;
++           isHorizontal ? "left-0 right-0 top-0 bottom-0" : "top-0 bottom-0 left-0 right-0"
 +         } ${
-+           isDragging ? &quot;bg-blue-500&quot; : &quot;bg-gray-300 group-hover:bg-blue-400&quot;
++           isDragging ? "bg-blue-500" : "bg-gray-300 group-hover:bg-blue-400"
 +         } transition-colors&#96;}
 +         style={{
-+           [isHorizontal ? &quot;width&quot; : &quot;height&quot;]: &quot;1px&quot;,
-+           [isHorizontal ? &quot;left&quot; : &quot;top&quot;]: &quot;50%&quot;,
-+           [isHorizontal ? &quot;transform&quot; : &quot;transform&quot;]: isHorizontal 
-+             ? &quot;translateX(-50%)&quot; 
-+             : &quot;translateY(-50%)&quot;,
++           [isHorizontal ? "width" : "height"]: "1px",
++           [isHorizontal ? "left" : "top"]: "50%",
++           [isHorizontal ? "transform" : "transform"]: isHorizontal 
++             ? "translateX(-50%)" 
++             : "translateY(-50%)",
           }}
         /&gt;
 ```
@@ -3810,7 +3810,7 @@ Adding a dead zone to prevent accidental drags and verifying the direction logic
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 17, lines removed: undefined
@@ -3827,8 +3827,8 @@ Lines added: 17, lines removed: undefined
 +       const originalUserSelect = style.userSelect;
 +       const originalPointerEvents = style.pointerEvents;
 +       
-+       style.userSelect = &quot;none&quot;;
-+       style.pointerEvents = &quot;none&quot;;
++       style.userSelect = "none";
++       style.pointerEvents = "none";
 +       
 +       return () =&gt; {
 +         style.userSelect = originalUserSelect;
@@ -3837,7 +3837,7 @@ Lines added: 17, lines removed: undefined
 +     }
 +   }, [isDragging]);
   
-    const isHorizontal = direction === &quot;horizontal&quot;;
+    const isHorizontal = direction === "horizontal";
 ```
 
 </details>
@@ -3848,7 +3848,7 @@ Lines added: 17, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -3872,13 +3872,13 @@ Lines added: 8, lines removed: 6
           // Calculate delta based on direction
 -         // Horizontal: dragging right increases size (positive delta)
 -         // Vertical: dragging down increases size (positive delta)
--         const delta = direction === &quot;horizontal&quot;
+-         const delta = direction === "horizontal"
 -           ? e.clientX - startPosRef.current
 -           : e.clientY - startPosRef.current;
 - 
 +         // For horizontal separator: dragging RIGHT should increase sidebar width
 +         // For vertical separator: dragging DOWN should increase chat height
-+         const currentPos = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
++         const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
 +         const delta = currentPos - startPosRef.current;
 + 
 +         // Apply delta to starting size
@@ -3931,25 +3931,25 @@ Cleaning up duplicate code and ensuring the direction is correct:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 7, lines removed: 1
 
 ```diff
 @@ -73,7 +73,13 @@
-      document.addEventListener(&quot;mousemove&quot;, handleMouseMove, { passive: true });
-      document.addEventListener(&quot;mouseup&quot;, handleMouseUp);
+      document.addEventListener("mousemove", handleMouseMove, { passive: true });
+      document.addEventListener("mouseup", handleMouseUp);
 +     
 +     // Prevent text selection and improve cursor during drag
 +     const originalCursor = document.body.style.cursor;
 +     const originalUserSelect = document.body.style.userSelect;
 +     const originalPointerEvents = document.body.style.pointerEvents;
 +     
-      document.body.style.cursor = direction === &quot;horizontal&quot; ? &quot;col-resize&quot; : &quot;row-resize&quot;;
-      document.body.style.userSelect = &quot;none&quot;;
--     document.body.style.pointerEvents = &quot;none&quot;; // Prevent text selection during drag
-+     document.body.style.pointerEvents = &quot;none&quot;;
+      document.body.style.cursor = direction === "horizontal" ? "col-resize" : "row-resize";
+      document.body.style.userSelect = "none";
+-     document.body.style.pointerEvents = "none"; // Prevent text selection during drag
++     document.body.style.pointerEvents = "none";
   
       return () =&gt; {
 ```
@@ -3959,11 +3959,11 @@ Lines added: 3, lines removed: 3
 
 ```diff
 @@ -83,7 +89,7 @@
-        document.removeEventListener(&quot;mousemove&quot;, handleMouseMove);
-        document.removeEventListener(&quot;mouseup&quot;, handleMouseUp);
--       document.body.style.cursor = &quot;&quot;;
--       document.body.style.userSelect = &quot;&quot;;
--       document.body.style.pointerEvents = &quot;&quot;;
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+-       document.body.style.cursor = "";
+-       document.body.style.userSelect = "";
+-       document.body.style.pointerEvents = "";
 +       document.body.style.cursor = originalCursor;
 +       document.body.style.userSelect = originalUserSelect;
 +       document.body.style.pointerEvents = originalPointerEvents;
@@ -3986,8 +3986,8 @@ Lines added: undefined, lines removed: 17
 -       const originalUserSelect = style.userSelect;
 -       const originalPointerEvents = style.pointerEvents;
 -       
--       style.userSelect = &quot;none&quot;;
--       style.pointerEvents = &quot;none&quot;;
+-       style.userSelect = "none";
+-       style.pointerEvents = "none";
 -       
 -       return () =&gt; {
 -         style.userSelect = originalUserSelect;
@@ -3996,7 +3996,7 @@ Lines added: undefined, lines removed: 17
 -     }
 -   }, [isDragging]);
   
-    const isHorizontal = direction === &quot;horizontal&quot;;
+    const isHorizontal = direction === "horizontal";
 ```
 
 </details>
@@ -4129,7 +4129,7 @@ Checking if the dev server is running and if changes are being picked up. Verify
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: Get-Process | Where-Object {$_.ProcessName -like "*node*" -or $_.ProcessName -like "*electron*"} | Select-Object ProcessName, Id | Format-Table</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: Get-Process | Where-Object {$_.ProcessName -like "*node*" -or $_.ProcessName -like "*electron*"} | Select-Object ProcessName, Id | Format-Table</summary>
 
 ```bash
 Get-Process | Where-Object {$_.ProcessName -like "*node*" -or $_.ProcessName -like "*electron*"} | Select-Object ProcessName, Id | Format-Table
@@ -4166,7 +4166,7 @@ Restarting the dev server to pick up changes. Vite should hot-reload, but a rest
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: taskkill /F /IM electron.exe 2>$null; taskkill /F /FI "WINDOWTITLE eq *vite*" /IM node.exe 2>$null; Start-Sleep -Seconds 2</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: taskkill /F /IM electron.exe 2>$null; taskkill /F /FI "WINDOWTITLE eq *vite*" /IM node.exe 2>$null; Start-Sleep -Seconds 2</summary>
 
 ```bash
 taskkill /F /IM electron.exe 2>$null; taskkill /F /FI "WINDOWTITLE eq *vite*" /IM node.exe 2>$null; Start-Sleep -Seconds 2
@@ -4174,10 +4174,10 @@ taskkill /F /IM electron.exe 2>$null; taskkill /F /FI "WINDOWTITLE eq *vite*" /I
 
 ```
 eep -Seconds 2                                                                  
-SUCCESS: The process &quot;electron.exe&quot; with PID 29608 has been terminated.
-SUCCESS: The process &quot;electron.exe&quot; with PID 9092 has been terminated.
-SUCCESS: The process &quot;electron.exe&quot; with PID 1312 has been terminated.
-SUCCESS: The process &quot;electron.exe&quot; with PID 16856 has been terminated.
+SUCCESS: The process "electron.exe" with PID 29608 has been terminated.
+SUCCESS: The process "electron.exe" with PID 9092 has been terminated.
+SUCCESS: The process "electron.exe" with PID 1312 has been terminated.
+SUCCESS: The process "electron.exe" with PID 16856 has been terminated.
 ```
 </details>
 </tool-use>
@@ -4185,7 +4185,7 @@ SUCCESS: The process &quot;electron.exe&quot; with PID 16856 has been terminated
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run dev</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run dev</summary>
 
 ```bash
 npm run dev
@@ -4281,7 +4281,7 @@ Rewriting with a simpler, more reliable approach:
 
 <tool-use data-tool-type="write" data-tool-name="write">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **write** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: undefined, lines removed: 2
@@ -4319,7 +4319,7 @@ Lines added: 10, lines removed: 49
 -         // Calculate delta based on direction
 -         // For horizontal separator: dragging RIGHT should increase sidebar width
 -         // For vertical separator: dragging DOWN should increase chat height
--         const currentPos = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
+-         const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
 -         const delta = currentPos - startPosRef.current;
 - 
 -         // Apply delta to starting size
@@ -4332,7 +4332,7 @@ Lines added: 10, lines removed: 49
 - 
 -         onResize(newSize);
 -       });
-+       const currentPos = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
++       const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
 +       const delta = currentPos - startPosRef.current;
 +       const newSize = Math.max(
 +         minSize,
@@ -4349,30 +4349,30 @@ Lines added: 10, lines removed: 49
         setIsDragging(false);
       };
   
--     document.addEventListener(&quot;mousemove&quot;, handleMouseMove, { passive: true });
-+     document.addEventListener(&quot;mousemove&quot;, handleMouseMove);
-      document.addEventListener(&quot;mouseup&quot;, handleMouseUp);
+-     document.addEventListener("mousemove", handleMouseMove, { passive: true });
++     document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
 - 
 -     // Prevent text selection and improve cursor during drag
 -     const originalCursor = document.body.style.cursor;
 -     const originalUserSelect = document.body.style.userSelect;
 -     const originalPointerEvents = document.body.style.pointerEvents;
 - 
-      document.body.style.cursor = direction === &quot;horizontal&quot; ? &quot;col-resize&quot; : &quot;row-resize&quot;;
-      document.body.style.userSelect = &quot;none&quot;;
--     document.body.style.pointerEvents = &quot;none&quot;;
+      document.body.style.cursor = direction === "horizontal" ? "col-resize" : "row-resize";
+      document.body.style.userSelect = "none";
+-     document.body.style.pointerEvents = "none";
   
       return () =&gt; {
 -       if (rafRef.current !== null) {
 -         cancelAnimationFrame(rafRef.current);
 -       }
-        document.removeEventListener(&quot;mousemove&quot;, handleMouseMove);
-        document.removeEventListener(&quot;mouseup&quot;, handleMouseUp);
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
 -       document.body.style.cursor = originalCursor;
 -       document.body.style.userSelect = originalUserSelect;
 -       document.body.style.pointerEvents = originalPointerEvents;
-+       document.body.style.cursor = &quot;&quot;;
-+       document.body.style.userSelect = &quot;&quot;;
++       document.body.style.cursor = "";
++       document.body.style.userSelect = "";
       };
     }, [isDragging, direction, minSize, maxSize, onResize]);
   
@@ -4380,7 +4380,7 @@ Lines added: 10, lines removed: 49
       e.preventDefault();
 -     e.stopPropagation();
       setIsDragging(true);
-      startPosRef.current = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
+      startPosRef.current = direction === "horizontal" ? e.clientX : e.clientY;
       startSizeRef.current = initialSize;
 -     lastUpdateRef.current = Date.now();
     };
@@ -4397,8 +4397,8 @@ Lines added: 12, lines removed: 32
 -       className={&#96;group relative flex-shrink-0 ${className}&#96;}
 +       className={&#96;relative flex-shrink-0 ${className}&#96;}
         style={{
--         width: isHorizontal ? &quot;6px&quot; : &quot;100%&quot;,
--         height: isHorizontal ? &quot;100%&quot; : &quot;6px&quot;,
+-         width: isHorizontal ? "6px" : "100%",
+-         height: isHorizontal ? "100%" : "6px",
 -         zIndex: isDragging ? 10 : 1,
 -       }}
 -     &gt;
@@ -4406,40 +4406,40 @@ Lines added: 12, lines removed: 32
 -       &lt;div
 -         onMouseDown={handleMouseDown}
 -         className={&#96;absolute inset-0 bg-transparent transition-colors ${
--           isDragging ? &quot;bg-blue-500&quot; : &quot;hover:bg-blue-400&quot;
--         } ${isHorizontal ? &quot;cursor-col-resize&quot; : &quot;cursor-row-resize&quot;}&#96;}
-+         width: isHorizontal ? &quot;4px&quot; : &quot;100%&quot;,
-+         height: isHorizontal ? &quot;100%&quot; : &quot;4px&quot;,
-+         cursor: isHorizontal ? &quot;col-resize&quot; : &quot;row-resize&quot;,
-+         backgroundColor: isDragging ? &quot;#3b82f6&quot; : &quot;transparent&quot;,
+-           isDragging ? "bg-blue-500" : "hover:bg-blue-400"
+-         } ${isHorizontal ? "cursor-col-resize" : "cursor-row-resize"}&#96;}
++         width: isHorizontal ? "4px" : "100%",
++         height: isHorizontal ? "100%" : "4px",
++         cursor: isHorizontal ? "col-resize" : "row-resize",
++         backgroundColor: isDragging ? "#3b82f6" : "transparent",
 +         zIndex: isDragging ? 50 : 10,
 +       }}
 +       onMouseDown={handleMouseDown}
 +     &gt;
 +       &lt;div
-+         className=&quot;absolute inset-0 hover:bg-blue-400 transition-colors&quot;
++         className="absolute inset-0 hover:bg-blue-400 transition-colors"
           style={{
--           width: &quot;100%&quot;,
--           height: &quot;100%&quot;,
+-           width: "100%",
+-           height: "100%",
 -           // Extend hit area slightly beyond visual bounds for easier grabbing
--           [isHorizontal ? &quot;marginLeft&quot; : &quot;marginTop&quot;]: &quot;-2px&quot;,
--           [isHorizontal ? &quot;marginRight&quot; : &quot;marginBottom&quot;]: &quot;-2px&quot;,
+-           [isHorizontal ? "marginLeft" : "marginTop"]: "-2px",
+-           [isHorizontal ? "marginRight" : "marginBottom"]: "-2px",
 -         }}
 -       /&gt;
 -       {/* Visual separator line */}
 -       &lt;div
 -         className={&#96;absolute ${
--           isHorizontal ? &quot;left-0 right-0 top-0 bottom-0&quot; : &quot;top-0 bottom-0 left-0 right-0&quot;
+-           isHorizontal ? "left-0 right-0 top-0 bottom-0" : "top-0 bottom-0 left-0 right-0"
 -         } ${
--           isDragging ? &quot;bg-blue-500&quot; : &quot;bg-gray-300 group-hover:bg-blue-400&quot;
+-           isDragging ? "bg-blue-500" : "bg-gray-300 group-hover:bg-blue-400"
 -         } transition-colors&#96;}
 -         style={{
--           [isHorizontal ? &quot;width&quot; : &quot;height&quot;]: &quot;1px&quot;,
--           [isHorizontal ? &quot;left&quot; : &quot;top&quot;]: &quot;50%&quot;,
--           [isHorizontal ? &quot;transform&quot; : &quot;transform&quot;]: isHorizontal
--             ? &quot;translateX(-50%)&quot;
--             : &quot;translateY(-50%)&quot;,
-+           backgroundColor: isDragging ? &quot;#3b82f6&quot; : &quot;transparent&quot;,
+-           [isHorizontal ? "width" : "height"]: "1px",
+-           [isHorizontal ? "left" : "top"]: "50%",
+-           [isHorizontal ? "transform" : "transform"]: isHorizontal
+-             ? "translateX(-50%)"
+-             : "translateY(-50%)",
++           backgroundColor: isDragging ? "#3b82f6" : "transparent",
           }}
         /&gt;
 ```
@@ -4541,15 +4541,15 @@ Fixing the inverted horizontal drag and the jump-to-max issue:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
 
 ```diff
 @@ -1,3 +1,3 @@
-- import { useEffect, useRef, useState } from &quot;react&quot;;
-+ import { useCallback, useEffect, useRef, useState } from &quot;react&quot;;
+- import { useEffect, useRef, useState } from "react";
++ import { useCallback, useEffect, useRef, useState } from "react";
   
   interface ResizablePaneProps {
 ```
@@ -4581,7 +4581,7 @@ Lines added: 7, lines removed: 1
 ```diff
 @@ -31,10 +34,16 @@
       const handleMouseMove = (e: MouseEvent) =&gt; {
-        const currentPos = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
+        const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
 +       // For horizontal: dragging RIGHT should increase size (positive delta)
 +       // For vertical: dragging DOWN should increase size (positive delta)
         const delta = currentPos - startPosRef.current;
@@ -4604,7 +4604,7 @@ Lines added: 5, lines removed: 4
 
 ```diff
 @@ -54,12 +63,13 @@
-        document.body.style.userSelect = &quot;&quot;;
+        document.body.style.userSelect = "";
       };
 -   }, [isDragging, direction, minSize, maxSize, onResize]);
 +   }, [isDragging, direction, minSize, maxSize]);
@@ -4614,13 +4614,13 @@ Lines added: 5, lines removed: 4
       e.preventDefault();
 +     e.stopPropagation();
       setIsDragging(true);
-      startPosRef.current = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
+      startPosRef.current = direction === "horizontal" ? e.clientX : e.clientY;
 -     startSizeRef.current = initialSize;
 -   };
 +     startSizeRef.current = initialSize; // Capture current size at drag start
 +   }, [direction, initialSize]);
   
-    const isHorizontal = direction === &quot;horizontal&quot;;
+    const isHorizontal = direction === "horizontal";
 ```
 
 </details>
@@ -4649,7 +4649,7 @@ Fixing both issues: inverting the horizontal direction and preventing the jump-t
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 10, lines removed: 5
@@ -4657,7 +4657,7 @@ Lines added: 10, lines removed: 5
 ```diff
 @@ -34,15 +34,20 @@
       const handleMouseMove = (e: MouseEvent) =&gt; {
-        const currentPos = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
+        const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
 -       // For horizontal: dragging RIGHT should increase size (positive delta)
 -       // For vertical: dragging DOWN should increase size (positive delta)
 -       const delta = currentPos - startPosRef.current;
@@ -4667,9 +4667,9 @@ Lines added: 10, lines removed: 5
 +       // Actually wait - let me think: sidebar is on LEFT, separator is to its RIGHT
 +       // Dragging separator RIGHT should make sidebar WIDER (increase width)
 +       // So: delta = currentPos - startPos, positive delta = drag right = increase size ✓
-+       // But user says it&#39;s reversed, so let&#39;s invert it
++       // But user says it's reversed, so let's invert it
 +       const rawDelta = currentPos - startPosRef.current;
-+       const delta = direction === &quot;horizontal&quot; ? -rawDelta : rawDelta; // Invert for horizontal
++       const delta = direction === "horizontal" ? -rawDelta : rawDelta; // Invert for horizontal
         
 -       // Calculate new size from the starting size
 +       // Calculate new size from the starting size (captured at drag start)
@@ -4718,7 +4718,7 @@ Preventing `initialSize` updates from resetting the drag start position:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 7, lines removed: 3
@@ -4728,12 +4728,12 @@ Lines added: 7, lines removed: 3
     const onResizeRef = useRef(onResize);
   
 -   // Keep refs updated
-+   // Keep refs updated, but DON&#39;T update startSizeRef during drag
++   // Keep refs updated, but DON'T update startSizeRef during drag
     useEffect(() =&gt; {
       onResizeRef.current = onResize;
 -     startSizeRef.current = initialSize;
 -   }, [onResize, initialSize]);
-+     // Only update startSizeRef if we&#39;re not currently dragging
++     // Only update startSizeRef if we're not currently dragging
 +     // This prevents the jump-to-max issue
 +     if (!isDragging) {
 +       startSizeRef.current = initialSize;
@@ -4761,7 +4761,7 @@ Removing the inversion and testing if the jump fix resolves it. If the direction
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 8, lines removed: 9
@@ -4769,22 +4769,22 @@ Lines added: 8, lines removed: 9
 ```diff
 @@ -38,13 +38,12 @@
       const handleMouseMove = (e: MouseEvent) =&gt; {
-        const currentPos = direction === &quot;horizontal&quot; ? e.clientX : e.clientY;
+        const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
 -       // For horizontal: dragging RIGHT should increase size
 -       // BUT: the separator is on the RIGHT side of the sidebar, so dragging RIGHT means moving AWAY from sidebar
 -       // So we need to INVERT: dragging right = negative delta = decrease sidebar width
 -       // Actually wait - let me think: sidebar is on LEFT, separator is to its RIGHT
 -       // Dragging separator RIGHT should make sidebar WIDER (increase width)
 -       // So: delta = currentPos - startPos, positive delta = drag right = increase size ✓
--       // But user says it&#39;s reversed, so let&#39;s invert it
+-       // But user says it's reversed, so let's invert it
 -       const rawDelta = currentPos - startPosRef.current;
--       const delta = direction === &quot;horizontal&quot; ? -rawDelta : rawDelta; // Invert for horizontal
+-       const delta = direction === "horizontal" ? -rawDelta : rawDelta; // Invert for horizontal
 +       // Calculate delta: positive = drag right/down
 +       let delta = currentPos - startPosRef.current;
 +       
-+       // For horizontal separator: if dragging right makes sidebar smaller (user&#39;s report),
++       // For horizontal separator: if dragging right makes sidebar smaller (user's report),
 +       // we need to invert the delta
-+       if (direction === &quot;horizontal&quot;) {
++       if (direction === "horizontal") {
 +         delta = -delta; // Invert: drag right = decrease, drag left = increase
 +       }
         
@@ -4888,7 +4888,7 @@ Swapping the inversion - removing it from horizontal and applying it to vertical
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/ResizablePane.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/ResizablePane.tsx</summary>
 
 **Chunk 1**
 Lines added: 6, lines removed: 7
@@ -4898,13 +4898,13 @@ Lines added: 6, lines removed: 7
         // Calculate delta: positive = drag right/down
         let delta = currentPos - startPosRef.current;
 - 
--       // For horizontal separator: if dragging right makes sidebar smaller (user&#39;s report),
+-       // For horizontal separator: if dragging right makes sidebar smaller (user's report),
 -       // we need to invert the delta
--       if (direction === &quot;horizontal&quot;) {
+-       if (direction === "horizontal") {
 -         delta = -delta; // Invert: drag right = decrease, drag left = increase
 +       
 +       // Invert vertical only (horizontal is correct as-is)
-+       if (direction === &quot;vertical&quot;) {
++       if (direction === "vertical") {
 +         delta = -delta;
         }
 - 
@@ -5043,7 +5043,7 @@ Great! Let's squash-merge the branch. First, let me check the current git status
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: git status</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: git status</summary>
 
 ```bash
 git status
@@ -5051,9 +5051,9 @@ git status
 
 ```
 hint: core.useBuiltinFSMonitor=true is deprecated;please set core.fsmonitor=true instead                                                                        
-hint: Disable this message with &quot;git config advice.useCoreFSMonitorConfig false&quot;
+hint: Disable this message with "git config advice.useCoreFSMonitorConfig false"
 On branch feature/drag_separators
-Your branch is up to date with &#39;origin/feature/drag_separators&#39;.
+Your branch is up to date with 'origin/feature/drag_separators'.
 
 nothing to commit, working tree clean
 ```
@@ -5063,7 +5063,7 @@ nothing to commit, working tree clean
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: git branch</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: git branch</summary>
 
 ```bash
 git branch
@@ -5094,7 +5094,7 @@ Perfect! You're on `feature/drag_separators` with a clean working tree. Let's sq
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: git checkout main</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: git checkout main</summary>
 
 ```bash
 git checkout main
@@ -5103,9 +5103,9 @@ git checkout main
 ```
 (base) PS C:\Users\JohnDeHart\working\insightLM-LT&gt; git checkout main
 hint: core.useBuiltinFSMonitor=true is deprecated;please set core.fsmonitor=true instead                                                                        
-hint: Disable this message with &quot;git config advice.useCoreFSMonitorConfig false&quot;
-Switched to branch &#39;main&#39;
-Your branch is up to date with &#39;origin/main&#39;.
+hint: Disable this message with "git config advice.useCoreFSMonitorConfig false"
+Switched to branch 'main'
+Your branch is up to date with 'origin/main'.
 ```
 </details>
 </tool-use>
@@ -5113,7 +5113,7 @@ Your branch is up to date with &#39;origin/main&#39;.
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: git merge --squash feature/drag_separators</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: git merge --squash feature/drag_separators</summary>
 
 ```bash
 git merge --squash feature/drag_separators
@@ -5121,7 +5121,7 @@ git merge --squash feature/drag_separators
 
 ```
 hint: core.useBuiltinFSMonitor=true is deprecated;please set core.fsmonitor=true instead                                                                        
-hint: Disable this message with &quot;git config advice.useCoreFSMonitorConfig false&quot;
+hint: Disable this message with "git config advice.useCoreFSMonitorConfig false"
 Updating 11a5a46..4e092a8
 Fast-forward
 Squash commit -- not updating HEAD
@@ -5154,7 +5154,7 @@ Squash commit -- not updating HEAD
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: git status</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: git status</summary>
 
 ```bash
 git status
@@ -5163,12 +5163,12 @@ git status
 ```
 (base) PS C:\Users\JohnDeHart\working\insightLM-LT&gt; git status
 hint: core.useBuiltinFSMonitor=true is deprecated;please set core.fsmonitor=true instead                                                                        
-hint: Disable this message with &quot;git config advice.useCoreFSMonitorConfig false&quot;
+hint: Disable this message with "git config advice.useCoreFSMonitorConfig false"
 On branch main
-Your branch is up to date with &#39;origin/main&#39;.
+Your branch is up to date with 'origin/main'.
 
 Changes to be committed:
-  (use &quot;git restore --staged &lt;file&gt;...&quot; to unstage)
+  (use "git restore --staged &lt;file&gt;..." to unstage)
         new file:   .cursorindexingignore
         new file:   .specstory/.gitignore
         new file:   .specstory/history/2025-12-01_21-46Z-errors-when-starting-the-application.md                                                                
@@ -5200,7 +5200,7 @@ Perfect! The squash merge is staged. Now let's commit it with a descriptive mess
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: git commit -m "feat: add resizable separators with persistent layout
+<details><summary>Tool use: **run_terminal_cmd** • Run command: git commit -m "feat: add resizable separators with persistent layout
 
 - Add draggable horizontal separator for sidebar width
 - Add draggable vertical separator for chat height
@@ -5230,7 +5230,7 @@ Constraints: sidebar 200-800px, chat 150-600px."
 
 ```
 hint: core.useBuiltinFSMonitor=true is deprecated;please set core.fsmonitor=true instead                                                                        
-hint: Disable this message with &quot;git config advice.useCoreFSMonitorConfig false&quot;
+hint: Disable this message with "git config advice.useCoreFSMonitorConfig false"
 [main 025d7d7] feat: add resizable separators with persistent layout
  15 files changed, 5486 insertions(+), 32 deletions(-)
  create mode 100644 .cursorindexingignore
@@ -5299,7 +5299,7 @@ Creating a new branch for PDF viewing:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: git checkout -b feature/pdf-viewer</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: git checkout -b feature/pdf-viewer</summary>
 
 ```bash
 git checkout -b feature/pdf-viewer
@@ -5307,7 +5307,7 @@ git checkout -b feature/pdf-viewer
 
 ```
 viewer                                                                          
-Switched to a new branch &#39;feature/pdf-viewer&#39;
+Switched to a new branch 'feature/pdf-viewer'
 ```
 </details>
 </tool-use>
@@ -5315,7 +5315,7 @@ Switched to a new branch &#39;feature/pdf-viewer&#39;
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: git branch</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: git branch</summary>
 
 ```bash
 git branch
@@ -5503,7 +5503,7 @@ Drafting a plan for a multi-format document viewer system:
 
 <tool-use data-tool-type="write" data-tool-name="write">
 
-<details><summary>Tool use: **code_edit** • Edit file: DOCUMENT_VIEWER_PLAN.md</summary>
+<details><summary>Tool use: **write** • Edit file: DOCUMENT_VIEWER_PLAN.md</summary>
 
 **Chunk 1**
 Lines added: 210, lines removed: 1
@@ -5532,7 +5532,7 @@ Lines added: 210, lines removed: 1
 + ### 1. File Reading Strategy
 + 
 + **Current:** Files read as text strings via &#96;file:read&#96; IPC
-+ **Problem:** Binary files (PDF, images, DOCX) can&#39;t be read as text
++ **Problem:** Binary files (PDF, images, DOCX) can't be read as text
 + 
 + **Solution:** Two approaches:
 + - **Option A:** Return file path from Electron, load directly in renderer
@@ -5548,11 +5548,11 @@ Lines added: 210, lines removed: 1
 + 
 + &#96;&#96;&#96;typescript
 + // In electron/ipc/files.ts
-+ ipcMain.handle(&quot;file:readBinary&quot;, async (_, workbookId: string, relativePath: string) =&gt; {
++ ipcMain.handle("file:readBinary", async (_, workbookId: string, relativePath: string) =&gt; {
 +   // Return base64 encoded file or file:// path
 + });
 + 
-+ ipcMain.handle(&quot;file:getPath&quot;, async (_, workbookId: string, relativePath: string) =&gt; {
++ ipcMain.handle("file:getPath", async (_, workbookId: string, relativePath: string) =&gt; {
 +   // Return absolute file system path for direct access
 + });
 + &#96;&#96;&#96;
@@ -5591,44 +5591,44 @@ Lines added: 210, lines removed: 1
 + 
 + &#96;&#96;&#96;typescript
 + // src/utils/fileTypeUtils.ts
-+ export type FileType = &#39;markdown&#39; | &#39;csv&#39; | &#39;pdf&#39; | &#39;image&#39; | &#39;docx&#39; | &#39;excel&#39; | &#39;text&#39; | &#39;unknown&#39;;
++ export type FileType = 'markdown' | 'csv' | 'pdf' | 'image' | 'docx' | 'excel' | 'text' | 'unknown';
 + 
 + export function getFileType(filename: string): FileType {
-+   const ext = filename.split(&#39;.&#39;).pop()?.toLowerCase() || &#39;&#39;;
++   const ext = filename.split('.').pop()?.toLowerCase() || '';
 +   
 +   const typeMap: Record&lt;string, FileType&gt; = {
 +     // Text
-+     &#39;md&#39;: &#39;markdown&#39;,
-+     &#39;markdown&#39;: &#39;markdown&#39;,
-+     &#39;csv&#39;: &#39;csv&#39;,
-+     &#39;txt&#39;: &#39;text&#39;,
-+     &#39;js&#39;: &#39;text&#39;,
-+     &#39;ts&#39;: &#39;text&#39;,
-+     &#39;json&#39;: &#39;text&#39;,
-+     &#39;yaml&#39;: &#39;text&#39;,
-+     &#39;yml&#39;: &#39;text&#39;,
-+     &#39;xml&#39;: &#39;text&#39;,
-+     &#39;html&#39;: &#39;text&#39;,
-+     &#39;css&#39;: &#39;text&#39;,
++     'md': 'markdown',
++     'markdown': 'markdown',
++     'csv': 'csv',
++     'txt': 'text',
++     'js': 'text',
++     'ts': 'text',
++     'json': 'text',
++     'yaml': 'text',
++     'yml': 'text',
++     'xml': 'text',
++     'html': 'text',
++     'css': 'text',
 +     
 +     // Documents
-+     &#39;pdf&#39;: &#39;pdf&#39;,
-+     &#39;docx&#39;: &#39;docx&#39;,
-+     &#39;doc&#39;: &#39;docx&#39;, // Legacy Word format
-+     &#39;xlsx&#39;: &#39;excel&#39;,
-+     &#39;xls&#39;: &#39;excel&#39;,
++     'pdf': 'pdf',
++     'docx': 'docx',
++     'doc': 'docx', // Legacy Word format
++     'xlsx': 'excel',
++     'xls': 'excel',
 +     
 +     // Images
-+     &#39;png&#39;: &#39;image&#39;,
-+     &#39;jpg&#39;: &#39;image&#39;,
-+     &#39;jpeg&#39;: &#39;image&#39;,
-+     &#39;gif&#39;: &#39;image&#39;,
-+     &#39;svg&#39;: &#39;image&#39;,
-+     &#39;webp&#39;: &#39;image&#39;,
-+     &#39;bmp&#39;: &#39;image&#39;,
++     'png': 'image',
++     'jpg': 'image',
++     'jpeg': 'image',
++     'gif': 'image',
++     'svg': 'image',
++     'webp': 'image',
++     'bmp': 'image',
 +   };
 +   
-+   return typeMap[ext] || &#39;unknown&#39;;
++   return typeMap[ext] || 'unknown';
 + }
 + &#96;&#96;&#96;
 + 
@@ -5640,20 +5640,20 @@ Lines added: 210, lines removed: 1
 +   const fileType = getFileType(activeDoc.filename);
 +   
 +   switch (fileType) {
-+     case &#39;markdown&#39;:
-+       return &lt;MarkdownViewer content={activeDoc.content || &quot;&quot;} /&gt;;
-+     case &#39;csv&#39;:
-+       return &lt;CSVViewer content={activeDoc.content || &quot;&quot;} /&gt;;
-+     case &#39;pdf&#39;:
++     case 'markdown':
++       return &lt;MarkdownViewer content={activeDoc.content || ""} /&gt;;
++     case 'csv':
++       return &lt;CSVViewer content={activeDoc.content || ""} /&gt;;
++     case 'pdf':
 +       return &lt;PDFViewer workbookId={activeDoc.workbookId} path={activeDoc.path} /&gt;;
-+     case &#39;image&#39;:
++     case 'image':
 +       return &lt;ImageViewer workbookId={activeDoc.workbookId} path={activeDoc.path} /&gt;;
-+     case &#39;docx&#39;:
++     case 'docx':
 +       return &lt;DOCXViewer workbookId={activeDoc.workbookId} path={activeDoc.path} /&gt;;
-+     case &#39;excel&#39;:
++     case 'excel':
 +       return &lt;ExcelViewer workbookId={activeDoc.workbookId} path={activeDoc.path} /&gt;;
-+     case &#39;text&#39;:
-+       return &lt;TextViewer content={activeDoc.content || &quot;&quot;} filename={activeDoc.filename} /&gt;;
++     case 'text':
++       return &lt;TextViewer content={activeDoc.content || ""} filename={activeDoc.filename} /&gt;;
 +     default:
 +       return &lt;UnknownFileViewer filename={activeDoc.filename} /&gt;;
 +   }
@@ -5694,14 +5694,14 @@ Lines added: 210, lines removed: 1
 + ### Phase 6: Polish
 + 1. Add loading states for all viewers
 + 2. Add error handling
-+ 3. Add &quot;unsupported file type&quot; fallback
++ 3. Add "unsupported file type" fallback
 + 4. Optimize performance for large files
 + 
 + ## Dependencies Needed
 + 
 + &#96;&#96;&#96;json
 + {
-+   &quot;mammoth&quot;: &quot;^1.6.0&quot;,  // DOCX to HTML conversion
++   "mammoth": "^1.6.0",  // DOCX to HTML conversion
 +   // react-pdf already installed
 +   // xlsx already installed
 + }
@@ -5925,14 +5925,14 @@ Implementing editing and saving for text-based files. Creating a plan and starti
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/services/fileService.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/services/fileService.ts</summary>
 
 **Chunk 1**
 Lines added: 24, lines removed: undefined
 
 ```diff
 @@ -63,4 +63,28 @@
-      return fs.readFileSync(filePath, &quot;utf-8&quot;);
+      return fs.readFileSync(filePath, "utf-8");
     }
 + 
 +   writeDocument(
@@ -5941,7 +5941,7 @@ Lines added: 24, lines removed: undefined
 +     content: string,
 +   ): void {
 +     const workbookPath = path.join(
-+       this.workbookService[&quot;workbooksDir&quot;],
++       this.workbookService["workbooksDir"],
 +       workbookId,
 +     );
 +     const filePath = path.join(workbookPath, relativePath);
@@ -5950,7 +5950,7 @@ Lines added: 24, lines removed: undefined
 +       throw new Error(&#96;File not found: ${relativePath}&#96;);
 +     }
 + 
-+     fs.writeFileSync(filePath, content, &quot;utf-8&quot;);
++     fs.writeFileSync(filePath, content, "utf-8");
 + 
 +     // Update workbook metadata timestamp
 +     this.updateWorkbookMetadata(workbookId, (metadata) =&gt; {
@@ -5970,7 +5970,7 @@ Lines added: 24, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/ipc/files.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/ipc/files.ts</summary>
 
 **Chunk 1**
 Lines added: 17, lines removed: undefined
@@ -5981,7 +5981,7 @@ Lines added: 17, lines removed: undefined
     );
 + 
 +   ipcMain.handle(
-+     &quot;file:write&quot;,
++     "file:write",
 +     async (
 +       _,
 +       workbookId: string,
@@ -5991,7 +5991,7 @@ Lines added: 17, lines removed: undefined
 +       try {
 +         await fileService.writeDocument(workbookId, relativePath, content);
 +       } catch (error) {
-+         console.error(&quot;Error writing file:&quot;, error);
++         console.error("Error writing file:", error);
 +         throw error;
 +       }
 +     },
@@ -6008,7 +6008,7 @@ Lines added: 17, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/preload.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/preload.ts</summary>
 
 **Chunk 1**
 Lines added: 6, lines removed: undefined
@@ -6016,15 +6016,15 @@ Lines added: 6, lines removed: undefined
 ```diff
 @@ -21,4 +21,10 @@
       read: (workbookId: string, relativePath: string) =&gt;
-        ipcRenderer.invoke(&quot;file:read&quot;, workbookId, relativePath),
+        ipcRenderer.invoke("file:read", workbookId, relativePath),
 +     write: (
 +       workbookId: string,
 +       relativePath: string,
 +       content: string,
 +     ) =&gt;
-+       ipcRenderer.invoke(&quot;file:write&quot;, workbookId, relativePath, content),
++       ipcRenderer.invoke("file:write", workbookId, relativePath, content),
       rename: (workbookId: string, oldPath: string, newName: string) =&gt;
-        ipcRenderer.invoke(&quot;file:rename&quot;, workbookId, oldPath, newName),
+        ipcRenderer.invoke("file:rename", workbookId, oldPath, newName),
 ```
 
 </details>
@@ -6035,7 +6035,7 @@ Lines added: 6, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/types/electron.d.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/types/electron.d.ts</summary>
 
 **Chunk 1**
 Lines added: 5, lines removed: undefined
@@ -6096,7 +6096,7 @@ Updating the document store to track edit state and unsaved changes:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/store/documentStore.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/store/documentStore.ts</summary>
 
 **Chunk 1**
 Lines added: 7, lines removed: undefined
@@ -6108,7 +6108,7 @@ Lines added: 7, lines removed: undefined
 +   editingDocuments: Set&lt;string&gt;; // Track which documents are in edit mode
 +   unsavedChanges: Map&lt;string, string&gt;; // Track unsaved content changes
   
-    openDocument: (doc: Omit&lt;OpenDocument, &quot;id&quot;&gt;) =&gt; Promise&lt;void&gt;;
+    openDocument: (doc: Omit&lt;OpenDocument, "id"&gt;) =&gt; Promise&lt;void&gt;;
     closeDocument: (id: string) =&gt; void;
     updateDocumentContent: (id: string, content: string) =&gt; void;
 +   setEditing: (id: string, editing: boolean) =&gt; void;
@@ -6128,7 +6128,7 @@ Lines added: 7, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/store/documentStore.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/store/documentStore.ts</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: undefined
@@ -6151,7 +6151,7 @@ Lines added: 2, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/store/documentStore.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/store/documentStore.ts</summary>
 
 **Chunk 1**
 Lines added: 33, lines removed: undefined
@@ -6222,15 +6222,15 @@ Lines added: 33, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/TextViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/TextViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 15, lines removed: 1
 
 ```diff
 @@ -1,10 +1,24 @@
-+ import { useEffect, useState } from &quot;react&quot;;
-  import Editor from &quot;@monaco-editor/react&quot;;
++ import { useEffect, useState } from "react";
+  import Editor from "@monaco-editor/react";
   
   interface TextViewerProps {
     content: string;
@@ -6253,7 +6253,7 @@ Lines added: 15, lines removed: 1
 +   }, [content]);
 + 
     const getLanguage = (filename: string): string =&gt; {
-      const ext = filename.split(&quot;.&quot;).pop()?.toLowerCase() || &quot;&quot;;
+      const ext = filename.split(".").pop()?.toLowerCase() || "";
 ```
 
 **Chunk 2**
@@ -6261,11 +6261,11 @@ Lines added: 6, lines removed: undefined
 
 ```diff
 @@ -23,4 +37,10 @@
-      return languageMap[ext] || &quot;plaintext&quot;;
+      return languageMap[ext] || "plaintext";
     };
 + 
 +   const handleChange = (value: string | undefined) =&gt; {
-+     const newContent = value || &quot;&quot;;
++     const newContent = value || "";
 +     setEditorContent(newContent);
 +     onContentChange?.(newContent);
 +   };
@@ -6278,17 +6278,17 @@ Lines added: 3, lines removed: 2
 
 ```diff
 @@ -29,8 +49,9 @@
-          height=&quot;100%&quot;
+          height="100%"
           language={getLanguage(filename)}
 -         value={content}
 +         value={editorContent}
-          theme=&quot;vs-light&quot;
+          theme="vs-light"
 +         onChange={handleChange}
           options={{
 -           readOnly: true,
 +           readOnly: !isEditing,
             minimap: { enabled: false },
-            wordWrap: &quot;on&quot;,
+            wordWrap: "on",
 ```
 
 </details>
@@ -6299,16 +6299,16 @@ Lines added: 3, lines removed: 2
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 41, lines removed: 2
 
 ```diff
 @@ -1,12 +1,51 @@
-+ import { useEffect, useState } from &quot;react&quot;;
-  import ReactMarkdown from &quot;react-markdown&quot;;
-+ import Editor from &quot;@monaco-editor/react&quot;;
++ import { useEffect, useState } from "react";
+  import ReactMarkdown from "react-markdown";
++ import Editor from "@monaco-editor/react";
   
   interface MarkdownViewerProps {
     content: string;
@@ -6329,24 +6329,24 @@ Lines added: 41, lines removed: 2
 +   }, [content]);
 + 
 +   const handleChange = (value: string | undefined) =&gt; {
-+     const newContent = value || &quot;&quot;;
++     const newContent = value || "";
 +     setEditorContent(newContent);
 +     onContentChange?.(newContent);
 +   };
 + 
 +   if (isEditing) {
 +     return (
-+       &lt;div className=&quot;h-full&quot;&gt;
++       &lt;div className="h-full"&gt;
 +         &lt;Editor
-+           height=&quot;100%&quot;
-+           language=&quot;markdown&quot;
++           height="100%"
++           language="markdown"
 +           value={editorContent}
-+           theme=&quot;vs-light&quot;
++           theme="vs-light"
 +           onChange={handleChange}
 +           options={{
 +             readOnly: false,
 +             minimap: { enabled: false },
-+             wordWrap: &quot;on&quot;,
++             wordWrap: "on",
 +           }}
 +         /&gt;
 +       &lt;/div&gt;
@@ -6354,7 +6354,7 @@ Lines added: 41, lines removed: 2
 +   }
 + 
     return (
-      &lt;div className=&quot;prose prose-sm h-full max-w-none overflow-auto p-4&quot;&gt;
+      &lt;div className="prose prose-sm h-full max-w-none overflow-auto p-4"&gt;
 -       &lt;ReactMarkdown&gt;{content}&lt;/ReactMarkdown&gt;
 +       &lt;ReactMarkdown&gt;{editorContent}&lt;/ReactMarkdown&gt;
       &lt;/div&gt;
@@ -6404,16 +6404,16 @@ Updating CSVViewer to support editing:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/CSVViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/CSVViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 10, lines removed: 4
 
 ```diff
 @@ -1,14 +1,20 @@
-- import { useMemo } from &quot;react&quot;;
-+ import { useEffect, useMemo, useState } from &quot;react&quot;;
-  import Papa from &quot;papaparse&quot;;
+- import { useMemo } from "react";
++ import { useEffect, useMemo, useState } from "react";
+  import Papa from "papaparse";
   
   interface CSVViewerProps {
     content: string;
@@ -6472,7 +6472,7 @@ Lines added: 98, lines removed: undefined
 + 
 +   const addRow = () =&gt; {
 +     const newRow: any = {};
-+     headers.forEach((h) =&gt; (newRow[h] = &quot;&quot;));
++     headers.forEach((h) =&gt; (newRow[h] = ""));
 +     setData([...data, newRow]);
 +     const csv = Papa.unparse([...data, newRow], { header: true });
 +     onContentChange?.(csv);
@@ -6487,50 +6487,50 @@ Lines added: 98, lines removed: undefined
 + 
 +   if (isEditing) {
 +     return (
-+       &lt;div className=&quot;h-full overflow-auto p-4&quot;&gt;
-+         &lt;div className=&quot;mb-2 flex gap-2&quot;&gt;
++       &lt;div className="h-full overflow-auto p-4"&gt;
++         &lt;div className="mb-2 flex gap-2"&gt;
 +           &lt;button
 +             onClick={addRow}
-+             className=&quot;rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600&quot;
++             className="rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600"
 +           &gt;
 +             + Add Row
 +           &lt;/button&gt;
 +         &lt;/div&gt;
-+         &lt;table className=&quot;min-w-full border border-gray-300&quot;&gt;
++         &lt;table className="min-w-full border border-gray-300"&gt;
 +           &lt;thead&gt;
-+             &lt;tr className=&quot;bg-gray-100&quot;&gt;
++             &lt;tr className="bg-gray-100"&gt;
 +               {headers.map((header, idx) =&gt; (
 +                 &lt;th
 +                   key={idx}
-+                   className=&quot;border-b border-gray-300 px-4 py-2 text-left text-sm font-semibold&quot;
++                   className="border-b border-gray-300 px-4 py-2 text-left text-sm font-semibold"
 +                 &gt;
 +                   {header}
 +                 &lt;/th&gt;
 +               ))}
-+               &lt;th className=&quot;border-b border-gray-300 px-4 py-2 text-left text-sm font-semibold&quot;&gt;
++               &lt;th className="border-b border-gray-300 px-4 py-2 text-left text-sm font-semibold"&gt;
 +                 Actions
 +               &lt;/th&gt;
 +             &lt;/tr&gt;
 +           &lt;/thead&gt;
 +           &lt;tbody&gt;
 +             {data.map((row, rowIdx) =&gt; (
-+               &lt;tr key={rowIdx} className=&quot;hover:bg-gray-50&quot;&gt;
++               &lt;tr key={rowIdx} className="hover:bg-gray-50"&gt;
 +                 {headers.map((header, colIdx) =&gt; (
-+                   &lt;td key={colIdx} className=&quot;border-b border-gray-200 p-0&quot;&gt;
++                   &lt;td key={colIdx} className="border-b border-gray-200 p-0"&gt;
 +                     &lt;input
-+                       type=&quot;text&quot;
-+                       value={row[header] || &quot;&quot;}
++                       type="text"
++                       value={row[header] || ""}
 +                       onChange={(e) =&gt;
 +                         updateCell(rowIdx, header, e.target.value)
 +                       }
-+                       className=&quot;w-full border-0 px-4 py-2 text-sm focus:bg-blue-50 focus:outline-none&quot;
++                       className="w-full border-0 px-4 py-2 text-sm focus:bg-blue-50 focus:outline-none"
 +                     /&gt;
 +                   &lt;/td&gt;
 +                 ))}
-+                 &lt;td className=&quot;border-b border-gray-200 px-4 py-2&quot;&gt;
++                 &lt;td className="border-b border-gray-200 px-4 py-2"&gt;
 +                   &lt;button
 +                     onClick={() =&gt; deleteRow(rowIdx)}
-+                     className=&quot;text-red-500 hover:text-red-700 text-sm&quot;
++                     className="text-red-500 hover:text-red-700 text-sm"
 +                   &gt;
 +                     Delete
 +                   &lt;/button&gt;
@@ -6551,12 +6551,12 @@ Lines added: 1, lines removed: 2
 
 ```diff
 @@ -24,6 +128,5 @@
-            &lt;tr className=&quot;bg-gray-100&quot;&gt;
+            &lt;tr className="bg-gray-100"&gt;
               {headers.map((header, idx) =&gt; (
 -               &lt;th
 -                 key={idx}
 +               key={idx}
-                  className=&quot;border-b border-gray-300 px-4 py-2 text-left text-sm font-semibold&quot;
+                  className="border-b border-gray-300 px-4 py-2 text-left text-sm font-semibold"
                 &gt;
 ```
 
@@ -6603,19 +6603,19 @@ Fixing the syntax error in CSVViewer:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/CSVViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/CSVViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 1
 
 ```diff
 @@ -128,5 +128,6 @@
-            &lt;tr className=&quot;bg-gray-100&quot;&gt;
+            &lt;tr className="bg-gray-100"&gt;
               {headers.map((header, idx) =&gt; (
 -               key={idx}
 +               &lt;th
 +                 key={idx}
-                  className=&quot;border-b border-gray-300 px-4 py-2 text-left text-sm font-semibold&quot;
+                  className="border-b border-gray-300 px-4 py-2 text-left text-sm font-semibold"
                 &gt;
 ```
 
@@ -6644,16 +6644,16 @@ Lines added: 2, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
 
 ```diff
 @@ -4,4 +4,5 @@
-  import { PDFViewer } from &quot;./PDFViewer&quot;;
-  import { TextViewer } from &quot;./TextViewer&quot;;
-+ import { useDocumentStore } from &quot;../../store/documentStore&quot;;
+  import { PDFViewer } from "./PDFViewer";
+  import { TextViewer } from "./TextViewer";
++ import { useDocumentStore } from "../../store/documentStore";
   
   export interface OpenDocument {
 ```
@@ -6689,18 +6689,18 @@ Lines added: 10, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 52, lines removed: undefined
 
 ```diff
 @@ -39,4 +39,56 @@
-      return filename.split(&quot;.&quot;).pop()?.toLowerCase() || &quot;&quot;;
+      return filename.split(".").pop()?.toLowerCase() || "";
     };
 + 
 +   const isEditableFileType = (ext: string): boolean =&gt; {
-+     return [&quot;md&quot;, &quot;markdown&quot;, &quot;csv&quot;, &quot;txt&quot;, &quot;js&quot;, &quot;ts&quot;, &quot;py&quot;, &quot;json&quot;, &quot;yaml&quot;, &quot;yml&quot;, &quot;xml&quot;, &quot;html&quot;, &quot;css&quot;].includes(ext);
++     return ["md", "markdown", "csv", "txt", "js", "ts", "py", "json", "yaml", "yml", "xml", "html", "css"].includes(ext);
 +   };
 + 
 +   const handleEdit = () =&gt; {
@@ -6728,7 +6728,7 @@ Lines added: 52, lines removed: undefined
 +     if (!activeDocId || !activeDoc) return;
 + 
 +     const unsavedContent = useDocumentStore.getState().unsavedChanges.get(activeDocId);
-+     const contentToSave = unsavedContent || activeDoc.content || &quot;&quot;;
++     const contentToSave = unsavedContent || activeDoc.content || "";
 + 
 +     try {
 +       await window.electronAPI.file.write(
@@ -6740,8 +6740,8 @@ Lines added: 52, lines removed: undefined
 +       setEditing(activeDocId, false);
 +       clearUnsavedContent(activeDocId);
 +     } catch (error) {
-+       console.error(&quot;Failed to save file:&quot;, error);
-+       alert(&#96;Failed to save file: ${error instanceof Error ? error.message : &quot;Unknown error&quot;}&#96;);
++       console.error("Failed to save file:", error);
++       alert(&#96;Failed to save file: ${error instanceof Error ? error.message : "Unknown error"}&#96;);
 +     }
 +   };
 + 
@@ -6763,11 +6763,11 @@ Lines added: 18, lines removed: 2
       const ext = getFileExtension(activeDoc.filename);
 +     const editable = isEditableFileType(ext);
 +     const currentContent = hasUnsaved 
-+       ? (useDocumentStore.getState().unsavedChanges.get(activeDocId) || activeDoc.content || &quot;&quot;)
-+       : (activeDoc.content || &quot;&quot;);
++       ? (useDocumentStore.getState().unsavedChanges.get(activeDocId) || activeDoc.content || "")
++       : (activeDoc.content || "");
   
-      if (ext === &quot;md&quot; || ext === &quot;markdown&quot;) {
--       return &lt;MarkdownViewer content={activeDoc.content || &quot;&quot;} /&gt;;
+      if (ext === "md" || ext === "markdown") {
+-       return &lt;MarkdownViewer content={activeDoc.content || ""} /&gt;;
 +       return (
 +         &lt;MarkdownViewer
 +           content={currentContent}
@@ -6775,8 +6775,8 @@ Lines added: 18, lines removed: 2
 +           onContentChange={handleContentChange}
 +         /&gt;
 +       );
-      } else if (ext === &quot;csv&quot;) {
--       return &lt;CSVViewer content={activeDoc.content || &quot;&quot;} /&gt;;
+      } else if (ext === "csv") {
+-       return &lt;CSVViewer content={activeDoc.content || ""} /&gt;;
 +       return (
 +         &lt;CSVViewer
 +           content={currentContent}
@@ -6784,7 +6784,7 @@ Lines added: 18, lines removed: 2
 +           onContentChange={handleContentChange}
 +         /&gt;
 +       );
-      } else if (ext === &quot;pdf&quot;) {
+      } else if (ext === "pdf") {
         return (
 ```
 
@@ -6795,7 +6795,7 @@ Lines added: 3, lines removed: 1
 @@ -74,6 +142,8 @@
         return (
           &lt;TextViewer
--           content={activeDoc.content || &quot;&quot;}
+-           content={activeDoc.content || ""}
 +           content={currentContent}
             filename={activeDoc.filename}
 +           isEditing={isActiveEditing}
@@ -6812,7 +6812,7 @@ Lines added: 3, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: undefined
@@ -6822,7 +6822,7 @@ Lines added: 3, lines removed: undefined
       }
     };
 + 
-+   const ext = activeDoc ? getFileExtension(activeDoc.filename) : &quot;&quot;;
++   const ext = activeDoc ? getFileExtension(activeDoc.filename) : "";
 +   const editable = isEditableFileType(ext);
   
     return (
@@ -6835,11 +6835,11 @@ Lines added: 6, lines removed: 1
 @@ -165,5 +168,10 @@
                 onClick={() =&gt; setActiveDocId(doc.id)}
               &gt;
--               &lt;span className=&quot;text-sm&quot;&gt;{doc.filename}&lt;/span&gt;
-+               &lt;span className=&quot;text-sm&quot;&gt;
+-               &lt;span className="text-sm"&gt;{doc.filename}&lt;/span&gt;
++               &lt;span className="text-sm"&gt;
 +                 {doc.filename}
 +                 {hasUnsavedChanges(doc.id) &amp;&amp; (
-+                   &lt;span className=&quot;ml-2 text-orange-500&quot;&gt;●&lt;/span&gt;
++                   &lt;span className="ml-2 text-orange-500"&gt;●&lt;/span&gt;
 +                 )}
 +               &lt;/span&gt;
                 &lt;button
@@ -6854,11 +6854,11 @@ Lines added: 31, lines removed: undefined
           &lt;/div&gt;
         )}
 +       {editable &amp;&amp; activeDoc &amp;&amp; (
-+         &lt;div className=&quot;flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2&quot;&gt;
++         &lt;div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2"&gt;
 +           {!isActiveEditing ? (
 +             &lt;button
 +               onClick={handleEdit}
-+               className=&quot;rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600&quot;
++               className="rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600"
 +             &gt;
 +               Edit
 +             &lt;/button&gt;
@@ -6867,24 +6867,24 @@ Lines added: 31, lines removed: undefined
 +               &lt;button
 +                 onClick={handleSave}
 +                 disabled={!hasUnsaved}
-+                 className=&quot;rounded bg-green-500 px-3 py-1 text-sm text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50&quot;
++                 className="rounded bg-green-500 px-3 py-1 text-sm text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
 +               &gt;
 +                 Save
 +               &lt;/button&gt;
 +               &lt;button
 +                 onClick={handleCancel}
-+                 className=&quot;rounded bg-gray-500 px-3 py-1 text-sm text-white hover:bg-gray-600&quot;
++                 className="rounded bg-gray-500 px-3 py-1 text-sm text-white hover:bg-gray-600"
 +               &gt;
 +                 Cancel
 +               &lt;/button&gt;
 +               {hasUnsaved &amp;&amp; (
-+                 &lt;span className=&quot;text-xs text-orange-500&quot;&gt;Unsaved changes&lt;/span&gt;
++                 &lt;span className="text-xs text-orange-500"&gt;Unsaved changes&lt;/span&gt;
 +               )}
 +             &lt;/&gt;
 +           )}
 +         &lt;/div&gt;
 +       )}
-        &lt;div className=&quot;flex-1 overflow-auto&quot;&gt;{renderDocument()}&lt;/div&gt;
+        &lt;div className="flex-1 overflow-auto"&gt;{renderDocument()}&lt;/div&gt;
       &lt;/div&gt;
 ```
 
@@ -6936,7 +6936,7 @@ Model supplied an ambiguous edit
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 2
@@ -6961,7 +6961,7 @@ Lines added: 2, lines removed: 2
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -6970,9 +6970,9 @@ Lines added: 1, lines removed: 1
 @@ -116,5 +116,5 @@
       const editable = isEditableFileType(ext);
       const currentContent = hasUnsaved 
--       ? (useDocumentStore.getState().unsavedChanges.get(activeDocId) || activeDoc.content || &quot;&quot;)
-+       ? (unsavedChanges.get(activeDocId) || activeDoc.content || &quot;&quot;)
-        : (activeDoc.content || &quot;&quot;);
+-       ? (useDocumentStore.getState().unsavedChanges.get(activeDocId) || activeDoc.content || "")
++       ? (unsavedChanges.get(activeDocId) || activeDoc.content || "")
+        : (activeDoc.content || "");
   
 ```
 
@@ -6984,18 +6984,18 @@ Lines added: 1, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
 
 ```diff
 @@ -170,5 +170,5 @@
-                &lt;span className=&quot;text-sm&quot;&gt;
+                &lt;span className="text-sm"&gt;
                   {doc.filename}
 -                 {hasUnsavedChanges(doc.id) &amp;&amp; (
 +                 {hasUnsavedChangesFn(doc.id) &amp;&amp; (
-                    &lt;span className=&quot;ml-2 text-orange-500&quot;&gt;●&lt;/span&gt;
+                    &lt;span className="ml-2 text-orange-500"&gt;●&lt;/span&gt;
                   )}
 ```
 
@@ -7007,7 +7007,7 @@ Lines added: 1, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -7018,7 +7018,7 @@ Lines added: 1, lines removed: 1
   
 -     const unsavedContent = useDocumentStore.getState().unsavedChanges.get(activeDocId);
 +     const unsavedContent = unsavedChanges.get(activeDocId);
-      const contentToSave = unsavedContent || activeDoc.content || &quot;&quot;;
+      const contentToSave = unsavedContent || activeDoc.content || "";
   
 ```
 
@@ -7046,7 +7046,7 @@ Lint results
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -7083,7 +7083,7 @@ Fixing the DocumentViewer to use the hook correctly:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -7183,7 +7183,7 @@ Fixing the function name references:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 2
@@ -7388,7 +7388,7 @@ Making text files editable by default (like VSCode) and removing the Edit button
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: undefined, lines removed: 2
@@ -7428,17 +7428,17 @@ The string to replace was not found in the file.
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
 
 ```diff
 @@ -1,3 +1,3 @@
-- import { useState } from &quot;react&quot;;
-+ import { useState, useEffect } from &quot;react&quot;;
-  import { MarkdownViewer } from &quot;./MarkdownViewer&quot;;
-  import { CSVViewer } from &quot;./CSVViewer&quot;;
+- import { useState } from "react";
++ import { useState, useEffect } from "react";
+  import { MarkdownViewer } from "./MarkdownViewer";
+  import { CSVViewer } from "./CSVViewer";
 ```
 
 </details>
@@ -7453,7 +7453,7 @@ The string to replace was not found in the file.
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -7496,7 +7496,7 @@ Lines added: 1, lines removed: 4
       }
     };
 - 
--   const ext = activeDoc ? getFileExtension(activeDoc.filename) : &quot;&quot;;
+-   const ext = activeDoc ? getFileExtension(activeDoc.filename) : "";
 -   const editable = isEditableFileType(ext);
   
     return (
@@ -7510,18 +7510,18 @@ Lines added: 1, lines removed: 4
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
 
 ```diff
 @@ -165,5 +165,5 @@
-                &lt;span className=&quot;text-sm&quot;&gt;
+                &lt;span className="text-sm"&gt;
                   {doc.filename}
 -                 {hasUnsavedChangesFn(doc.id) &amp;&amp; (
 +                 {hasUnsavedChanges(doc.id) &amp;&amp; (
-                    &lt;span className=&quot;ml-2 text-orange-500&quot;&gt;●&lt;/span&gt;
+                    &lt;span className="ml-2 text-orange-500"&gt;●&lt;/span&gt;
                   )}
 ```
 
@@ -7533,7 +7533,7 @@ Lines added: 1, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 8, lines removed: 28
@@ -7544,11 +7544,11 @@ Lines added: 8, lines removed: 28
         )}
 -       {editable &amp;&amp; activeDoc &amp;&amp; (
 +       {activeDoc &amp;&amp; isEditableFileType(getFileExtension(activeDoc.filename)) &amp;&amp; hasUnsaved &amp;&amp; (
-          &lt;div className=&quot;flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2&quot;&gt;
+          &lt;div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2"&gt;
 -           {!isActiveEditing ? (
 -             &lt;button
 -               onClick={handleEdit}
--               className=&quot;rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600&quot;
+-               className="rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600"
 -             &gt;
 -               Edit
 -             &lt;/button&gt;
@@ -7557,25 +7557,25 @@ Lines added: 8, lines removed: 28
 -               &lt;button
 -                 onClick={handleSave}
 -                 disabled={!hasUnsaved}
--                 className=&quot;rounded bg-green-500 px-3 py-1 text-sm text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50&quot;
+-                 className="rounded bg-green-500 px-3 py-1 text-sm text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
 -               &gt;
 -                 Save
 -               &lt;/button&gt;
 -               &lt;button
 -                 onClick={handleCancel}
--                 className=&quot;rounded bg-gray-500 px-3 py-1 text-sm text-white hover:bg-gray-600&quot;
+-                 className="rounded bg-gray-500 px-3 py-1 text-sm text-white hover:bg-gray-600"
 -               &gt;
 -                 Cancel
 -               &lt;/button&gt;
 -               {hasUnsaved &amp;&amp; (
--                 &lt;span className=&quot;text-xs text-orange-500&quot;&gt;Unsaved changes&lt;/span&gt;
+-                 &lt;span className="text-xs text-orange-500"&gt;Unsaved changes&lt;/span&gt;
 -               )}
 -             &lt;/&gt;
 -           )}
-+           &lt;span className=&quot;text-xs text-orange-500&quot;&gt;Unsaved changes&lt;/span&gt;
++           &lt;span className="text-xs text-orange-500"&gt;Unsaved changes&lt;/span&gt;
 +           &lt;button
 +             onClick={handleSave}
-+             className=&quot;ml-auto rounded bg-green-500 px-3 py-1 text-sm text-white hover:bg-green-600&quot;
++             className="ml-auto rounded bg-green-500 px-3 py-1 text-sm text-white hover:bg-green-600"
 +           &gt;
 +             Save (Ctrl+S)
 +           &lt;/button&gt;
@@ -7591,7 +7591,7 @@ Lines added: 8, lines removed: 28
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -7613,7 +7613,7 @@ Lines added: 1, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/CSVViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/CSVViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -7684,14 +7684,14 @@ Removing unused functions and adding the Ctrl+S handler:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: undefined, lines removed: 21
 
 ```diff
 @@ -41,25 +41,4 @@
-      return [&quot;md&quot;, &quot;markdown&quot;, &quot;csv&quot;, &quot;txt&quot;, &quot;js&quot;, &quot;ts&quot;, &quot;py&quot;, &quot;json&quot;, &quot;yaml&quot;, &quot;yml&quot;, &quot;xml&quot;, &quot;html&quot;, &quot;css&quot;].includes(ext);
+      return ["md", "markdown", "csv", "txt", "js", "ts", "py", "json", "yaml", "yml", "xml", "html", "css"].includes(ext);
     };
 - 
 -   const handleEdit = () =&gt; {
@@ -7741,7 +7741,7 @@ Lines added: 15, lines removed: undefined
 +   // Handle Ctrl+S to save
 +   useEffect(() =&gt; {
 +     const handleKeyDown = (e: KeyboardEvent) =&gt; {
-+       if ((e.ctrlKey || e.metaKey) &amp;&amp; e.key === &quot;s&quot;) {
++       if ((e.ctrlKey || e.metaKey) &amp;&amp; e.key === "s") {
 +         e.preventDefault();
 +         if (activeDocId &amp;&amp; activeDoc &amp;&amp; isEditableFileType(getFileExtension(activeDoc.filename))) {
 +           handleSave();
@@ -7749,8 +7749,8 @@ Lines added: 15, lines removed: undefined
 +       }
 +     };
 + 
-+     window.addEventListener(&quot;keydown&quot;, handleKeyDown);
-+     return () =&gt; window.removeEventListener(&quot;keydown&quot;, handleKeyDown);
++     window.addEventListener("keydown", handleKeyDown);
++     return () =&gt; window.removeEventListener("keydown", handleKeyDown);
 +   }, [activeDocId, activeDoc]);
   
     const handleContentChange = (newContent: string) =&gt; {
@@ -7825,32 +7825,32 @@ Fixing the useEffect dependency array:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 16, lines removed: 2
 
 ```diff
 @@ -67,6 +67,20 @@
-        if ((e.ctrlKey || e.metaKey) &amp;&amp; e.key === &quot;s&quot;) {
+        if ((e.ctrlKey || e.metaKey) &amp;&amp; e.key === "s") {
           e.preventDefault();
 -         if (activeDocId &amp;&amp; activeDoc &amp;&amp; isEditableFileType(getFileExtension(activeDoc.filename))) {
 -           handleSave();
 +         const currentDoc = documents.find((d) =&gt; d.id === activeDocId);
 +         if (currentDoc &amp;&amp; isEditableFileType(getFileExtension(currentDoc.filename))) {
-+           const unsavedContent = unsavedChanges.get(activeDocId || &quot;&quot;);
-+           const contentToSave = unsavedContent || currentDoc.content || &quot;&quot;;
++           const unsavedContent = unsavedChanges.get(activeDocId || "");
++           const contentToSave = unsavedContent || currentDoc.content || "";
 +           
 +           window.electronAPI.file.write(
 +             currentDoc.workbookId,
 +             currentDoc.path,
 +             contentToSave
 +           ).then(() =&gt; {
-+             updateDocumentContent(activeDocId || &quot;&quot;, contentToSave);
-+             clearUnsavedContent(activeDocId || &quot;&quot;);
++             updateDocumentContent(activeDocId || "", contentToSave);
++             clearUnsavedContent(activeDocId || "");
 +           }).catch((error) =&gt; {
-+             console.error(&quot;Failed to save file:&quot;, error);
-+             alert(&#96;Failed to save file: ${error instanceof Error ? error.message : &quot;Unknown error&quot;}&#96;);
++             console.error("Failed to save file:", error);
++             alert(&#96;Failed to save file: ${error instanceof Error ? error.message : "Unknown error"}&#96;);
 +           });
           }
         }
@@ -7861,8 +7861,8 @@ Lines added: 1, lines removed: 1
 
 ```diff
 @@ -75,5 +89,5 @@
-      window.addEventListener(&quot;keydown&quot;, handleKeyDown);
-      return () =&gt; window.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+      window.addEventListener("keydown", handleKeyDown);
+      return () =&gt; window.removeEventListener("keydown", handleKeyDown);
 -   }, [activeDocId, activeDoc]);
 +   }, [activeDocId, documents, unsavedChanges, updateDocumentContent, clearUnsavedContent]);
   
@@ -7922,17 +7922,17 @@ Using `useCallback` to stabilize `handleSave` and fix the dependency issue:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
 
 ```diff
 @@ -1,3 +1,3 @@
-- import { useState, useEffect } from &quot;react&quot;;
-+ import { useState, useEffect, useCallback } from &quot;react&quot;;
-  import { MarkdownViewer } from &quot;./MarkdownViewer&quot;;
-  import { CSVViewer } from &quot;./CSVViewer&quot;;
+- import { useState, useEffect } from "react";
++ import { useState, useEffect, useCallback } from "react";
+  import { MarkdownViewer } from "./MarkdownViewer";
+  import { CSVViewer } from "./CSVViewer";
 ```
 
 </details>
@@ -7943,7 +7943,7 @@ Lines added: 1, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -7963,7 +7963,7 @@ Lines added: 1, lines removed: 1
 
 ```diff
 @@ -60,5 +60,5 @@
-        alert(&#96;Failed to save file: ${error instanceof Error ? error.message : &quot;Unknown error&quot;}&#96;);
+        alert(&#96;Failed to save file: ${error instanceof Error ? error.message : "Unknown error"}&#96;);
       }
 -   };
 +   }, [activeDocId, activeDoc, unsavedChanges, updateDocumentContent, clearUnsavedContent]);
@@ -7976,23 +7976,23 @@ Lines added: 2, lines removed: 16
 
 ```diff
 @@ -67,20 +67,6 @@
-        if ((e.ctrlKey || e.metaKey) &amp;&amp; e.key === &quot;s&quot;) {
+        if ((e.ctrlKey || e.metaKey) &amp;&amp; e.key === "s") {
           e.preventDefault();
 -         const currentDoc = documents.find((d) =&gt; d.id === activeDocId);
 -         if (currentDoc &amp;&amp; isEditableFileType(getFileExtension(currentDoc.filename))) {
--           const unsavedContent = unsavedChanges.get(activeDocId || &quot;&quot;);
--           const contentToSave = unsavedContent || currentDoc.content || &quot;&quot;;
+-           const unsavedContent = unsavedChanges.get(activeDocId || "");
+-           const contentToSave = unsavedContent || currentDoc.content || "";
 -           
 -           window.electronAPI.file.write(
 -             currentDoc.workbookId,
 -             currentDoc.path,
 -             contentToSave
 -           ).then(() =&gt; {
--             updateDocumentContent(activeDocId || &quot;&quot;, contentToSave);
--             clearUnsavedContent(activeDocId || &quot;&quot;);
+-             updateDocumentContent(activeDocId || "", contentToSave);
+-             clearUnsavedContent(activeDocId || "");
 -           }).catch((error) =&gt; {
--             console.error(&quot;Failed to save file:&quot;, error);
--             alert(&#96;Failed to save file: ${error instanceof Error ? error.message : &quot;Unknown error&quot;}&#96;);
+-             console.error("Failed to save file:", error);
+-             alert(&#96;Failed to save file: ${error instanceof Error ? error.message : "Unknown error"}&#96;);
 -           });
 +         if (activeDocId &amp;&amp; activeDoc &amp;&amp; isEditableFileType(getFileExtension(activeDoc.filename))) {
 +           handleSave();
@@ -8005,8 +8005,8 @@ Lines added: 1, lines removed: 1
 
 ```diff
 @@ -89,5 +75,5 @@
-      window.addEventListener(&quot;keydown&quot;, handleKeyDown);
-      return () =&gt; window.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+      window.addEventListener("keydown", handleKeyDown);
+      return () =&gt; window.removeEventListener("keydown", handleKeyDown);
 -   }, [activeDocId, documents, unsavedChanges, updateDocumentContent, clearUnsavedContent]);
 +   }, [activeDocId, activeDoc, handleSave]);
   
@@ -8047,7 +8047,7 @@ Adding Mermaid diagram support to the markdown renderer:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm install mermaid</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm install mermaid</summary>
 
 ```bash
 npm install mermaid
@@ -8073,7 +8073,7 @@ Retrying the install:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm install mermaid</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm install mermaid</summary>
 
 ```bash
 npm install mermaid
@@ -8158,18 +8158,18 @@ Updating MarkdownViewer to support Mermaid diagrams:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 1
 
 ```diff
 @@ -1,5 +1,6 @@
-- import { useEffect, useState } from &quot;react&quot;;
-+ import { useEffect, useState, useRef } from &quot;react&quot;;
-  import ReactMarkdown from &quot;react-markdown&quot;;
-  import Editor from &quot;@monaco-editor/react&quot;;
-+ import mermaid from &quot;mermaid&quot;;
+- import { useEffect, useState } from "react";
++ import { useEffect, useState, useRef } from "react";
+  import ReactMarkdown from "react-markdown";
+  import Editor from "@monaco-editor/react";
++ import mermaid from "mermaid";
   
   interface MarkdownViewerProps {
 ```
@@ -8193,8 +8193,8 @@ Lines added: 47, lines removed: undefined
 +     // Initialize mermaid if not already initialized
 +     mermaid.initialize({
 +       startOnLoad: true,
-+       theme: &quot;default&quot;,
-+       securityLevel: &quot;loose&quot;,
++       theme: "default",
++       securityLevel: "loose",
 +     });
 + 
 +     const id = &#96;mermaid-${Math.random().toString(36).substr(2, 9)}&#96;;
@@ -8209,19 +8209,19 @@ Lines added: 47, lines removed: undefined
 +         }
 +       })
 +       .catch((err) =&gt; {
-+         console.error(&quot;Mermaid rendering error:&quot;, err);
-+         setError(err.message || &quot;Failed to render diagram&quot;);
++         console.error("Mermaid rendering error:", err);
++         setError(err.message || "Failed to render diagram");
 +         if (mermaidRef.current) {
-+           mermaidRef.current.innerHTML = &#96;&lt;pre class=&quot;text-red-500 p-2&quot;&gt;Error rendering Mermaid diagram: ${err.message}&lt;/pre&gt;&#96;;
++           mermaidRef.current.innerHTML = &#96;&lt;pre class="text-red-500 p-2"&gt;Error rendering Mermaid diagram: ${err.message}&lt;/pre&gt;&#96;;
 +         }
 +       });
 +   }, [chart]);
 + 
 +   return (
-+     &lt;div className=&quot;my-4 flex justify-center&quot;&gt;
-+       &lt;div ref={mermaidRef} className=&quot;mermaid-container&quot; /&gt;
++     &lt;div className="my-4 flex justify-center"&gt;
++       &lt;div ref={mermaidRef} className="mermaid-container" /&gt;
 +       {error &amp;&amp; (
-+         &lt;div className=&quot;text-sm text-red-500 mt-2&quot;&gt;
++         &lt;div className="text-sm text-red-500 mt-2"&gt;
 +           {error}
 +         &lt;/div&gt;
 +       )}
@@ -8238,16 +8238,16 @@ Lines added: 21, lines removed: 1
 ```diff
 @@ -48,5 +96,25 @@
     return (
-      &lt;div className=&quot;prose prose-sm h-full max-w-none overflow-auto p-4&quot;&gt;
+      &lt;div className="prose prose-sm h-full max-w-none overflow-auto p-4"&gt;
 -       &lt;ReactMarkdown&gt;{editorContent}&lt;/ReactMarkdown&gt;
 +       &lt;ReactMarkdown
 +         components={{
 +           code: ({ node, inline, className, children, ...props }) =&gt; {
-+             const match = /language-(\w+)/.exec(className || &quot;&quot;);
-+             const language = match ? match[1] : &quot;&quot;;
-+             const codeString = String(children).replace(/\n$/, &quot;&quot;);
++             const match = /language-(\w+)/.exec(className || "");
++             const language = match ? match[1] : "";
++             const codeString = String(children).replace(/\n$/, "");
 + 
-+             if (!inline &amp;&amp; language === &quot;mermaid&quot;) {
++             if (!inline &amp;&amp; language === "mermaid") {
 +               return &lt;MermaidDiagram chart={codeString} /&gt;;
 +             }
 + 
@@ -8332,7 +8332,7 @@ Fixing the deprecated `substr` method:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -8355,7 +8355,7 @@ Lines added: 1, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -8366,8 +8366,8 @@ Lines added: 1, lines removed: 1
           components={{
 -           code: ({ node, inline, className, children, ...props }) =&gt; {
 +           code: ({ inline, className, children, ...props }) =&gt; {
-              const match = /language-(\w+)/.exec(className || &quot;&quot;);
-              const language = match ? match[1] : &quot;&quot;;
+              const match = /language-(\w+)/.exec(className || "");
+              const language = match ? match[1] : "";
 ```
 
 </details>
@@ -8404,7 +8404,7 @@ Verifying everything compiles:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -8524,7 +8524,7 @@ Updating file type detection to use a blacklist: all files are editable except b
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 19, lines removed: 1
@@ -8533,19 +8533,19 @@ Lines added: 19, lines removed: 1
 @@ -39,5 +39,23 @@
   
     const isEditableFileType = (ext: string): boolean =&gt; {
--     return [&quot;md&quot;, &quot;markdown&quot;, &quot;csv&quot;, &quot;txt&quot;, &quot;js&quot;, &quot;ts&quot;, &quot;py&quot;, &quot;json&quot;, &quot;yaml&quot;, &quot;yml&quot;, &quot;xml&quot;, &quot;html&quot;, &quot;css&quot;].includes(ext);
+-     return ["md", "markdown", "csv", "txt", "js", "ts", "py", "json", "yaml", "yml", "xml", "html", "css"].includes(ext);
 +     // Blacklist of binary/non-editable file types
 +     const binaryTypes = [
 +       // Documents
-+       &quot;pdf&quot;, &quot;doc&quot;, &quot;docx&quot;, &quot;xls&quot;, &quot;xlsx&quot;, &quot;ppt&quot;, &quot;pptx&quot;, &quot;odt&quot;, &quot;ods&quot;, &quot;odp&quot;,
++       "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
 +       // Images
-+       &quot;png&quot;, &quot;jpg&quot;, &quot;jpeg&quot;, &quot;gif&quot;, &quot;svg&quot;, &quot;webp&quot;, &quot;bmp&quot;, &quot;ico&quot;, &quot;tiff&quot;, &quot;tif&quot;,
++       "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico", "tiff", "tif",
 +       // Archives
-+       &quot;zip&quot;, &quot;rar&quot;, &quot;7z&quot;, &quot;tar&quot;, &quot;gz&quot;, &quot;bz2&quot;,
++       "zip", "rar", "7z", "tar", "gz", "bz2",
 +       // Media
-+       &quot;mp3&quot;, &quot;mp4&quot;, &quot;avi&quot;, &quot;mov&quot;, &quot;wmv&quot;, &quot;flv&quot;, &quot;webm&quot;, &quot;ogg&quot;,
++       "mp3", "mp4", "avi", "mov", "wmv", "flv", "webm", "ogg",
 +       // Executables
-+       &quot;exe&quot;, &quot;dll&quot;, &quot;so&quot;, &quot;dylib&quot;, &quot;bin&quot;,
++       "exe", "dll", "so", "dylib", "bin",
 +     ];
 +     
 +     // If no extension, assume editable (text file)
@@ -8583,7 +8583,7 @@ Adding PowerShell syntax highlighting support:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/TextViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/TextViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: undefined
@@ -8591,12 +8591,12 @@ Lines added: 2, lines removed: undefined
 ```diff
 @@ -25,5 +25,7 @@
       const languageMap: Record&lt;string, string&gt; = {
-        js: &quot;javascript&quot;,
-+       jsx: &quot;javascript&quot;,
-        ts: &quot;typescript&quot;,
-+       tsx: &quot;typescript&quot;,
-        py: &quot;python&quot;,
-        json: &quot;json&quot;,
+        js: "javascript",
++       jsx: "javascript",
+        ts: "typescript",
++       tsx: "typescript",
+        py: "python",
+        json: "json",
 ```
 
 **Chunk 2**
@@ -8604,43 +8604,43 @@ Lines added: 33, lines removed: undefined
 
 ```diff
 @@ -34,4 +36,37 @@
-        css: &quot;css&quot;,
-        md: &quot;markdown&quot;,
-+       markdown: &quot;markdown&quot;,
-+       ps1: &quot;powershell&quot;,
-+       psd1: &quot;powershell&quot;,
-+       psm1: &quot;powershell&quot;,
-+       sh: &quot;shell&quot;,
-+       bash: &quot;shell&quot;,
-+       zsh: &quot;shell&quot;,
-+       bat: &quot;batch&quot;,
-+       cmd: &quot;batch&quot;,
-+       sql: &quot;sql&quot;,
-+       cpp: &quot;cpp&quot;,
-+       c: &quot;c&quot;,
-+       h: &quot;c&quot;,
-+       hpp: &quot;cpp&quot;,
-+       java: &quot;java&quot;,
-+       go: &quot;go&quot;,
-+       rs: &quot;rust&quot;,
-+       rb: &quot;ruby&quot;,
-+       php: &quot;php&quot;,
-+       r: &quot;r&quot;,
-+       swift: &quot;swift&quot;,
-+       kt: &quot;kotlin&quot;,
-+       scala: &quot;scala&quot;,
-+       clj: &quot;clojure&quot;,
-+       lua: &quot;lua&quot;,
-+       perl: &quot;perl&quot;,
-+       pl: &quot;perl&quot;,
-+       vb: &quot;vb&quot;,
-+       cs: &quot;csharp&quot;,
-+       fs: &quot;fsharp&quot;,
-+       dart: &quot;dart&quot;,
-+       vue: &quot;vue&quot;,
-+       svelte: &quot;svelte&quot;,
+        css: "css",
+        md: "markdown",
++       markdown: "markdown",
++       ps1: "powershell",
++       psd1: "powershell",
++       psm1: "powershell",
++       sh: "shell",
++       bash: "shell",
++       zsh: "shell",
++       bat: "batch",
++       cmd: "batch",
++       sql: "sql",
++       cpp: "cpp",
++       c: "c",
++       h: "c",
++       hpp: "cpp",
++       java: "java",
++       go: "go",
++       rs: "rust",
++       rb: "ruby",
++       php: "php",
++       r: "r",
++       swift: "swift",
++       kt: "kotlin",
++       scala: "scala",
++       clj: "clojure",
++       lua: "lua",
++       perl: "perl",
++       pl: "perl",
++       vb: "vb",
++       cs: "csharp",
++       fs: "fsharp",
++       dart: "dart",
++       vue: "vue",
++       svelte: "svelte",
       };
-      return languageMap[ext] || &quot;plaintext&quot;;
+      return languageMap[ext] || "plaintext";
 ```
 
 </details>
@@ -8677,7 +8677,7 @@ Verifying everything compiles:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -8845,7 +8845,7 @@ Updating the documentation to track the mermaid capability:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: IMPLEMENTATION_STATUS.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: IMPLEMENTATION_STATUS.md</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: 2
@@ -8872,7 +8872,7 @@ Lines added: 3, lines removed: 2
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: IMPLEMENTATION_STATUS.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: IMPLEMENTATION_STATUS.md</summary>
 
 **Chunk 1**
 Lines added: 4, lines removed: undefined
@@ -8905,7 +8905,7 @@ Lines added: 4, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: README.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: README.md</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 1
@@ -8947,7 +8947,7 @@ Creating a dependencies documentation file to track capabilities:
 
 <tool-use data-tool-type="write" data-tool-name="write">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **write** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 77, lines removed: 1
@@ -9023,10 +9023,10 @@ Lines added: 77, lines removed: 1
 + 2. **Update this file**: Add the dependency to the appropriate section with:
 +    - Package name and version
 +    - Purpose/description
-+    - Where it&#39;s used
++    - Where it's used
 +    - Date added
 + 3. **Update IMPLEMENTATION_STATUS.md**: Add the feature to the appropriate section
-+ 4. **Update README.md**: If it&#39;s a user-facing feature, mention it in the features list
++ 4. **Update README.md**: If it's a user-facing feature, mention it in the features list
 + 
 + ## Build Process
 + 
@@ -9145,18 +9145,18 @@ Updating MarkdownViewer to support dual-pane mode with a resizable split:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: undefined
 
 ```diff
 @@ -3,4 +3,7 @@
-  import Editor from &quot;@monaco-editor/react&quot;;
-  import mermaid from &quot;mermaid&quot;;
-+ import { ResizablePane } from &quot;../ResizablePane&quot;;
+  import Editor from "@monaco-editor/react";
+  import mermaid from "mermaid";
++ import { ResizablePane } from "../ResizablePane";
 + 
-+ type MarkdownViewMode = &quot;edit&quot; | &quot;preview&quot; | &quot;split&quot;;
++ type MarkdownViewMode = "edit" | "preview" | "split";
   
   interface MarkdownViewerProps {
 ```
@@ -9169,7 +9169,7 @@ Lines added: 3, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 26, lines removed: undefined
@@ -9179,7 +9179,7 @@ Lines added: 26, lines removed: undefined
     );
   }
 + 
-+ const MARKDOWN_SPLIT_STORAGE_KEY = &quot;insightlm-markdown-split&quot;;
++ const MARKDOWN_SPLIT_STORAGE_KEY = "insightlm-markdown-split";
 + const DEFAULT_SPLIT_SIZE = 50; // Percentage
 + 
 + function loadSplitSize(): number {
@@ -9192,7 +9192,7 @@ Lines added: 26, lines removed: undefined
 +       }
 +     }
 +   } catch (e) {
-+     console.error(&quot;Failed to load markdown split size:&quot;, e);
++     console.error("Failed to load markdown split size:", e);
 +   }
 +   return DEFAULT_SPLIT_SIZE;
 + }
@@ -9201,7 +9201,7 @@ Lines added: 26, lines removed: undefined
 +   try {
 +     localStorage.setItem(MARKDOWN_SPLIT_STORAGE_KEY, size.toString());
 +   } catch (e) {
-+     console.error(&quot;Failed to save markdown split size:&quot;, e);
++     console.error("Failed to save markdown split size:", e);
 +   }
 + }
   
@@ -9215,7 +9215,7 @@ Lines added: 11, lines removed: undefined
 @@ -66,8 +92,19 @@
   }: MarkdownViewerProps) {
     const [editorContent, setEditorContent] = useState(content);
-+   const [viewMode, setViewMode] = useState&lt;MarkdownViewMode&gt;(&quot;split&quot;);
++   const [viewMode, setViewMode] = useState&lt;MarkdownViewMode&gt;("split");
 +   const [splitSize, setSplitSize] = useState(loadSplitSize);
   
     useEffect(() =&gt; {
@@ -9225,9 +9225,9 @@ Lines added: 11, lines removed: undefined
 +   useEffect(() =&gt; {
 +     // When editing is enabled, default to split view; when disabled, show preview only
 +     if (isEditing) {
-+       setViewMode(&quot;split&quot;);
++       setViewMode("split");
 +     } else {
-+       setViewMode(&quot;preview&quot;);
++       setViewMode("preview");
 +     }
 +   }, [isEditing]);
   
@@ -9244,17 +9244,17 @@ Lines added: 6, lines removed: 21
 -   // For markdown, show editor by default if editable, or preview if not
 -   if (isEditing) {
 -     return (
--       &lt;div className=&quot;h-full&quot;&gt;
+-       &lt;div className="h-full"&gt;
 -         &lt;Editor
--           height=&quot;100%&quot;
--           language=&quot;markdown&quot;
+-           height="100%"
+-           language="markdown"
 -           value={editorContent}
--           theme=&quot;vs-light&quot;
+-           theme="vs-light"
 -           onChange={handleChange}
 -           options={{
 -             readOnly: false,
 -             minimap: { enabled: false },
--             wordWrap: &quot;on&quot;,
+-             wordWrap: "on",
 -           }}
 -         /&gt;
 -       &lt;/div&gt;
@@ -9268,7 +9268,7 @@ Lines added: 6, lines removed: 21
 +   };
 + 
 +   const renderPreview = () =&gt; (
-      &lt;div className=&quot;prose prose-sm h-full max-w-none overflow-auto p-4&quot;&gt;
+      &lt;div className="prose prose-sm h-full max-w-none overflow-auto p-4"&gt;
         &lt;ReactMarkdown
 ```
 
@@ -9281,17 +9281,17 @@ Lines added: 109, lines removed: undefined
     );
 + 
 +   const renderEditor = () =&gt; (
-+     &lt;div className=&quot;h-full&quot;&gt;
++     &lt;div className="h-full"&gt;
 +       &lt;Editor
-+         height=&quot;100%&quot;
-+         language=&quot;markdown&quot;
++         height="100%"
++         language="markdown"
 +         value={editorContent}
-+         theme=&quot;vs-light&quot;
++         theme="vs-light"
 +         onChange={handleChange}
 +         options={{
 +           readOnly: !isEditing,
 +           minimap: { enabled: false },
-+           wordWrap: &quot;on&quot;,
++           wordWrap: "on",
 +         }}
 +       /&gt;
 +     &lt;/div&gt;
@@ -9304,37 +9304,37 @@ Lines added: 109, lines removed: undefined
 + 
 +   // View mode controls
 +   const viewModeButtons = (
-+     &lt;div className=&quot;absolute top-2 right-2 z-20 flex gap-1 rounded bg-white shadow-md border border-gray-200&quot;&gt;
++     &lt;div className="absolute top-2 right-2 z-20 flex gap-1 rounded bg-white shadow-md border border-gray-200"&gt;
 +       &lt;button
-+         onClick={() =&gt; setViewMode(&quot;edit&quot;)}
++         onClick={() =&gt; setViewMode("edit")}
 +         className={&#96;px-3 py-1 text-xs font-medium transition-colors ${
-+           viewMode === &quot;edit&quot;
-+             ? &quot;bg-blue-500 text-white&quot;
-+             : &quot;bg-white text-gray-700 hover:bg-gray-100&quot;
++           viewMode === "edit"
++             ? "bg-blue-500 text-white"
++             : "bg-white text-gray-700 hover:bg-gray-100"
 +         }&#96;}
-+         title=&quot;Edit only&quot;
++         title="Edit only"
 +       &gt;
 +         Edit
 +       &lt;/button&gt;
 +       &lt;button
-+         onClick={() =&gt; setViewMode(&quot;split&quot;)}
++         onClick={() =&gt; setViewMode("split")}
 +         className={&#96;px-3 py-1 text-xs font-medium transition-colors ${
-+           viewMode === &quot;split&quot;
-+             ? &quot;bg-blue-500 text-white&quot;
-+             : &quot;bg-white text-gray-700 hover:bg-gray-100&quot;
++           viewMode === "split"
++             ? "bg-blue-500 text-white"
++             : "bg-white text-gray-700 hover:bg-gray-100"
 +         }&#96;}
-+         title=&quot;Split view&quot;
++         title="Split view"
 +       &gt;
 +         Split
 +       &lt;/button&gt;
 +       &lt;button
-+         onClick={() =&gt; setViewMode(&quot;preview&quot;)}
++         onClick={() =&gt; setViewMode("preview")}
 +         className={&#96;px-3 py-1 text-xs font-medium transition-colors ${
-+           viewMode === &quot;preview&quot;
-+             ? &quot;bg-blue-500 text-white&quot;
-+             : &quot;bg-white text-gray-700 hover:bg-gray-100&quot;
++           viewMode === "preview"
++             ? "bg-blue-500 text-white"
++             : "bg-white text-gray-700 hover:bg-gray-100"
 +         }&#96;}
-+         title=&quot;Preview only&quot;
++         title="Preview only"
 +       &gt;
 +         Preview
 +       &lt;/button&gt;
@@ -9342,9 +9342,9 @@ Lines added: 109, lines removed: undefined
 +   );
 + 
 +   // Edit only mode
-+   if (viewMode === &quot;edit&quot;) {
++   if (viewMode === "edit") {
 +     return (
-+       &lt;div className=&quot;relative h-full&quot;&gt;
++       &lt;div className="relative h-full"&gt;
 +         {viewModeButtons}
 +         {renderEditor()}
 +       &lt;/div&gt;
@@ -9352,9 +9352,9 @@ Lines added: 109, lines removed: undefined
 +   }
 + 
 +   // Preview only mode
-+   if (viewMode === &quot;preview&quot;) {
++   if (viewMode === "preview") {
 +     return (
-+       &lt;div className=&quot;relative h-full&quot;&gt;
++       &lt;div className="relative h-full"&gt;
 +         {viewModeButtons}
 +         {renderPreview()}
 +       &lt;/div&gt;
@@ -9366,16 +9366,16 @@ Lines added: 109, lines removed: undefined
 +   const previewWidthPercent = 100 - splitSize;
 + 
 +   return (
-+     &lt;div className=&quot;relative flex h-full&quot;&gt;
++     &lt;div className="relative flex h-full"&gt;
 +       {viewModeButtons}
 +       {/* Editor pane */}
-+       &lt;div style={{ width: &#96;${editorWidthPercent}%&#96; }} className=&quot;flex-shrink-0&quot;&gt;
++       &lt;div style={{ width: &#96;${editorWidthPercent}%&#96; }} className="flex-shrink-0"&gt;
 +         {renderEditor()}
 +       &lt;/div&gt;
 + 
 +       {/* Resizable separator */}
 +       &lt;ResizablePane
-+         direction=&quot;horizontal&quot;
++         direction="horizontal"
 +         onResize={handleSplitResize}
 +         initialSize={splitSize}
 +         minSize={20}
@@ -9383,7 +9383,7 @@ Lines added: 109, lines removed: undefined
 +       /&gt;
 + 
 +       {/* Preview pane */}
-+       &lt;div style={{ width: &#96;${previewWidthPercent}%&#96; }} className=&quot;flex-shrink-0&quot;&gt;
++       &lt;div style={{ width: &#96;${previewWidthPercent}%&#96; }} className="flex-shrink-0"&gt;
 +         {renderPreview()}
 +       &lt;/div&gt;
 +     &lt;/div&gt;
@@ -9435,7 +9435,7 @@ Fixing the split sizing to work with pixels instead of percentages:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 2
@@ -9443,7 +9443,7 @@ Lines added: 2, lines removed: 2
 ```diff
 @@ -61,7 +61,7 @@
   
-  const MARKDOWN_SPLIT_STORAGE_KEY = &quot;insightlm-markdown-split&quot;;
+  const MARKDOWN_SPLIT_STORAGE_KEY = "insightlm-markdown-split";
 - const DEFAULT_SPLIT_SIZE = 50; // Percentage
 + const DEFAULT_SPLIT_PERCENT = 50; // Percentage
   
@@ -9460,8 +9460,8 @@ Lines added: 5, lines removed: 5
 @@ -73,14 +73,14 @@
       }
     } catch (e) {
--     console.error(&quot;Failed to load markdown split size:&quot;, e);
-+     console.error(&quot;Failed to load markdown split percent:&quot;, e);
+-     console.error("Failed to load markdown split size:", e);
++     console.error("Failed to load markdown split percent:", e);
     }
 -   return DEFAULT_SPLIT_SIZE;
 +   return DEFAULT_SPLIT_PERCENT;
@@ -9473,8 +9473,8 @@ Lines added: 5, lines removed: 5
 -     localStorage.setItem(MARKDOWN_SPLIT_STORAGE_KEY, size.toString());
 +     localStorage.setItem(MARKDOWN_SPLIT_STORAGE_KEY, percent.toString());
     } catch (e) {
--     console.error(&quot;Failed to save markdown split size:&quot;, e);
-+     console.error(&quot;Failed to save markdown split percent:&quot;, e);
+-     console.error("Failed to save markdown split size:", e);
++     console.error("Failed to save markdown split percent:", e);
     }
   }
 ```
@@ -9487,7 +9487,7 @@ Lines added: 5, lines removed: 5
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 1
@@ -9495,7 +9495,7 @@ Lines added: 2, lines removed: 1
 ```diff
 @@ -93,5 +93,6 @@
     const [editorContent, setEditorContent] = useState(content);
-    const [viewMode, setViewMode] = useState&lt;MarkdownViewMode&gt;(&quot;split&quot;);
+    const [viewMode, setViewMode] = useState&lt;MarkdownViewMode&gt;("split");
 -   const [splitSize, setSplitSize] = useState(loadSplitSize);
 +   const [splitPercent, setSplitPercent] = useState(loadSplitPercent);
 +   const containerRef = useRef&lt;HTMLDivElement&gt;(null);
@@ -9511,7 +9511,7 @@ Lines added: 2, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 13, lines removed: 3
@@ -9548,7 +9548,7 @@ Lines added: 13, lines removed: 3
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: 3
@@ -9563,8 +9563,8 @@ Lines added: 3, lines removed: 3
 +   const previewWidthPercent = 100 - splitPercent;
   
     return (
--     &lt;div className=&quot;relative flex h-full&quot;&gt;
-+     &lt;div ref={containerRef} className=&quot;relative flex h-full&quot;&gt;
+-     &lt;div className="relative flex h-full"&gt;
++     &lt;div ref={containerRef} className="relative flex h-full"&gt;
         {viewModeButtons}
         {/* Editor pane */}
 ```
@@ -9574,7 +9574,7 @@ Lines added: 3, lines removed: 3
 
 ```diff
 @@ -253,7 +253,7 @@
-          direction=&quot;horizontal&quot;
+          direction="horizontal"
           onResize={handleSplitResize}
 -         initialSize={splitSize}
 -         minSize={20}
@@ -9639,14 +9639,14 @@ Fixing the initial size calculation to handle the container ref:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
 
 ```diff
 @@ -94,4 +94,5 @@
-    const [viewMode, setViewMode] = useState&lt;MarkdownViewMode&gt;(&quot;split&quot;);
+    const [viewMode, setViewMode] = useState&lt;MarkdownViewMode&gt;("split");
     const [splitPercent, setSplitPercent] = useState(loadSplitPercent);
 +   const [editorWidthPixels, setEditorWidthPixels] = useState(400); // Default fallback
     const containerRef = useRef&lt;HTMLDivElement&gt;(null);
@@ -9663,7 +9663,7 @@ Lines added: 18, lines removed: undefined
 + 
 +   // Update pixel width when container is mounted or resized
 +   useEffect(() =&gt; {
-+     if (!containerRef.current || viewMode !== &quot;split&quot;) return;
++     if (!containerRef.current || viewMode !== "split") return;
 +     
 +     const updateWidth = () =&gt; {
 +       if (containerRef.current) {
@@ -9707,14 +9707,14 @@ Lines added: undefined, lines removed: 6
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
 
 ```diff
 @@ -266,5 +266,5 @@
-          direction=&quot;horizontal&quot;
+          direction="horizontal"
           onResize={handleSplitResize}
 -         initialSize={getEditorWidthPixels()}
 +         initialSize={editorWidthPixels}
@@ -9746,7 +9746,7 @@ Lint results
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -9775,7 +9775,7 @@ Updating the documentation to reflect this feature:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: IMPLEMENTATION_STATUS.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: IMPLEMENTATION_STATUS.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -9798,7 +9798,7 @@ Lines added: 1, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: IMPLEMENTATION_STATUS.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: IMPLEMENTATION_STATUS.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -9820,7 +9820,7 @@ Lines added: 1, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: README.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: README.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -10009,7 +10009,7 @@ Updating the document store to track the last opened document and updating Docum
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/store/documentStore.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/store/documentStore.ts</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -10020,7 +10020,7 @@ Lines added: 1, lines removed: undefined
     unsavedChanges: Map&lt;string, string&gt;; // Track unsaved content changes
 +   lastOpenedDocId: string | null; // Track the most recently opened document ID
   
-    openDocument: (doc: Omit&lt;OpenDocument, &quot;id&quot;&gt;) =&gt; Promise&lt;void&gt;;
+    openDocument: (doc: Omit&lt;OpenDocument, "id"&gt;) =&gt; Promise&lt;void&gt;;
 ```
 
 </details>
@@ -10031,7 +10031,7 @@ Lines added: 1, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/store/documentStore.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/store/documentStore.ts</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -10053,7 +10053,7 @@ Lines added: 1, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/store/documentStore.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/store/documentStore.ts</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 1
@@ -10081,7 +10081,7 @@ Lines added: 2, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/store/documentStore.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/store/documentStore.ts</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -10103,7 +10103,7 @@ Lines added: 1, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -10189,7 +10189,7 @@ Adding a useEffect to handle new documents:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 10, lines removed: undefined
@@ -10236,7 +10236,7 @@ Lint results
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -10299,7 +10299,7 @@ Implementation looks correct. Verifying it handles the case where clicking an al
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/DocumentViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: 1
@@ -10308,7 +10308,7 @@ Lines added: 3, lines removed: 1
 @@ -105,10 +105,12 @@
     useEffect(() =&gt; {
       if (lastOpenedDocId &amp;&amp; documents.some((d) =&gt; d.id === lastOpenedDocId)) {
-+       // Always select the last opened document, even if it&#39;s already active
++       // Always select the last opened document, even if it's already active
 +       // This ensures clicking an already-open document brings it to front
         setActiveDocId(lastOpenedDocId);
       } else if (documents.length &gt; 0 &amp;&amp; !activeDocId) {
@@ -10494,7 +10494,7 @@ The `@tailwindcss/typography` plugin isn't installed, so the `prose` class has n
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm install @tailwindcss/typography</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm install @tailwindcss/typography</summary>
 
 ```bash
 npm install @tailwindcss/typography
@@ -10535,7 +10535,7 @@ Updating Tailwind config to include the typography plugin:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: tailwind.config.js</summary>
+<details><summary>Tool use: **search_replace** • Edit file: tailwind.config.js</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: 1
@@ -10546,7 +10546,7 @@ Lines added: 3, lines removed: 1
     },
 -   plugins: [],
 +   plugins: [
-+     require(&#39;@tailwindcss/typography&#39;),
++     require('@tailwindcss/typography'),
 +   ],
   };
   
@@ -10568,7 +10568,7 @@ Lines added: 3, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 4, lines removed: undefined
@@ -10609,7 +10609,7 @@ Lint results
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -10638,7 +10638,7 @@ Enhancing markdown preview styling to match the chat component:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 8, lines removed: undefined
@@ -10650,7 +10650,7 @@ Lines added: 8, lines removed: undefined
 + 
 +             if (inline) {
 +               return (
-+                 &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono&quot; {...props}&gt;
++                 &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono" {...props}&gt;
 +                   {children}
 +                 &lt;/code&gt;
 +               );
@@ -10667,24 +10667,24 @@ Lines added: 22, lines removed: undefined
               );
             },
 +           pre: ({ children }) =&gt; (
-+             &lt;pre className=&quot;my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
++             &lt;pre className="my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 +               {children}
 +             &lt;/pre&gt;
 +           ),
 +           table: ({ children }) =&gt; (
-+             &lt;div className=&quot;my-4 overflow-x-auto&quot;&gt;
-+               &lt;table className=&quot;min-w-full border border-gray-300&quot;&gt;
++             &lt;div className="my-4 overflow-x-auto"&gt;
++               &lt;table className="min-w-full border border-gray-300"&gt;
 +                 {children}
 +               &lt;/table&gt;
 +             &lt;/div&gt;
 +           ),
 +           th: ({ children }) =&gt; (
-+             &lt;th className=&quot;border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold&quot;&gt;
++             &lt;th className="border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold"&gt;
 +               {children}
 +             &lt;/th&gt;
 +           ),
 +           td: ({ children }) =&gt; (
-+             &lt;td className=&quot;border border-gray-300 px-4 py-2&quot;&gt;
++             &lt;td className="border border-gray-300 px-4 py-2"&gt;
 +               {children}
 +             &lt;/td&gt;
 +           ),
@@ -10835,7 +10835,7 @@ Updating DEPENDENCIES.md with the exact version and verifying the Tailwind confi
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 1
@@ -10869,7 +10869,7 @@ Lines added: 2, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: IMPLEMENTATION_STATUS.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: IMPLEMENTATION_STATUS.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -10927,7 +10927,7 @@ Verifying everything is properly tracked:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm list @tailwindcss/typography</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm list @tailwindcss/typography</summary>
 
 ```bash
 npm list @tailwindcss/typography
@@ -11050,7 +11050,7 @@ Checking if content is being passed correctly and adding debugging. Verifying th
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 61, lines removed: 52
@@ -11060,44 +11060,44 @@ Lines added: 61, lines removed: 52
     };
   
 -   const renderPreview = () =&gt; (
--     &lt;div className=&quot;prose prose-sm h-full max-w-none overflow-auto p-4&quot;&gt;
+-     &lt;div className="prose prose-sm h-full max-w-none overflow-auto p-4"&gt;
 -       &lt;ReactMarkdown
 -         components={{
 -           code: ({ inline, className, children, ...props }) =&gt; {
--             const match = /language-(\w+)/.exec(className || &quot;&quot;);
--             const language = match ? match[1] : &quot;&quot;;
--             const codeString = String(children).replace(/\n$/, &quot;&quot;);
+-             const match = /language-(\w+)/.exec(className || "");
+-             const language = match ? match[1] : "";
+-             const codeString = String(children).replace(/\n$/, "");
 +   const renderPreview = () =&gt; {
 +     // Ensure we have content to render
-+     const contentToRender = editorContent || &quot;&quot;;
++     const contentToRender = editorContent || "";
 +     
 +     return (
-+       &lt;div className=&quot;prose prose-sm prose-gray h-full max-w-none overflow-auto p-4&quot;&gt;
++       &lt;div className="prose prose-sm prose-gray h-full max-w-none overflow-auto p-4"&gt;
 +         {contentToRender ? (
 +           &lt;ReactMarkdown
 +             components={{
 +               code: ({ inline, className, children, ...props }) =&gt; {
-+                 const match = /language-(\w+)/.exec(className || &quot;&quot;);
-+                 const language = match ? match[1] : &quot;&quot;;
-+                 const codeString = String(children).replace(/\n$/, &quot;&quot;);
++                 const match = /language-(\w+)/.exec(className || "");
++                 const language = match ? match[1] : "";
++                 const codeString = String(children).replace(/\n$/, "");
   
--             if (!inline &amp;&amp; language === &quot;mermaid&quot;) {
+-             if (!inline &amp;&amp; language === "mermaid") {
 -               return &lt;MermaidDiagram chart={codeString} /&gt;;
 -             }
-+                 if (!inline &amp;&amp; language === &quot;mermaid&quot;) {
++                 if (!inline &amp;&amp; language === "mermaid") {
 +                   return &lt;MermaidDiagram chart={codeString} /&gt;;
 +                 }
   
 -             if (inline) {
 -               return (
--                 &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono&quot; {...props}&gt;
+-                 &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono" {...props}&gt;
 -                   {children}
 -                 &lt;/code&gt;
 -               );
 -             }
 +                 if (inline) {
 +                   return (
-+                     &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono&quot; {...props}&gt;
++                     &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono" {...props}&gt;
 +                       {children}
 +                     &lt;/code&gt;
 +                   );
@@ -11110,24 +11110,24 @@ Lines added: 61, lines removed: 52
 -             );
 -           },
 -           pre: ({ children }) =&gt; (
--             &lt;pre className=&quot;my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
+-             &lt;pre className="my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 -               {children}
 -             &lt;/pre&gt;
 -           ),
 -           table: ({ children }) =&gt; (
--             &lt;div className=&quot;my-4 overflow-x-auto&quot;&gt;
--               &lt;table className=&quot;min-w-full border border-gray-300&quot;&gt;
+-             &lt;div className="my-4 overflow-x-auto"&gt;
+-               &lt;table className="min-w-full border border-gray-300"&gt;
 -                 {children}
 -               &lt;/table&gt;
 -             &lt;/div&gt;
 -           ),
 -           th: ({ children }) =&gt; (
--             &lt;th className=&quot;border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold&quot;&gt;
+-             &lt;th className="border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold"&gt;
 -               {children}
 -             &lt;/th&gt;
 -           ),
 -           td: ({ children }) =&gt; (
--             &lt;td className=&quot;border border-gray-300 px-4 py-2&quot;&gt;
+-             &lt;td className="border border-gray-300 px-4 py-2"&gt;
 -               {children}
 -             &lt;/td&gt;
 -           ),
@@ -11144,24 +11144,24 @@ Lines added: 61, lines removed: 52
 +                 );
 +               },
 +               pre: ({ children }) =&gt; (
-+                 &lt;pre className=&quot;my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
++                 &lt;pre className="my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 +                   {children}
 +                 &lt;/pre&gt;
 +               ),
 +               table: ({ children }) =&gt; (
-+                 &lt;div className=&quot;my-4 overflow-x-auto&quot;&gt;
-+                   &lt;table className=&quot;min-w-full border border-gray-300&quot;&gt;
++                 &lt;div className="my-4 overflow-x-auto"&gt;
++                   &lt;table className="min-w-full border border-gray-300"&gt;
 +                     {children}
 +                   &lt;/table&gt;
 +                 &lt;/div&gt;
 +               ),
 +               th: ({ children }) =&gt; (
-+                 &lt;th className=&quot;border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold&quot;&gt;
++                 &lt;th className="border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold"&gt;
 +                   {children}
 +                 &lt;/th&gt;
 +               ),
 +               td: ({ children }) =&gt; (
-+                 &lt;td className=&quot;border border-gray-300 px-4 py-2&quot;&gt;
++                 &lt;td className="border border-gray-300 px-4 py-2"&gt;
 +                   {children}
 +                 &lt;/td&gt;
 +               ),
@@ -11170,7 +11170,7 @@ Lines added: 61, lines removed: 52
 +             {contentToRender}
 +           &lt;/ReactMarkdown&gt;
 +         ) : (
-+           &lt;div className=&quot;text-gray-400 italic&quot;&gt;No content to preview&lt;/div&gt;
++           &lt;div className="text-gray-400 italic"&gt;No content to preview&lt;/div&gt;
 +         )}
 +       &lt;/div&gt;
 +     );
@@ -11235,7 +11235,7 @@ Checking if Tailwind is processing the typography plugin. Verifying the build an
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 55, lines removed: 53
@@ -11244,41 +11244,41 @@ Lines added: 55, lines removed: 53
 @@ -148,60 +148,62 @@
       
       return (
--       &lt;div className=&quot;prose prose-sm prose-gray h-full max-w-none overflow-auto p-4&quot;&gt;
+-       &lt;div className="prose prose-sm prose-gray h-full max-w-none overflow-auto p-4"&gt;
 -         {contentToRender ? (
 -           &lt;ReactMarkdown
 -             components={{
 -               code: ({ inline, className, children, ...props }) =&gt; {
--                 const match = /language-(\w+)/.exec(className || &quot;&quot;);
--                 const language = match ? match[1] : &quot;&quot;;
--                 const codeString = String(children).replace(/\n$/, &quot;&quot;);
-+       &lt;div className=&quot;h-full overflow-auto p-4&quot;&gt;
-+         &lt;div className=&quot;prose prose-sm prose-gray max-w-none&quot;&gt;
+-                 const match = /language-(\w+)/.exec(className || "");
+-                 const language = match ? match[1] : "";
+-                 const codeString = String(children).replace(/\n$/, "");
++       &lt;div className="h-full overflow-auto p-4"&gt;
++         &lt;div className="prose prose-sm prose-gray max-w-none"&gt;
 +           {contentToRender ? (
 +             &lt;ReactMarkdown
 +               components={{
 +                 code: ({ inline, className, children, ...props }) =&gt; {
-+                   const match = /language-(\w+)/.exec(className || &quot;&quot;);
-+                   const language = match ? match[1] : &quot;&quot;;
-+                   const codeString = String(children).replace(/\n$/, &quot;&quot;);
++                   const match = /language-(\w+)/.exec(className || "");
++                   const language = match ? match[1] : "";
++                   const codeString = String(children).replace(/\n$/, "");
   
--                 if (!inline &amp;&amp; language === &quot;mermaid&quot;) {
+-                 if (!inline &amp;&amp; language === "mermaid") {
 -                   return &lt;MermaidDiagram chart={codeString} /&gt;;
 -                 }
-+                   if (!inline &amp;&amp; language === &quot;mermaid&quot;) {
++                   if (!inline &amp;&amp; language === "mermaid") {
 +                     return &lt;MermaidDiagram chart={codeString} /&gt;;
 +                   }
   
 -                 if (inline) {
 -                   return (
--                     &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono&quot; {...props}&gt;
+-                     &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono" {...props}&gt;
 -                       {children}
 -                     &lt;/code&gt;
 -                   );
 -                 }
 +                   if (inline) {
 +                     return (
-+                       &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono&quot; {...props}&gt;
++                       &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono" {...props}&gt;
 +                         {children}
 +                       &lt;/code&gt;
 +                     );
@@ -11291,24 +11291,24 @@ Lines added: 55, lines removed: 53
 -                 );
 -               },
 -               pre: ({ children }) =&gt; (
--                 &lt;pre className=&quot;my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
+-                 &lt;pre className="my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 -                   {children}
 -                 &lt;/pre&gt;
 -               ),
 -               table: ({ children }) =&gt; (
--                 &lt;div className=&quot;my-4 overflow-x-auto&quot;&gt;
--                   &lt;table className=&quot;min-w-full border border-gray-300&quot;&gt;
+-                 &lt;div className="my-4 overflow-x-auto"&gt;
+-                   &lt;table className="min-w-full border border-gray-300"&gt;
 -                     {children}
 -                   &lt;/table&gt;
 -                 &lt;/div&gt;
 -               ),
 -               th: ({ children }) =&gt; (
--                 &lt;th className=&quot;border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold&quot;&gt;
+-                 &lt;th className="border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold"&gt;
 -                   {children}
 -                 &lt;/th&gt;
 -               ),
 -               td: ({ children }) =&gt; (
--                 &lt;td className=&quot;border border-gray-300 px-4 py-2&quot;&gt;
+-                 &lt;td className="border border-gray-300 px-4 py-2"&gt;
 -                   {children}
 -                 &lt;/td&gt;
 -               ),
@@ -11317,7 +11317,7 @@ Lines added: 55, lines removed: 53
 -             {contentToRender}
 -           &lt;/ReactMarkdown&gt;
 -         ) : (
--           &lt;div className=&quot;text-gray-400 italic&quot;&gt;No content to preview&lt;/div&gt;
+-           &lt;div className="text-gray-400 italic"&gt;No content to preview&lt;/div&gt;
 -         )}
 +                   return (
 +                     &lt;code className={className} {...props}&gt;
@@ -11326,24 +11326,24 @@ Lines added: 55, lines removed: 53
 +                   );
 +                 },
 +                 pre: ({ children }) =&gt; (
-+                   &lt;pre className=&quot;my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
++                   &lt;pre className="my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 +                     {children}
 +                   &lt;/pre&gt;
 +                 ),
 +                 table: ({ children }) =&gt; (
-+                   &lt;div className=&quot;my-4 overflow-x-auto&quot;&gt;
-+                     &lt;table className=&quot;min-w-full border border-gray-300&quot;&gt;
++                   &lt;div className="my-4 overflow-x-auto"&gt;
++                     &lt;table className="min-w-full border border-gray-300"&gt;
 +                       {children}
 +                     &lt;/table&gt;
 +                   &lt;/div&gt;
 +                 ),
 +                 th: ({ children }) =&gt; (
-+                   &lt;th className=&quot;border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold&quot;&gt;
++                   &lt;th className="border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold"&gt;
 +                     {children}
 +                   &lt;/th&gt;
 +                 ),
 +                 td: ({ children }) =&gt; (
-+                   &lt;td className=&quot;border border-gray-300 px-4 py-2&quot;&gt;
++                   &lt;td className="border border-gray-300 px-4 py-2"&gt;
 +                     {children}
 +                   &lt;/td&gt;
 +                 ),
@@ -11352,7 +11352,7 @@ Lines added: 55, lines removed: 53
 +               {contentToRender}
 +             &lt;/ReactMarkdown&gt;
 +           ) : (
-+             &lt;div className=&quot;text-gray-400 italic&quot;&gt;No content to preview&lt;/div&gt;
++             &lt;div className="text-gray-400 italic"&gt;No content to preview&lt;/div&gt;
 +           )}
 +         &lt;/div&gt;
         &lt;/div&gt;
@@ -11401,7 +11401,7 @@ Restructured the preview to apply the prose class correctly. Verifying the Tailw
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:react</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:react</summary>
 
 ```bash
 npm run build:react
@@ -11411,11 +11411,11 @@ npm run build:react
 &gt; insightlm-lt@1.0.0 build:react
 &gt; vite build
 
-The CJS build of Vite&#39;s Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.                  
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.                  
 vite v5.4.21 building for production...
-(node:38544) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn&#39;t parse as CommonJS.                                                       
+(node:38544) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn't parse as CommonJS.                                                       
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.                                                                  
-To eliminate this warning, add &quot;type&quot;: &quot;module&quot; to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                       
+To eliminate this warning, add "type": "module" to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                       
 (Use &#96;node --trace-warnings ...&#96; to show where the warning was created)
 ✓ 1999 modules transformed.
 dist/index.html                                         0.40 kB │ gzip:   0.27 kB                                                                               
@@ -11640,19 +11640,19 @@ Implementing PDF viewing: adding an IPC handler to get the file path and updatin
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/services/fileService.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/services/fileService.ts</summary>
 
 **Chunk 1**
 Lines added: 14, lines removed: undefined
 
 ```diff
 @@ -63,4 +63,18 @@
-      return fs.readFileSync(filePath, &quot;utf-8&quot;);
+      return fs.readFileSync(filePath, "utf-8");
     }
 + 
 +   getFilePath(workbookId: string, relativePath: string): string {
 +     const workbookPath = path.join(
-+       this.workbookService[&quot;workbooksDir&quot;],
++       this.workbookService["workbooksDir"],
 +       workbookId,
 +     );
 +     const filePath = path.join(workbookPath, relativePath);
@@ -11675,7 +11675,7 @@ Lines added: 14, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/ipc/files.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/ipc/files.ts</summary>
 
 **Chunk 1**
 Lines added: 12, lines removed: undefined
@@ -11686,12 +11686,12 @@ Lines added: 12, lines removed: undefined
     );
 + 
 +   ipcMain.handle(
-+     &quot;file:getPath&quot;,
++     "file:getPath",
 +     async (_, workbookId: string, relativePath: string) =&gt; {
 +       try {
 +         return fileService.getFilePath(workbookId, relativePath);
 +       } catch (error) {
-+         console.error(&quot;Error getting file path:&quot;, error);
++         console.error("Error getting file path:", error);
 +         throw error;
 +       }
 +     },
@@ -11726,7 +11726,7 @@ Adding getPath to preload and implementing the PDF viewer:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/preload.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/preload.ts</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: undefined
@@ -11736,7 +11736,7 @@ Lines added: 2, lines removed: undefined
           targetWorkbookId,
         ),
 +     getPath: (workbookId: string, relativePath: string) =&gt;
-+       ipcRenderer.invoke(&quot;file:getPath&quot;, workbookId, relativePath),
++       ipcRenderer.invoke("file:getPath", workbookId, relativePath),
     },
   
 ```
@@ -11749,7 +11749,7 @@ Lines added: 2, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/types/electron.d.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/types/electron.d.ts</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -11771,18 +11771,18 @@ Lines added: 1, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/PDFViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/PDFViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 7, lines removed: 1
 
 ```diff
 @@ -1,3 +1,9 @@
-- import { useState } from &quot;react&quot;;
-+ import { useState, useEffect } from &quot;react&quot;;
-+ import { Document, Page, pdfjs } from &quot;react-pdf&quot;;
-+ import &quot;react-pdf/dist/esm/Page/AnnotationLayer.css&quot;;
-+ import &quot;react-pdf/dist/esm/Page/TextLayer.css&quot;;
+- import { useState } from "react";
++ import { useState, useEffect } from "react";
++ import { Document, Page, pdfjs } from "react-pdf";
++ import "react-pdf/dist/esm/Page/AnnotationLayer.css";
++ import "react-pdf/dist/esm/Page/TextLayer.css";
 + 
 + // Set up PDF.js worker
 + pdfjs.GlobalWorkerOptions.workerSrc = &#96;//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js&#96;;
@@ -11807,13 +11807,13 @@ Lines added: 133, lines removed: 10
 -   // For now, show a placeholder
 -   // PDF viewing will require additional setup with react-pdf
 -   return (
--     &lt;div className=&quot;flex h-full items-center justify-center p-4&quot;&gt;
--       &lt;div className=&quot;text-center&quot;&gt;
--         &lt;p className=&quot;mb-2 text-gray-500&quot;&gt;PDF Viewer&lt;/p&gt;
--         &lt;p className=&quot;text-sm text-gray-400&quot;&gt;
+-     &lt;div className="flex h-full items-center justify-center p-4"&gt;
+-       &lt;div className="text-center"&gt;
+-         &lt;p className="mb-2 text-gray-500"&gt;PDF Viewer&lt;/p&gt;
+-         &lt;p className="text-sm text-gray-400"&gt;
 -           PDF viewing will be implemented with react-pdf library
 -         &lt;/p&gt;
--         &lt;p className=&quot;mt-2 text-xs text-gray-400&quot;&gt;File: {path}&lt;/p&gt;
+-         &lt;p className="mt-2 text-xs text-gray-400"&gt;File: {path}&lt;/p&gt;
 +   useEffect(() =&gt; {
 +     const loadFilePath = async () =&gt; {
 +       try {
@@ -11821,11 +11821,11 @@ Lines added: 133, lines removed: 10
 +         setError(null);
 +         const path = await window.electronAPI.file.getPath(workbookId, path);
 +         // Convert Windows path to file:// URL
-+         const fileUrl = &#96;file:///${path.replace(/\\/g, &quot;/&quot;)}&#96;;
++         const fileUrl = &#96;file:///${path.replace(/\\/g, "/")}&#96;;
 +         setFilePath(fileUrl);
 +       } catch (err) {
-+         console.error(&quot;Failed to load PDF file path:&quot;, err);
-+         setError(err instanceof Error ? err.message : &quot;Failed to load PDF&quot;);
++         console.error("Failed to load PDF file path:", err);
++         setError(err instanceof Error ? err.message : "Failed to load PDF");
 +       } finally {
 +         setLoading(false);
 +       }
@@ -11840,7 +11840,7 @@ Lines added: 133, lines removed: 10
 +   };
 + 
 +   const onDocumentLoadError = (error: Error) =&gt; {
-+     console.error(&quot;PDF load error:&quot;, error);
++     console.error("PDF load error:", error);
 +     setError(&#96;Failed to load PDF: ${error.message}&#96;);
 +   };
 + 
@@ -11862,10 +11862,10 @@ Lines added: 133, lines removed: 10
 + 
 +   if (loading) {
 +     return (
-+       &lt;div className=&quot;flex h-full items-center justify-center&quot;&gt;
-+         &lt;div className=&quot;text-center&quot;&gt;
-+           &lt;div className=&quot;text-gray-500 mb-2&quot;&gt;Loading PDF...&lt;/div&gt;
-+           &lt;div className=&quot;text-xs text-gray-400&quot;&gt;{path}&lt;/div&gt;
++       &lt;div className="flex h-full items-center justify-center"&gt;
++         &lt;div className="text-center"&gt;
++           &lt;div className="text-gray-500 mb-2"&gt;Loading PDF...&lt;/div&gt;
++           &lt;div className="text-xs text-gray-400"&gt;{path}&lt;/div&gt;
 +         &lt;/div&gt;
 +       &lt;/div&gt;
 +     );
@@ -11873,50 +11873,50 @@ Lines added: 133, lines removed: 10
 + 
 +   if (error || !filePath) {
 +     return (
-+       &lt;div className=&quot;flex h-full items-center justify-center p-4&quot;&gt;
-+         &lt;div className=&quot;text-center&quot;&gt;
-+           &lt;p className=&quot;mb-2 text-red-500&quot;&gt;Error loading PDF&lt;/p&gt;
-+           &lt;p className=&quot;text-sm text-gray-400&quot;&gt;{error || &quot;File path not available&quot;}&lt;/p&gt;
-+           &lt;p className=&quot;mt-2 text-xs text-gray-400&quot;&gt;File: {path}&lt;/p&gt;
++       &lt;div className="flex h-full items-center justify-center p-4"&gt;
++         &lt;div className="text-center"&gt;
++           &lt;p className="mb-2 text-red-500"&gt;Error loading PDF&lt;/p&gt;
++           &lt;p className="text-sm text-gray-400"&gt;{error || "File path not available"}&lt;/p&gt;
++           &lt;p className="mt-2 text-xs text-gray-400"&gt;File: {path}&lt;/p&gt;
 +         &lt;/div&gt;
 +       &lt;/div&gt;
 +     );
 +   }
 + 
 +   return (
-+     &lt;div className=&quot;flex h-full flex-col bg-gray-100&quot;&gt;
++     &lt;div className="flex h-full flex-col bg-gray-100"&gt;
 +       {/* Toolbar */}
-+       &lt;div className=&quot;flex items-center justify-between border-b border-gray-300 bg-white px-4 py-2&quot;&gt;
-+         &lt;div className=&quot;flex items-center gap-2&quot;&gt;
++       &lt;div className="flex items-center justify-between border-b border-gray-300 bg-white px-4 py-2"&gt;
++         &lt;div className="flex items-center gap-2"&gt;
 +           &lt;button
 +             onClick={goToPrevPage}
 +             disabled={pageNumber &lt;= 1}
-+             className=&quot;rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50&quot;
++             className="rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
 +           &gt;
 +             Previous
 +           &lt;/button&gt;
-+           &lt;span className=&quot;text-sm text-gray-700&quot;&gt;
-+             Page {pageNumber} of {numPages || &quot;?&quot;}
++           &lt;span className="text-sm text-gray-700"&gt;
++             Page {pageNumber} of {numPages || "?"}
 +           &lt;/span&gt;
 +           &lt;button
 +             onClick={goToNextPage}
 +             disabled={pageNumber &gt;= (numPages || 1)}
-+             className=&quot;rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50&quot;
++             className="rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
 +           &gt;
 +             Next
 +           &lt;/button&gt;
 +         &lt;/div&gt;
-+         &lt;div className=&quot;flex items-center gap-2&quot;&gt;
++         &lt;div className="flex items-center gap-2"&gt;
 +           &lt;button
 +             onClick={zoomOut}
-+             className=&quot;rounded bg-gray-500 px-3 py-1 text-sm text-white hover:bg-gray-600&quot;
++             className="rounded bg-gray-500 px-3 py-1 text-sm text-white hover:bg-gray-600"
 +           &gt;
 +             -
 +           &lt;/button&gt;
-+           &lt;span className=&quot;text-sm text-gray-700&quot;&gt;{Math.round(scale * 100)}%&lt;/span&gt;
++           &lt;span className="text-sm text-gray-700"&gt;{Math.round(scale * 100)}%&lt;/span&gt;
 +           &lt;button
 +             onClick={zoomIn}
-+             className=&quot;rounded bg-gray-500 px-3 py-1 text-sm text-white hover:bg-gray-600&quot;
++             className="rounded bg-gray-500 px-3 py-1 text-sm text-white hover:bg-gray-600"
 +           &gt;
 +             +
 +           &lt;/button&gt;
@@ -11924,14 +11924,14 @@ Lines added: 133, lines removed: 10
 +       &lt;/div&gt;
 + 
 +       {/* PDF Viewer */}
-+       &lt;div className=&quot;flex-1 overflow-auto p-4&quot;&gt;
-+         &lt;div className=&quot;flex justify-center&quot;&gt;
++       &lt;div className="flex-1 overflow-auto p-4"&gt;
++         &lt;div className="flex justify-center"&gt;
 +           &lt;Document
 +             file={filePath}
 +             onLoadSuccess={onDocumentLoadSuccess}
 +             onLoadError={onDocumentLoadError}
 +             loading={
-+               &lt;div className=&quot;text-center text-gray-500&quot;&gt;Loading PDF page...&lt;/div&gt;
++               &lt;div className="text-center text-gray-500"&gt;Loading PDF page...&lt;/div&gt;
 +             }
 +           &gt;
 +             &lt;Page
@@ -11999,7 +11999,7 @@ Output mode: content
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -12028,7 +12028,7 @@ Updating the PDF viewer to handle Electron file paths correctly:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/PDFViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/PDFViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 4, lines removed: 4
@@ -12039,14 +12039,14 @@ Lines added: 4, lines removed: 4
           setError(null);
 -         const path = await window.electronAPI.file.getPath(workbookId, path);
 -         // Convert Windows path to file:// URL
--         const fileUrl = &#96;file:///${path.replace(/\\/g, &quot;/&quot;)}&#96;;
+-         const fileUrl = &#96;file:///${path.replace(/\\/g, "/")}&#96;;
 -         setFilePath(fileUrl);
 +         const absolutePath = await window.electronAPI.file.getPath(workbookId, path);
 +         // For Electron, use the absolute path directly
 +         // react-pdf can handle file paths in Electron
 +         setFilePath(absolutePath);
         } catch (err) {
-          console.error(&quot;Failed to load PDF file path:&quot;, err);
+          console.error("Failed to load PDF file path:", err);
 ```
 
 </details>
@@ -12082,7 +12082,7 @@ Lint results
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 5, lines removed: 1
@@ -12119,7 +12119,7 @@ Updating the implementation to read the PDF as binary and create a blob URL, whi
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/services/fileService.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/services/fileService.ts</summary>
 
 **Chunk 1**
 Lines added: 14, lines removed: undefined
@@ -12131,7 +12131,7 @@ Lines added: 14, lines removed: undefined
 + 
 +   readBinary(workbookId: string, relativePath: string): Buffer {
 +     const workbookPath = path.join(
-+       this.workbookService[&quot;workbooksDir&quot;],
++       this.workbookService["workbooksDir"],
 +       workbookId,
 +     );
 +     const filePath = path.join(workbookPath, relativePath);
@@ -12154,7 +12154,7 @@ Lines added: 14, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/ipc/files.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/ipc/files.ts</summary>
 
 **Chunk 1**
 Lines added: 14, lines removed: undefined
@@ -12165,14 +12165,14 @@ Lines added: 14, lines removed: undefined
     );
 + 
 +   ipcMain.handle(
-+     &quot;file:readBinary&quot;,
++     "file:readBinary",
 +     async (_, workbookId: string, relativePath: string) =&gt; {
 +       try {
 +         const buffer = fileService.readBinary(workbookId, relativePath);
 +         // Convert buffer to base64 for transmission
-+         return buffer.toString(&quot;base64&quot;);
++         return buffer.toString("base64");
 +       } catch (error) {
-+         console.error(&quot;Error reading binary file:&quot;, error);
++         console.error("Error reading binary file:", error);
 +         throw error;
 +       }
 +     },
@@ -12189,7 +12189,7 @@ Lines added: 14, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: electron/preload.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: electron/preload.ts</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: undefined
@@ -12197,9 +12197,9 @@ Lines added: 2, lines removed: undefined
 ```diff
 @@ -44,4 +44,6 @@
       getPath: (workbookId: string, relativePath: string) =&gt;
-        ipcRenderer.invoke(&quot;file:getPath&quot;, workbookId, relativePath),
+        ipcRenderer.invoke("file:getPath", workbookId, relativePath),
 +     readBinary: (workbookId: string, relativePath: string) =&gt;
-+       ipcRenderer.invoke(&quot;file:readBinary&quot;, workbookId, relativePath),
++       ipcRenderer.invoke("file:readBinary", workbookId, relativePath),
     },
   
 ```
@@ -12212,7 +12212,7 @@ Lines added: 2, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/types/electron.d.ts</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/types/electron.d.ts</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -12234,7 +12234,7 @@ Lines added: 1, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/PDFViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/PDFViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 12, lines removed: 6
@@ -12259,13 +12259,13 @@ Lines added: 12, lines removed: 6
 +         for (let i = 0; i &lt; binaryString.length; i++) {
 +           bytes[i] = binaryString.charCodeAt(i);
 +         }
-+         const blob = new Blob([bytes], { type: &quot;application/pdf&quot; });
++         const blob = new Blob([bytes], { type: "application/pdf" });
 +         const blobUrl = URL.createObjectURL(blob);
 +         setFilePath(blobUrl);
         } catch (err) {
--         console.error(&quot;Failed to load PDF file path:&quot;, err);
-+         console.error(&quot;Failed to load PDF:&quot;, err);
-          setError(err instanceof Error ? err.message : &quot;Failed to load PDF&quot;);
+-         console.error("Failed to load PDF file path:", err);
++         console.error("Failed to load PDF:", err);
+          setError(err instanceof Error ? err.message : "Failed to load PDF");
         } finally {
 ```
 
@@ -12281,7 +12281,7 @@ Lines added: 8, lines removed: 1
 + 
 +     // Cleanup blob URL on unmount
 +     return () =&gt; {
-+       if (filePath &amp;&amp; filePath.startsWith(&quot;blob:&quot;)) {
++       if (filePath &amp;&amp; filePath.startsWith("blob:")) {
 +         URL.revokeObjectURL(filePath);
 +       }
 +     };
@@ -12325,7 +12325,7 @@ Fixing the useEffect dependency issue:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/PDFViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/PDFViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: undefined
@@ -12345,7 +12345,7 @@ Lines added: 1, lines removed: undefined
 
 ```diff
 @@ -34,4 +36,5 @@
-          const blob = new Blob([bytes], { type: &quot;application/pdf&quot; });
+          const blob = new Blob([bytes], { type: "application/pdf" });
           const blobUrl = URL.createObjectURL(blob);
 +         currentBlobUrl = blobUrl;
           setFilePath(blobUrl);
@@ -12362,7 +12362,7 @@ Lines added: 3, lines removed: 3
 -     // Cleanup blob URL on unmount
 +     // Cleanup blob URL on unmount or when dependencies change
       return () =&gt; {
--       if (filePath &amp;&amp; filePath.startsWith(&quot;blob:&quot;)) {
+-       if (filePath &amp;&amp; filePath.startsWith("blob:")) {
 -         URL.revokeObjectURL(filePath);
 +       if (currentBlobUrl) {
 +         URL.revokeObjectURL(currentBlobUrl);
@@ -12377,7 +12377,7 @@ Lines added: 3, lines removed: 3
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -12406,7 +12406,7 @@ Updating the implementation status:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: IMPLEMENTATION_STATUS.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: IMPLEMENTATION_STATUS.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -12574,7 +12574,7 @@ Checking if the dev server is running and verifying the configuration. Let me cr
 
 <tool-use data-tool-type="generic" data-tool-name="list_dir">
 <details>
-            <summary>Tool use: **list_directory** • Listed directory undefined • **0** results</summary>
+            <summary>Tool use: **list_dir** • Listed directory undefined • **0** results</summary>
         
 No results found
 </details>
@@ -12634,7 +12634,7 @@ I see the errors - the IPC handler `file:readBinary` isn't registered because th
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -12762,7 +12762,7 @@ Good! PDFs are working. Now let's fix the markdown rendering. The Tailwind Typog
 
 <tool-use data-tool-type="write" data-tool-name="write">
 
-<details><summary>Tool use: **code_edit** • Edit file: test-markdown.md</summary>
+<details><summary>Tool use: **write** • Edit file: test-markdown.md</summary>
 
 **Chunk 1**
 Lines added: 27, lines removed: 1
@@ -12783,7 +12783,7 @@ Lines added: 27, lines removed: 1
 + ### Code
 + 
 + &#96;&#96;&#96;javascript
-+ console.log(&quot;Hello, world!&quot;);
++ console.log("Hello, world!");
 + &#96;&#96;&#96;
 + 
 + ### Table
@@ -12807,7 +12807,7 @@ Lines added: 27, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: 3
@@ -12815,14 +12815,14 @@ Lines added: 3, lines removed: 3
 ```diff
 @@ -146,8 +146,8 @@
       // Ensure we have content to render
-      const contentToRender = editorContent || &quot;&quot;;
+      const contentToRender = editorContent || "";
 - 
 +     
       return (
--       &lt;div className=&quot;h-full overflow-auto p-4&quot;&gt;
--         &lt;div className=&quot;prose prose-sm prose-gray max-w-none&quot;&gt;
-+       &lt;div className=&quot;h-full overflow-auto p-4 bg-white&quot;&gt;
-+         &lt;div className=&quot;prose prose-slate max-w-none&quot;&gt;
+-       &lt;div className="h-full overflow-auto p-4"&gt;
+-         &lt;div className="prose prose-sm prose-gray max-w-none"&gt;
++       &lt;div className="h-full overflow-auto p-4 bg-white"&gt;
++         &lt;div className="prose prose-slate max-w-none"&gt;
             {contentToRender ? (
               &lt;ReactMarkdown
 ```
@@ -12847,7 +12847,7 @@ The markdown is not rendering. Let me check if Vite is picking up the Tailwind c
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm list @tailwindcss/typography</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm list @tailwindcss/typography</summary>
 
 ```bash
 npm list @tailwindcss/typography
@@ -12905,7 +12905,7 @@ Good news - the Tailwind Typography styles ARE in the built CSS. The dev server 
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 54, lines removed: 63
@@ -12916,45 +12916,45 @@ Lines added: 54, lines removed: 63
   
 -   const renderPreview = () =&gt; {
 -     // Ensure we have content to render
--     const contentToRender = editorContent || &quot;&quot;;
+-     const contentToRender = editorContent || "";
 -     
 -     return (
--       &lt;div className=&quot;h-full overflow-auto p-4 bg-white&quot;&gt;
--         &lt;div className=&quot;prose prose-slate max-w-none&quot;&gt;
+-       &lt;div className="h-full overflow-auto p-4 bg-white"&gt;
+-         &lt;div className="prose prose-slate max-w-none"&gt;
 -           {contentToRender ? (
 -             &lt;ReactMarkdown
 -               components={{
 -                 code: ({ inline, className, children, ...props }) =&gt; {
--                   const match = /language-(\w+)/.exec(className || &quot;&quot;);
--                   const language = match ? match[1] : &quot;&quot;;
--                   const codeString = String(children).replace(/\n$/, &quot;&quot;);
+-                   const match = /language-(\w+)/.exec(className || "");
+-                   const language = match ? match[1] : "";
+-                   const codeString = String(children).replace(/\n$/, "");
 +   const renderPreview = () =&gt; (
-+     &lt;div className=&quot;h-full overflow-auto bg-white p-4&quot;&gt;
-+       &lt;div className=&quot;prose prose-slate max-w-none&quot;&gt;
++     &lt;div className="h-full overflow-auto bg-white p-4"&gt;
++       &lt;div className="prose prose-slate max-w-none"&gt;
 +         &lt;ReactMarkdown
 +           components={{
 +             code: ({ inline, className, children, ...props }) =&gt; {
-+               const match = /language-(\w+)/.exec(className || &quot;&quot;);
-+               const language = match ? match[1] : &quot;&quot;;
-+               const codeString = String(children).replace(/\n$/, &quot;&quot;);
++               const match = /language-(\w+)/.exec(className || "");
++               const language = match ? match[1] : "";
++               const codeString = String(children).replace(/\n$/, "");
   
--                   if (!inline &amp;&amp; language === &quot;mermaid&quot;) {
+-                   if (!inline &amp;&amp; language === "mermaid") {
 -                     return &lt;MermaidDiagram chart={codeString} /&gt;;
 -                   }
-+               if (!inline &amp;&amp; language === &quot;mermaid&quot;) {
++               if (!inline &amp;&amp; language === "mermaid") {
 +                 return &lt;MermaidDiagram chart={codeString} /&gt;;
 +               }
   
 -                   if (inline) {
 -                     return (
--                       &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono&quot; {...props}&gt;
+-                       &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono" {...props}&gt;
 -                         {children}
 -                       &lt;/code&gt;
 -                     );
 -                   }
 +               if (inline) {
 +                 return (
-+                   &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 font-mono&quot; {...props}&gt;
++                   &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 font-mono" {...props}&gt;
 +                     {children}
 +                   &lt;/code&gt;
 +                 );
@@ -12967,24 +12967,24 @@ Lines added: 54, lines removed: 63
 -                   );
 -                 },
 -                 pre: ({ children }) =&gt; (
--                   &lt;pre className=&quot;my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
+-                   &lt;pre className="my-2 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 -                     {children}
 -                   &lt;/pre&gt;
 -                 ),
 -                 table: ({ children }) =&gt; (
--                   &lt;div className=&quot;my-4 overflow-x-auto&quot;&gt;
--                     &lt;table className=&quot;min-w-full border border-gray-300&quot;&gt;
+-                   &lt;div className="my-4 overflow-x-auto"&gt;
+-                     &lt;table className="min-w-full border border-gray-300"&gt;
 -                       {children}
 -                     &lt;/table&gt;
 -                   &lt;/div&gt;
 -                 ),
 -                 th: ({ children }) =&gt; (
--                   &lt;th className=&quot;border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold&quot;&gt;
+-                   &lt;th className="border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold"&gt;
 -                     {children}
 -                   &lt;/th&gt;
 -                 ),
 -                 td: ({ children }) =&gt; (
--                   &lt;td className=&quot;border border-gray-300 px-4 py-2&quot;&gt;
+-                   &lt;td className="border border-gray-300 px-4 py-2"&gt;
 -                     {children}
 -                   &lt;/td&gt;
 -                 ),
@@ -12993,7 +12993,7 @@ Lines added: 54, lines removed: 63
 -               {contentToRender}
 -             &lt;/ReactMarkdown&gt;
 -           ) : (
--             &lt;div className=&quot;text-gray-400 italic&quot;&gt;No content to preview&lt;/div&gt;
+-             &lt;div className="text-gray-400 italic"&gt;No content to preview&lt;/div&gt;
 -           )}
 -         &lt;/div&gt;
 -       &lt;/div&gt;
@@ -13006,24 +13006,24 @@ Lines added: 54, lines removed: 63
 +               );
 +             },
 +             pre: ({ children }) =&gt; (
-+               &lt;pre className=&quot;overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
++               &lt;pre className="overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 +                 {children}
 +               &lt;/pre&gt;
 +             ),
 +             table: ({ children }) =&gt; (
-+               &lt;div className=&quot;overflow-x-auto&quot;&gt;
-+                 &lt;table className=&quot;min-w-full border border-gray-300&quot;&gt;
++               &lt;div className="overflow-x-auto"&gt;
++                 &lt;table className="min-w-full border border-gray-300"&gt;
 +                   {children}
 +                 &lt;/table&gt;
 +               &lt;/div&gt;
 +             ),
 +             th: ({ children }) =&gt; (
-+               &lt;th className=&quot;border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold&quot;&gt;
++               &lt;th className="border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold"&gt;
 +                 {children}
 +               &lt;/th&gt;
 +             ),
 +             td: ({ children }) =&gt; (
-+               &lt;td className=&quot;border border-gray-300 px-4 py-2&quot;&gt;
++               &lt;td className="border border-gray-300 px-4 py-2"&gt;
 +                 {children}
 +               &lt;/td&gt;
 +             ),
@@ -13101,7 +13101,7 @@ Explanation: Removing the test markdown file that was created for debugging
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -13228,7 +13228,7 @@ Output mode: content
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm list react-markdown</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm list react-markdown</summary>
 
 ```bash
 npm list react-markdown
@@ -13267,7 +13267,7 @@ I see the issue. We need to add the `remark-gfm` plugin for proper markdown rend
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm install remark-gfm</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm install remark-gfm</summary>
 
 ```bash
 npm install remark-gfm
@@ -13307,18 +13307,18 @@ Now updating the MarkdownViewer to use remark-gfm:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
 
 ```diff
 @@ -1,4 +1,5 @@
-  import { useEffect, useState, useRef } from &quot;react&quot;;
-  import ReactMarkdown from &quot;react-markdown&quot;;
-+ import remarkGfm from &quot;remark-gfm&quot;;
-  import Editor from &quot;@monaco-editor/react&quot;;
-  import mermaid from &quot;mermaid&quot;;
+  import { useEffect, useState, useRef } from "react";
+  import ReactMarkdown from "react-markdown";
++ import remarkGfm from "remark-gfm";
+  import Editor from "@monaco-editor/react";
+  import mermaid from "mermaid";
 ```
 
 </details>
@@ -13329,14 +13329,14 @@ Lines added: 1, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
 
 ```diff
 @@ -148,4 +148,5 @@
-        &lt;div className=&quot;prose prose-slate max-w-none&quot;&gt;
+        &lt;div className="prose prose-slate max-w-none"&gt;
           &lt;ReactMarkdown
 +           remarkPlugins={[remarkGfm]}
             components={{
@@ -13351,7 +13351,7 @@ Lines added: 1, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 5, lines removed: undefined
@@ -13398,7 +13398,7 @@ Good. Now let me also check what the exact version is and update package.json ac
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm list remark-gfm</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm list remark-gfm</summary>
 
 ```bash
 npm list remark-gfm
@@ -13424,7 +13424,7 @@ insightlm-lt@1.0.0 C:\Users\JohnDeHart\working\insightLM-LT
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -13455,7 +13455,7 @@ Now verifying the implementation compiles:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:react</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:react</summary>
 
 ```bash
 npm run build:react
@@ -13467,14 +13467,14 @@ npm run build:react
 &gt; insightlm-lt@1.0.0 build:react
 &gt; vite build
 
-The CJS build of Vite&#39;s Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.                  
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.                  
 vite v5.4.21 building for production...
-transforming (1) index.html(node:31688) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn&#39;t parse as CommonJS.                            
+transforming (1) index.html(node:31688) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn't parse as CommonJS.                            
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.                                                                  
-To eliminate this warning, add &quot;type&quot;: &quot;module&quot; to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                       
+To eliminate this warning, add "type": "module" to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                       
 (Use &#96;node --trace-warnings ...&#96; to show where the warning was created)
 ✓ 2139 modules transformed.
-node_modules/pdfjs-dist/build/pdf.js (1982:23): Use of eval in &quot;node_modules/pdfjs-dist/build/pdf.js&quot; is strongly discouraged as it poses security risks and may cause issues with minification.                                                
+node_modules/pdfjs-dist/build/pdf.js (1982:23): Use of eval in "node_modules/pdfjs-dist/build/pdf.js" is strongly discouraged as it poses security risks and may cause issues with minification.                                                
 dist/index.html                                           0.40 kB │ gzip:   0.27 kB                                                                             
 dist/assets/index-Chnjjzhk.css                           44.86 kB │ gzip:   7.60 kB                                                                             
 dist/assets/clone-2_McQovK.js                             0.10 kB │ gzip:   0.11 kB                                                                             
@@ -13546,7 +13546,7 @@ Good, the build succeeded. Now let me update the version in DEPENDENCIES.md with
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -13689,7 +13689,7 @@ Perfect! Verifying all dependencies are tracked:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm list @tailwindcss/typography remark-gfm mermaid react-pdf</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm list @tailwindcss/typography remark-gfm mermaid react-pdf</summary>
 
 ```bash
 npm list @tailwindcss/typography remark-gfm mermaid react-pdf
@@ -13778,7 +13778,7 @@ Adding port cleanup to the dev scripts to prevent port conflicts:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm install -D kill-port</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm install -D kill-port</summary>
 
 ```bash
 npm install -D kill-port
@@ -13829,19 +13829,19 @@ Adding port cleanup to the dev scripts:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: package.json</summary>
+<details><summary>Tool use: **search_replace** • Edit file: package.json</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: undefined
 
 ```diff
 @@ -5,4 +5,6 @@
-    &quot;main&quot;: &quot;dist-electron/main.js&quot;,
-    &quot;scripts&quot;: {
-+     &quot;clean&quot;: &quot;kill-port 5173 5174 5175 5176 5177 5178 5179 5180&quot;,
-+     &quot;predev&quot;: &quot;npm run clean || echo \&quot;No ports to clean\&quot;&quot;,
-      &quot;dev&quot;: &quot;concurrently \&quot;npm run dev:electron\&quot; \&quot;npm run dev:react\&quot;&quot;,
-      &quot;dev:electron&quot;: &quot;tsc -p electron &amp;&amp; electron .&quot;,
+    "main": "dist-electron/main.js",
+    "scripts": {
++     "clean": "kill-port 5173 5174 5175 5176 5177 5178 5179 5180",
++     "predev": "npm run clean || echo \"No ports to clean\"",
+      "dev": "concurrently \"npm run dev:electron\" \"npm run dev:react\"",
+      "dev:electron": "tsc -p electron &amp;&amp; electron .",
 ```
 
 </details>
@@ -13852,7 +13852,7 @@ Lines added: 2, lines removed: undefined
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 5, lines removed: undefined
@@ -13901,7 +13901,7 @@ Good! I've added kill-port to the dev dependencies and created scripts to clean 
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -13937,7 +13937,7 @@ I should update the README.md to mention the clean script and how it handles por
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: README.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: README.md</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: undefined
@@ -13966,7 +13966,7 @@ Perfect! Now I should document this feature in the IMPLEMENTATION_STATUS.md and 
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: IMPLEMENTATION_STATUS.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: IMPLEMENTATION_STATUS.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: undefined
@@ -14000,7 +14000,7 @@ Great! Now I should verify everything compiles and document it properly.</detail
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -14163,7 +14163,7 @@ _No matches found_
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -14171,9 +14171,9 @@ Lines added: 1, lines removed: 1
 ```diff
 @@ -146,5 +146,5 @@
     const renderPreview = () =&gt; (
-      &lt;div className=&quot;h-full overflow-auto bg-white p-4&quot;&gt;
--       &lt;div className=&quot;prose prose-slate max-w-none&quot;&gt;
-+       &lt;div className=&quot;prose max-w-none&quot;&gt;
+      &lt;div className="h-full overflow-auto bg-white p-4"&gt;
+-       &lt;div className="prose prose-slate max-w-none"&gt;
++       &lt;div className="prose max-w-none"&gt;
           &lt;ReactMarkdown
             remarkPlugins={[remarkGfm]}
 ```
@@ -14264,7 +14264,7 @@ The issue is Tailwind's CSS reset is stripping the default HTML styling. Let me 
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -14272,9 +14272,9 @@ Lines added: 1, lines removed: 1
 ```diff
 @@ -146,5 +146,5 @@
     const renderPreview = () =&gt; (
-      &lt;div className=&quot;h-full overflow-auto bg-white p-4&quot;&gt;
--       &lt;div className=&quot;prose max-w-none&quot;&gt;
-+       &lt;article className=&quot;prose prose-lg max-w-none&quot;&gt;
+      &lt;div className="h-full overflow-auto bg-white p-4"&gt;
+-       &lt;div className="prose max-w-none"&gt;
++       &lt;article className="prose prose-lg max-w-none"&gt;
           &lt;ReactMarkdown
             remarkPlugins={[remarkGfm]}
 ```
@@ -14284,18 +14284,18 @@ Lines added: 4, lines removed: 1
 
 ```diff
 @@ -155,16 +155,19 @@
-                const codeString = String(children).replace(/\n$/, &quot;&quot;);
+                const codeString = String(children).replace(/\n$/, "");
   
 +               // Handle Mermaid diagrams
-                if (!inline &amp;&amp; language === &quot;mermaid&quot;) {
+                if (!inline &amp;&amp; language === "mermaid") {
                   return &lt;MermaidDiagram chart={codeString} /&gt;;
                 }
   
 +               // Inline code - override prose default
                 if (inline) {
                   return (
--                   &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 font-mono&quot; {...props}&gt;
-+                   &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono not-prose&quot; {...props}&gt;
+-                   &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 font-mono" {...props}&gt;
++                   &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono not-prose" {...props}&gt;
                       {children}
                     &lt;/code&gt;
                   );
@@ -14313,25 +14313,25 @@ Lines added: 2, lines removed: 19
 @@ -174,30 +177,13 @@
               },
               pre: ({ children }) =&gt; (
--               &lt;pre className=&quot;overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
-+               &lt;pre className=&quot;not-prose overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
+-               &lt;pre className="overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
++               &lt;pre className="not-prose overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
                   {children}
                 &lt;/pre&gt;
               ),
 -             table: ({ children }) =&gt; (
--               &lt;div className=&quot;overflow-x-auto&quot;&gt;
--                 &lt;table className=&quot;min-w-full border border-gray-300&quot;&gt;
+-               &lt;div className="overflow-x-auto"&gt;
+-                 &lt;table className="min-w-full border border-gray-300"&gt;
 -                   {children}
 -                 &lt;/table&gt;
 -               &lt;/div&gt;
 -             ),
 -             th: ({ children }) =&gt; (
--               &lt;th className=&quot;border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold&quot;&gt;
+-               &lt;th className="border border-gray-300 bg-gray-100 px-4 py-2 text-left font-semibold"&gt;
 -                 {children}
 -               &lt;/th&gt;
 -             ),
 -             td: ({ children }) =&gt; (
--               &lt;td className=&quot;border border-gray-300 px-4 py-2&quot;&gt;
+-               &lt;td className="border border-gray-300 px-4 py-2"&gt;
 -                 {children}
 -               &lt;/td&gt;
 -             ),
@@ -14385,7 +14385,7 @@ Now rebuilding to ensure the changes are ready:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:react</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:react</summary>
 
 ```bash
 npm run build:react
@@ -14397,14 +14397,14 @@ npm run build:react
 &gt; insightlm-lt@1.0.0 build:react
 &gt; vite build
 
-The CJS build of Vite&#39;s Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.                  
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.                  
 vite v5.4.21 building for production...
-transforming (1) index.html(node:24488) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn&#39;t parse as CommonJS.                            
+transforming (1) index.html(node:24488) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn't parse as CommonJS.                            
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.                                                                  
-To eliminate this warning, add &quot;type&quot;: &quot;module&quot; to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                       
+To eliminate this warning, add "type": "module" to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                       
 (Use &#96;node --trace-warnings ...&#96; to show where the warning was created)
 ✓ 2139 modules transformed.
-node_modules/pdfjs-dist/build/pdf.js (1982:23): Use of eval in &quot;node_modules/pdfjs-dist/build/pdf.js&quot; is strongly discouraged as it poses security risks and may cause issues with minification.                                                
+node_modules/pdfjs-dist/build/pdf.js (1982:23): Use of eval in "node_modules/pdfjs-dist/build/pdf.js" is strongly discouraged as it poses security risks and may cause issues with minification.                                                
 dist/index.html                                           0.40 kB │ gzip:   0.28 kB                                                                             
 dist/assets/index-jy55W_99.css                           49.88 kB │ gzip:   7.93 kB                                                                             
 dist/assets/clone-D-PIjGbu.js                             0.10 kB │ gzip:   0.11 kB                                                                             
@@ -14529,7 +14529,7 @@ _No matches found_
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -14537,9 +14537,9 @@ Lines added: 1, lines removed: 1
 ```diff
 @@ -146,5 +146,5 @@
     const renderPreview = () =&gt; (
-      &lt;div className=&quot;h-full overflow-auto bg-white p-4&quot;&gt;
--       &lt;article className=&quot;prose prose-lg max-w-none&quot;&gt;
-+       &lt;article className=&quot;prose prose-sm max-w-none&quot;&gt;
+      &lt;div className="h-full overflow-auto bg-white p-4"&gt;
+-       &lt;article className="prose prose-lg max-w-none"&gt;
++       &lt;article className="prose prose-sm max-w-none"&gt;
           &lt;ReactMarkdown
             remarkPlugins={[remarkGfm]}
 ```
@@ -14590,7 +14590,7 @@ The prose class isn't in the built CSS! Let me check the Tailwind config and for
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npx tailwindcss -i ./src/index.css -o ./test-output.css --watch=false</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npx tailwindcss -i ./src/index.css -o ./test-output.css --watch=false</summary>
 
 ```bash
 npx tailwindcss -i ./src/index.css -o ./test-output.css --watch=false
@@ -14687,7 +14687,7 @@ Perfect! The prose styles ARE being generated correctly. Now let me verify every
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -14722,7 +14722,7 @@ Good, the build worked. I simplified the markdown rendering by:1. Changed to <ar
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -14868,7 +14868,7 @@ Simplifying and fixing both headers and Mermaid. Let me use a better approach:
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm install remark-mermaid</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm install remark-mermaid</summary>
 
 ```bash
 npm install remark-mermaid
@@ -14916,7 +14916,7 @@ Let me simplify the approach - removing the complex Mermaid integration and fixi
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 57, lines removed: 33
@@ -14932,7 +14932,7 @@ Lines added: 57, lines removed: 33
   // Component to render Mermaid diagrams
   function MermaidDiagram({ chart }: { chart: string }) {
     const mermaidRef = useRef&lt;HTMLDivElement&gt;(null);
-+   const [svg, setSvg] = useState&lt;string&gt;(&quot;&quot;);
++   const [svg, setSvg] = useState&lt;string&gt;("");
     const [error, setError] = useState&lt;string | null&gt;(null);
 +   const chartRef = useRef(chart);
 + 
@@ -14946,8 +14946,8 @@ Lines added: 57, lines removed: 33
 -     // Initialize mermaid if not already initialized
 -     mermaid.initialize({
 -       startOnLoad: true,
--       theme: &quot;default&quot;,
--       securityLevel: &quot;loose&quot;,
+-       theme: "default",
+-       securityLevel: "loose",
 -     });
 - 
 -     const id = &#96;mermaid-${Math.random().toString(36).substring(2, 11)}&#96;;
@@ -14966,9 +14966,9 @@ Lines added: 57, lines removed: 33
 +     if (!mermaidInitialized) {
 +       mermaid.initialize({
 +         startOnLoad: false,
-+         theme: &quot;default&quot;,
-+         securityLevel: &quot;loose&quot;,
-+         fontFamily: &quot;inherit&quot;,
++         theme: "default",
++         securityLevel: "loose",
++         fontFamily: "inherit",
 +       });
 +       mermaidInitialized = true;
 +     }
@@ -14980,14 +14980,14 @@ Lines added: 57, lines removed: 33
 +         setSvg(svg);
 +         setError(null);
 +       } catch (err) {
-          console.error(&quot;Mermaid rendering error:&quot;, err);
--         setError(err.message || &quot;Failed to render diagram&quot;);
+          console.error("Mermaid rendering error:", err);
+-         setError(err.message || "Failed to render diagram");
 -         if (mermaidRef.current) {
--           mermaidRef.current.innerHTML = &#96;&lt;pre class=&quot;text-red-500 p-2&quot;&gt;Error rendering Mermaid diagram: ${err.message}&lt;/pre&gt;&#96;;
+-           mermaidRef.current.innerHTML = &#96;&lt;pre class="text-red-500 p-2"&gt;Error rendering Mermaid diagram: ${err.message}&lt;/pre&gt;&#96;;
 -         }
 -       });
-+         setError(err instanceof Error ? err.message : &quot;Failed to render diagram&quot;);
-+         setSvg(&quot;&quot;);
++         setError(err instanceof Error ? err.message : "Failed to render diagram");
++         setSvg("");
 +       }
 +     };
 + 
@@ -14995,27 +14995,27 @@ Lines added: 57, lines removed: 33
     }, [chart]);
   
 -   return (
--     &lt;div className=&quot;my-4 flex justify-center&quot;&gt;
--       &lt;div ref={mermaidRef} className=&quot;mermaid-container&quot; /&gt;
+-     &lt;div className="my-4 flex justify-center"&gt;
+-       &lt;div ref={mermaidRef} className="mermaid-container" /&gt;
 -       {error &amp;&amp; (
--         &lt;div className=&quot;text-sm text-red-500 mt-2&quot;&gt;
+-         &lt;div className="text-sm text-red-500 mt-2"&gt;
 -           {error}
 -         &lt;/div&gt;
 -       )}
 -     &lt;/div&gt;
 +   if (error) {
 +     return (
-+       &lt;div className=&quot;my-4 rounded border border-red-300 bg-red-50 p-4&quot;&gt;
-+         &lt;p className=&quot;text-sm font-semibold text-red-600&quot;&gt;Mermaid Diagram Error:&lt;/p&gt;
-+         &lt;p className=&quot;text-xs text-red-500 mt-1&quot;&gt;{error}&lt;/p&gt;
-+         &lt;pre className=&quot;text-xs text-gray-600 mt-2 overflow-x-auto&quot;&gt;{chart}&lt;/pre&gt;
++       &lt;div className="my-4 rounded border border-red-300 bg-red-50 p-4"&gt;
++         &lt;p className="text-sm font-semibold text-red-600"&gt;Mermaid Diagram Error:&lt;/p&gt;
++         &lt;p className="text-xs text-red-500 mt-1"&gt;{error}&lt;/p&gt;
++         &lt;pre className="text-xs text-gray-600 mt-2 overflow-x-auto"&gt;{chart}&lt;/pre&gt;
 +       &lt;/div&gt;
 +     );
 +   }
 + 
 +   if (!svg) {
 +     return (
-+       &lt;div className=&quot;my-4 text-center text-gray-400 text-sm&quot;&gt;
++       &lt;div className="my-4 text-center text-gray-400 text-sm"&gt;
 +         Loading diagram...
 +       &lt;/div&gt;
 +     );
@@ -15023,7 +15023,7 @@ Lines added: 57, lines removed: 33
 + 
 +   return (
 +     &lt;div
-+       className=&quot;my-4 flex justify-center&quot;
++       className="my-4 flex justify-center"
 +       ref={mermaidRef}
 +       dangerouslySetInnerHTML={{ __html: svg }}
 +     /&gt;
@@ -15039,7 +15039,7 @@ Lines added: 57, lines removed: 33
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 2, lines removed: 2
@@ -15047,16 +15047,16 @@ Lines added: 2, lines removed: 2
 ```diff
 @@ -170,9 +170,9 @@
     const renderPreview = () =&gt; (
-      &lt;div className=&quot;h-full overflow-auto bg-white p-4&quot;&gt;
--       &lt;article className=&quot;prose prose-sm max-w-none&quot;&gt;
-+       &lt;div className=&quot;prose prose-sm max-w-none&quot;&gt;
+      &lt;div className="h-full overflow-auto bg-white p-4"&gt;
+-       &lt;article className="prose prose-sm max-w-none"&gt;
++       &lt;div className="prose prose-sm max-w-none"&gt;
           &lt;ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
 -             code: ({ inline, className, children, ...props }) =&gt; {
 +             code({ inline, className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || &quot;&quot;);
-                const language = match ? match[1] : &quot;&quot;;
+                const match = /language-(\w+)/.exec(className || "");
+                const language = match ? match[1] : "";
 ```
 
 **Chunk 2**
@@ -15070,8 +15070,8 @@ Lines added: 3, lines removed: 3
 +               // Inline code
                 if (inline) {
                   return (
--                   &lt;code className=&quot;rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono not-prose&quot; {...props}&gt;
-+                   &lt;code className=&quot;not-prose rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono&quot; {...props}&gt;
+-                   &lt;code className="rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono not-prose" {...props}&gt;
++                   &lt;code className="not-prose rounded bg-gray-200 px-1.5 py-0.5 text-sm font-mono" {...props}&gt;
                       {children}
                     &lt;/code&gt;
                   );
@@ -15091,13 +15091,13 @@ Lines added: 8, lines removed: 6
                 );
               },
 -             pre: ({ children }) =&gt; (
--               &lt;pre className=&quot;not-prose overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
+-               &lt;pre className="not-prose overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 -                 {children}
 -               &lt;/pre&gt;
 -             ),
 +             pre({ children }) {
 +               return (
-+                 &lt;pre className=&quot;not-prose my-4 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
++                 &lt;pre className="not-prose my-4 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 +                   {children}
 +                 &lt;/pre&gt;
 +               );
@@ -15142,7 +15142,7 @@ Good, now let me update the dependencies doc to track remark-mermaid and rebuild
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 4, lines removed: undefined
@@ -15166,7 +15166,7 @@ Lines added: 4, lines removed: undefined
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:react</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:react</summary>
 
 ```bash
 npm run build:react
@@ -15178,14 +15178,14 @@ npm run build:react
 &gt; insightlm-lt@1.0.0 build:react
 &gt; vite build
 
-The CJS build of Vite&#39;s Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.                  
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.                  
 vite v5.4.21 building for production...
-transforming (1) index.html(node:19708) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn&#39;t parse as CommonJS.                            
+transforming (1) index.html(node:19708) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/JohnDeHart/working/insightLM-LT/postcss.config.js is not specified and it doesn't parse as CommonJS.                            
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.                                                                  
-To eliminate this warning, add &quot;type&quot;: &quot;module&quot; to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                       
+To eliminate this warning, add "type": "module" to C:\Users\JohnDeHart\working\insightLM-LT\package.json.                                                       
 (Use &#96;node --trace-warnings ...&#96; to show where the warning was created)
 ✓ 2139 modules transformed.
-node_modules/pdfjs-dist/build/pdf.js (1982:23): Use of eval in &quot;node_modules/pdfjs-dist/build/pdf.js&quot; is strongly discouraged as it poses security risks and may cause issues with minification.                                                
+node_modules/pdfjs-dist/build/pdf.js (1982:23): Use of eval in "node_modules/pdfjs-dist/build/pdf.js" is strongly discouraged as it poses security risks and may cause issues with minification.                                                
 dist/index.html                                           0.40 kB │ gzip:   0.28 kB                                                                             
 dist/assets/index-CQ53Zpa4.css                           43.89 kB │ gzip:   7.45 kB                                                                             
 dist/assets/clone-D2cl9sWq.js                             0.10 kB │ gzip:   0.11 kB                                                                             
@@ -15256,7 +15256,7 @@ Good! Now let me rebuild electron and make sure everything is ready.</details></
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: npm run build:electron</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: npm run build:electron</summary>
 
 ```bash
 npm run build:electron
@@ -15310,7 +15310,7 @@ Good, remark-mermaid is tracked. Now let me update the DEPENDENCIES.md to includ
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: DEPENDENCIES.md</summary>
+<details><summary>Tool use: **search_replace** • Edit file: DEPENDENCIES.md</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1

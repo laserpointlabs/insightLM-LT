@@ -50,7 +50,7 @@ Creating a simple mermaid diagram file:
 
 <tool-use data-tool-type="write" data-tool-name="write">
 
-<details><summary>Tool use: **code_edit** • Edit file: simple-diagram.md</summary>
+<details><summary>Tool use: **write** • Edit file: simple-diagram.md</summary>
 
 **Chunk 1**
 Lines added: 11, lines removed: 1
@@ -310,7 +310,7 @@ Fixing the MarkdownViewer component: correcting mermaid code extraction and ensu
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 8
@@ -321,7 +321,7 @@ Lines added: 1, lines removed: 8
   function MermaidDiagram({ chart }: { chart: string }) {
 -   const mermaidRef = useRef&lt;HTMLDivElement&gt;(null);
 +   const containerRef = useRef&lt;HTMLDivElement&gt;(null);
-    const [svg, setSvg] = useState&lt;string&gt;(&quot;&quot;);
+    const [svg, setSvg] = useState&lt;string&gt;("");
     const [error, setError] = useState&lt;string | null&gt;(null);
 -   const chartRef = useRef(chart);
 - 
@@ -346,7 +346,7 @@ Lines added: 8, lines removed: 1
 +         // Clean the chart string - remove any extra whitespace
 +         const cleanChart = chart.trim();
 +         if (!cleanChart) {
-+           setError(&quot;Empty mermaid diagram&quot;);
++           setError("Empty mermaid diagram");
 +           return;
 +         }
 + 
@@ -364,8 +364,8 @@ Lines added: 1, lines removed: 1
 @@ -70,5 +70,5 @@
     if (!svg) {
       return (
--       &lt;div className=&quot;my-4 text-center text-gray-400 text-sm&quot;&gt;
-+       &lt;div ref={containerRef} className=&quot;my-4 text-center text-gray-400 text-sm&quot;&gt;
+-       &lt;div className="my-4 text-center text-gray-400 text-sm"&gt;
++       &lt;div ref={containerRef} className="my-4 text-center text-gray-400 text-sm"&gt;
           Loading diagram...
         &lt;/div&gt;
 ```
@@ -378,7 +378,7 @@ Lines added: 1, lines removed: 1
     return (
       &lt;div
 +       ref={containerRef}
-        className=&quot;my-4 flex justify-center&quot;
+        className="my-4 flex justify-center"
 -       ref={mermaidRef}
         dangerouslySetInnerHTML={{ __html: svg }}
       /&gt;
@@ -392,25 +392,25 @@ Lines added: 1, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 7, lines removed: 2
 
 ```diff
 @@ -177,9 +177,14 @@
-                const match = /language-(\w+)/.exec(className || &quot;&quot;);
-                const language = match ? match[1] : &quot;&quot;;
--               const codeString = String(children).replace(/\n$/, &quot;&quot;);
+                const match = /language-(\w+)/.exec(className || "");
+                const language = match ? match[1] : "";
+-               const codeString = String(children).replace(/\n$/, "");
 +               
 +               // Properly extract code string from children (which can be an array)
 +               const codeString = Array.isArray(children)
-+                 ? children.map(child =&gt; (typeof child === &#39;string&#39; ? child : String(child))).join(&#39;&#39;)
++                 ? children.map(child =&gt; (typeof child === 'string' ? child : String(child))).join('')
 +                 : String(children);
-+               const trimmedCode = codeString.replace(/\n$/, &quot;&quot;);
++               const trimmedCode = codeString.replace(/\n$/, "");
   
                 // Handle Mermaid diagrams
-                if (!inline &amp;&amp; language === &quot;mermaid&quot;) {
+                if (!inline &amp;&amp; language === "mermaid") {
 -                 return &lt;MermaidDiagram chart={codeString} /&gt;;
 +                 return &lt;MermaidDiagram chart={trimmedCode} /&gt;;
                 }
@@ -424,12 +424,12 @@ Lines added: 6, lines removed: undefined
 @@ -207,4 +212,10 @@
                 );
               },
-+             h1: ({ children }) =&gt; &lt;h1 className=&quot;text-3xl font-bold mt-6 mb-4&quot;&gt;{children}&lt;/h1&gt;,
-+             h2: ({ children }) =&gt; &lt;h2 className=&quot;text-2xl font-bold mt-5 mb-3&quot;&gt;{children}&lt;/h2&gt;,
-+             h3: ({ children }) =&gt; &lt;h3 className=&quot;text-xl font-bold mt-4 mb-2&quot;&gt;{children}&lt;/h3&gt;,
-+             h4: ({ children }) =&gt; &lt;h4 className=&quot;text-lg font-bold mt-3 mb-2&quot;&gt;{children}&lt;/h4&gt;,
-+             h5: ({ children }) =&gt; &lt;h5 className=&quot;text-base font-bold mt-2 mb-1&quot;&gt;{children}&lt;/h5&gt;,
-+             h6: ({ children }) =&gt; &lt;h6 className=&quot;text-sm font-bold mt-2 mb-1&quot;&gt;{children}&lt;/h6&gt;,
++             h1: ({ children }) =&gt; &lt;h1 className="text-3xl font-bold mt-6 mb-4"&gt;{children}&lt;/h1&gt;,
++             h2: ({ children }) =&gt; &lt;h2 className="text-2xl font-bold mt-5 mb-3"&gt;{children}&lt;/h2&gt;,
++             h3: ({ children }) =&gt; &lt;h3 className="text-xl font-bold mt-4 mb-2"&gt;{children}&lt;/h3&gt;,
++             h4: ({ children }) =&gt; &lt;h4 className="text-lg font-bold mt-3 mb-2"&gt;{children}&lt;/h4&gt;,
++             h5: ({ children }) =&gt; &lt;h5 className="text-base font-bold mt-2 mb-1"&gt;{children}&lt;/h5&gt;,
++             h6: ({ children }) =&gt; &lt;h6 className="text-sm font-bold mt-2 mb-1"&gt;{children}&lt;/h6&gt;,
             }}
           &gt;
 ```
@@ -479,7 +479,7 @@ Updating header components to use prose classes for consistent styling:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 6, lines removed: 6
@@ -488,18 +488,18 @@ Lines added: 6, lines removed: 6
 @@ -212,10 +212,10 @@
                 );
               },
--             h1: ({ children }) =&gt; &lt;h1 className=&quot;text-3xl font-bold mt-6 mb-4&quot;&gt;{children}&lt;/h1&gt;,
--             h2: ({ children }) =&gt; &lt;h2 className=&quot;text-2xl font-bold mt-5 mb-3&quot;&gt;{children}&lt;/h2&gt;,
--             h3: ({ children }) =&gt; &lt;h3 className=&quot;text-xl font-bold mt-4 mb-2&quot;&gt;{children}&lt;/h3&gt;,
--             h4: ({ children }) =&gt; &lt;h4 className=&quot;text-lg font-bold mt-3 mb-2&quot;&gt;{children}&lt;/h4&gt;,
--             h5: ({ children }) =&gt; &lt;h5 className=&quot;text-base font-bold mt-2 mb-1&quot;&gt;{children}&lt;/h5&gt;,
--             h6: ({ children }) =&gt; &lt;h6 className=&quot;text-sm font-bold mt-2 mb-1&quot;&gt;{children}&lt;/h6&gt;,
-+             h1: ({ children }) =&gt; &lt;h1 className=&quot;prose-h1&quot;&gt;{children}&lt;/h1&gt;,
-+             h2: ({ children }) =&gt; &lt;h2 className=&quot;prose-h2&quot;&gt;{children}&lt;/h2&gt;,
-+             h3: ({ children }) =&gt; &lt;h3 className=&quot;prose-h3&quot;&gt;{children}&lt;/h3&gt;,
-+             h4: ({ children }) =&gt; &lt;h4 className=&quot;prose-h4&quot;&gt;{children}&lt;/h4&gt;,
-+             h5: ({ children }) =&gt; &lt;h5 className=&quot;prose-h5&quot;&gt;{children}&lt;/h5&gt;,
-+             h6: ({ children }) =&gt; &lt;h6 className=&quot;prose-h6&quot;&gt;{children}&lt;/h6&gt;,
+-             h1: ({ children }) =&gt; &lt;h1 className="text-3xl font-bold mt-6 mb-4"&gt;{children}&lt;/h1&gt;,
+-             h2: ({ children }) =&gt; &lt;h2 className="text-2xl font-bold mt-5 mb-3"&gt;{children}&lt;/h2&gt;,
+-             h3: ({ children }) =&gt; &lt;h3 className="text-xl font-bold mt-4 mb-2"&gt;{children}&lt;/h3&gt;,
+-             h4: ({ children }) =&gt; &lt;h4 className="text-lg font-bold mt-3 mb-2"&gt;{children}&lt;/h4&gt;,
+-             h5: ({ children }) =&gt; &lt;h5 className="text-base font-bold mt-2 mb-1"&gt;{children}&lt;/h5&gt;,
+-             h6: ({ children }) =&gt; &lt;h6 className="text-sm font-bold mt-2 mb-1"&gt;{children}&lt;/h6&gt;,
++             h1: ({ children }) =&gt; &lt;h1 className="prose-h1"&gt;{children}&lt;/h1&gt;,
++             h2: ({ children }) =&gt; &lt;h2 className="prose-h2"&gt;{children}&lt;/h2&gt;,
++             h3: ({ children }) =&gt; &lt;h3 className="prose-h3"&gt;{children}&lt;/h3&gt;,
++             h4: ({ children }) =&gt; &lt;h4 className="prose-h4"&gt;{children}&lt;/h4&gt;,
++             h5: ({ children }) =&gt; &lt;h5 className="prose-h5"&gt;{children}&lt;/h5&gt;,
++             h6: ({ children }) =&gt; &lt;h6 className="prose-h6"&gt;{children}&lt;/h6&gt;,
             }}
           &gt;
 ```
@@ -522,7 +522,7 @@ Using standard Tailwind classes that work with prose:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 6, lines removed: 6
@@ -531,18 +531,18 @@ Lines added: 6, lines removed: 6
 @@ -212,10 +212,10 @@
                 );
               },
--             h1: ({ children }) =&gt; &lt;h1 className=&quot;prose-h1&quot;&gt;{children}&lt;/h1&gt;,
--             h2: ({ children }) =&gt; &lt;h2 className=&quot;prose-h2&quot;&gt;{children}&lt;/h2&gt;,
--             h3: ({ children }) =&gt; &lt;h3 className=&quot;prose-h3&quot;&gt;{children}&lt;/h3&gt;,
--             h4: ({ children }) =&gt; &lt;h4 className=&quot;prose-h4&quot;&gt;{children}&lt;/h4&gt;,
--             h5: ({ children }) =&gt; &lt;h5 className=&quot;prose-h5&quot;&gt;{children}&lt;/h5&gt;,
--             h6: ({ children }) =&gt; &lt;h6 className=&quot;prose-h6&quot;&gt;{children}&lt;/h6&gt;,
-+             h1: ({ children }) =&gt; &lt;h1 className=&quot;text-3xl font-bold mt-6 mb-4 prose-headings:font-bold&quot;&gt;{children}&lt;/h1&gt;,
-+             h2: ({ children }) =&gt; &lt;h2 className=&quot;text-2xl font-bold mt-5 mb-3 prose-headings:font-bold&quot;&gt;{children}&lt;/h2&gt;,
-+             h3: ({ children }) =&gt; &lt;h3 className=&quot;text-xl font-bold mt-4 mb-2 prose-headings:font-bold&quot;&gt;{children}&lt;/h3&gt;,
-+             h4: ({ children }) =&gt; &lt;h4 className=&quot;text-lg font-bold mt-3 mb-2 prose-headings:font-bold&quot;&gt;{children}&lt;/h4&gt;,
-+             h5: ({ children }) =&gt; &lt;h5 className=&quot;text-base font-bold mt-2 mb-1 prose-headings:font-bold&quot;&gt;{children}&lt;/h5&gt;,
-+             h6: ({ children }) =&gt; &lt;h6 className=&quot;text-sm font-bold mt-2 mb-1 prose-headings:font-bold&quot;&gt;{children}&lt;/h6&gt;,
+-             h1: ({ children }) =&gt; &lt;h1 className="prose-h1"&gt;{children}&lt;/h1&gt;,
+-             h2: ({ children }) =&gt; &lt;h2 className="prose-h2"&gt;{children}&lt;/h2&gt;,
+-             h3: ({ children }) =&gt; &lt;h3 className="prose-h3"&gt;{children}&lt;/h3&gt;,
+-             h4: ({ children }) =&gt; &lt;h4 className="prose-h4"&gt;{children}&lt;/h4&gt;,
+-             h5: ({ children }) =&gt; &lt;h5 className="prose-h5"&gt;{children}&lt;/h5&gt;,
+-             h6: ({ children }) =&gt; &lt;h6 className="prose-h6"&gt;{children}&lt;/h6&gt;,
++             h1: ({ children }) =&gt; &lt;h1 className="text-3xl font-bold mt-6 mb-4 prose-headings:font-bold"&gt;{children}&lt;/h1&gt;,
++             h2: ({ children }) =&gt; &lt;h2 className="text-2xl font-bold mt-5 mb-3 prose-headings:font-bold"&gt;{children}&lt;/h2&gt;,
++             h3: ({ children }) =&gt; &lt;h3 className="text-xl font-bold mt-4 mb-2 prose-headings:font-bold"&gt;{children}&lt;/h3&gt;,
++             h4: ({ children }) =&gt; &lt;h4 className="text-lg font-bold mt-3 mb-2 prose-headings:font-bold"&gt;{children}&lt;/h4&gt;,
++             h5: ({ children }) =&gt; &lt;h5 className="text-base font-bold mt-2 mb-1 prose-headings:font-bold"&gt;{children}&lt;/h5&gt;,
++             h6: ({ children }) =&gt; &lt;h6 className="text-sm font-bold mt-2 mb-1 prose-headings:font-bold"&gt;{children}&lt;/h6&gt;,
             }}
           &gt;
 ```
@@ -565,7 +565,7 @@ Simplifying: letting prose handle header styling. Ensuring headers render correc
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 6, lines removed: 6
@@ -574,12 +574,12 @@ Lines added: 6, lines removed: 6
 @@ -212,10 +212,10 @@
                 );
               },
--             h1: ({ children }) =&gt; &lt;h1 className=&quot;text-3xl font-bold mt-6 mb-4 prose-headings:font-bold&quot;&gt;{children}&lt;/h1&gt;,
--             h2: ({ children }) =&gt; &lt;h2 className=&quot;text-2xl font-bold mt-5 mb-3 prose-headings:font-bold&quot;&gt;{children}&lt;/h2&gt;,
--             h3: ({ children }) =&gt; &lt;h3 className=&quot;text-xl font-bold mt-4 mb-2 prose-headings:font-bold&quot;&gt;{children}&lt;/h3&gt;,
--             h4: ({ children }) =&gt; &lt;h4 className=&quot;text-lg font-bold mt-3 mb-2 prose-headings:font-bold&quot;&gt;{children}&lt;/h4&gt;,
--             h5: ({ children }) =&gt; &lt;h5 className=&quot;text-base font-bold mt-2 mb-1 prose-headings:font-bold&quot;&gt;{children}&lt;/h5&gt;,
--             h6: ({ children }) =&gt; &lt;h6 className=&quot;text-sm font-bold mt-2 mb-1 prose-headings:font-bold&quot;&gt;{children}&lt;/h6&gt;,
+-             h1: ({ children }) =&gt; &lt;h1 className="text-3xl font-bold mt-6 mb-4 prose-headings:font-bold"&gt;{children}&lt;/h1&gt;,
+-             h2: ({ children }) =&gt; &lt;h2 className="text-2xl font-bold mt-5 mb-3 prose-headings:font-bold"&gt;{children}&lt;/h2&gt;,
+-             h3: ({ children }) =&gt; &lt;h3 className="text-xl font-bold mt-4 mb-2 prose-headings:font-bold"&gt;{children}&lt;/h3&gt;,
+-             h4: ({ children }) =&gt; &lt;h4 className="text-lg font-bold mt-3 mb-2 prose-headings:font-bold"&gt;{children}&lt;/h4&gt;,
+-             h5: ({ children }) =&gt; &lt;h5 className="text-base font-bold mt-2 mb-1 prose-headings:font-bold"&gt;{children}&lt;/h5&gt;,
+-             h6: ({ children }) =&gt; &lt;h6 className="text-sm font-bold mt-2 mb-1 prose-headings:font-bold"&gt;{children}&lt;/h6&gt;,
 +             h1: ({ children }) =&gt; &lt;h1&gt;{children}&lt;/h1&gt;,
 +             h2: ({ children }) =&gt; &lt;h2&gt;{children}&lt;/h2&gt;,
 +             h3: ({ children }) =&gt; &lt;h3&gt;{children}&lt;/h3&gt;,
@@ -706,7 +706,7 @@ Updating the mermaid diagram container to use a white background:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -715,8 +715,8 @@ Lines added: 1, lines removed: 1
 @@ -79,5 +79,5 @@
       &lt;div
         ref={containerRef}
--       className=&quot;my-4 flex justify-center&quot;
-+       className=&quot;my-4 flex justify-center bg-white rounded-lg p-4 border border-gray-200&quot;
+-       className="my-4 flex justify-center"
++       className="my-4 flex justify-center bg-white rounded-lg p-4 border border-gray-200"
         dangerouslySetInnerHTML={{ __html: svg }}
       /&gt;
 ```
@@ -729,7 +729,7 @@ Lines added: 1, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
@@ -738,8 +738,8 @@ Lines added: 1, lines removed: 1
 @@ -70,5 +70,5 @@
     if (!svg) {
       return (
--       &lt;div ref={containerRef} className=&quot;my-4 text-center text-gray-400 text-sm&quot;&gt;
-+       &lt;div ref={containerRef} className=&quot;my-4 text-center text-gray-400 text-sm bg-white rounded-lg p-4 border border-gray-200&quot;&gt;
+-       &lt;div ref={containerRef} className="my-4 text-center text-gray-400 text-sm"&gt;
++       &lt;div ref={containerRef} className="my-4 text-center text-gray-400 text-sm bg-white rounded-lg p-4 border border-gray-200"&gt;
           Loading diagram...
         &lt;/div&gt;
 ```
@@ -797,7 +797,7 @@ Ensuring the SVG itself has a white background by modifying the rendered SVG:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 20, lines removed: 1
@@ -813,15 +813,15 @@ Lines added: 20, lines removed: 1
 +           /&lt;svg([^&gt;]*)&gt;/,
 +           (match, attrs) =&gt; {
 +             // Add or update style attribute to ensure white background
-+             if (attrs.includes(&#39;style=&#39;)) {
-+               return match.replace(/style=&quot;([^&quot;]*)&quot;/, (styleMatch, styleValue) =&gt; {
-+                 const updatedStyle = styleValue.includes(&#39;background&#39;)
-+                   ? styleValue.replace(/background[^;]*;?/g, &#39;&#39;).trim()
++             if (attrs.includes('style=')) {
++               return match.replace(/style="([^"]*)"/, (styleMatch, styleValue) =&gt; {
++                 const updatedStyle = styleValue.includes('background')
++                   ? styleValue.replace(/background[^;]*;?/g, '').trim()
 +                   : styleValue;
-+                 return &#96;style=&quot;${updatedStyle}; background: white;&quot;&#96;;
++                 return &#96;style="${updatedStyle}; background: white;"&#96;;
 +               });
 +             } else {
-+               return &#96;&lt;svg${attrs} style=&quot;background: white;&quot;&gt;&#96;;
++               return &#96;&lt;svg${attrs} style="background: white;"&gt;&#96;;
 +             }
 +           }
 +         );
@@ -985,7 +985,7 @@ The `<pre>` wrapper still applies the black background. Updating the `pre` compo
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 18, lines removed: undefined
@@ -999,21 +999,21 @@ Lines added: 18, lines removed: undefined
 +               // is returned from the code component, so we need to detect it here
 +               const childrenArray = Array.isArray(children) ? children : [children];
 +               const hasMermaid = childrenArray.some((child: any) =&gt; {
-+                 if (child &amp;&amp; typeof child === &#39;object&#39; &amp;&amp; &#39;type&#39; in child) {
++                 if (child &amp;&amp; typeof child === 'object' &amp;&amp; 'type' in child) {
 +                   return child.type === MermaidDiagram || 
-+                          (child.props &amp;&amp; child.props.className &amp;&amp; child.props.className.includes(&#39;mermaid&#39;));
++                          (child.props &amp;&amp; child.props.className &amp;&amp; child.props.className.includes('mermaid'));
 +                 }
 +                 return false;
 +               });
 + 
-+               // If it&#39;s a mermaid diagram, don&#39;t apply the black background
++               // If it's a mermaid diagram, don't apply the black background
 +               if (hasMermaid) {
-+                 return &lt;div className=&quot;my-4&quot;&gt;{children}&lt;/div&gt;;
++                 return &lt;div className="my-4"&gt;{children}&lt;/div&gt;;
 +               }
 + 
 +               // Regular code block styling
                 return (
-                  &lt;pre className=&quot;not-prose my-4 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
+                  &lt;pre className="not-prose my-4 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
 ```
 
 </details>
@@ -1042,7 +1042,7 @@ Trying a simpler approach: checking if the pre contains a mermaid code block:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 28, lines removed: 10
@@ -1061,26 +1061,26 @@ Lines added: 28, lines removed: 10
 +               // We need to detect if the children contain our MermaidDiagram component
                 const childrenArray = Array.isArray(children) ? children : [children];
 +               
-+               // Check if any child is a MermaidDiagram (by checking if it&#39;s a div with our specific structure)
-+               // or if the pre&#39;s className indicates mermaid
++               // Check if any child is a MermaidDiagram (by checking if it's a div with our specific structure)
++               // or if the pre's className indicates mermaid
                 const hasMermaid = childrenArray.some((child: any) =&gt; {
--                 if (child &amp;&amp; typeof child === &#39;object&#39; &amp;&amp; &#39;type&#39; in child) {
+-                 if (child &amp;&amp; typeof child === 'object' &amp;&amp; 'type' in child) {
 -                   return child.type === MermaidDiagram || 
--                          (child.props &amp;&amp; child.props.className &amp;&amp; child.props.className.includes(&#39;mermaid&#39;));
+-                          (child.props &amp;&amp; child.props.className &amp;&amp; child.props.className.includes('mermaid'));
 +                 // Check if child is our MermaidDiagram component
-+                 if (child &amp;&amp; typeof child === &#39;object&#39;) {
++                 if (child &amp;&amp; typeof child === 'object') {
 +                   // MermaidDiagram renders a div with bg-white class
 +                   if (child.props &amp;&amp; child.props.className &amp;&amp; 
-+                       typeof child.props.className === &#39;string&#39; &amp;&amp; 
-+                       child.props.className.includes(&#39;bg-white&#39;)) {
++                       typeof child.props.className === 'string' &amp;&amp; 
++                       child.props.className.includes('bg-white')) {
 +                     return true;
 +                   }
-+                   // Or check if it&#39;s wrapped in a code element with mermaid language
++                   // Or check if it's wrapped in a code element with mermaid language
 +                   if (child.props &amp;&amp; child.props.children) {
 +                     const codeChild = child.props.children;
-+                     if (codeChild &amp;&amp; typeof codeChild === &#39;object&#39; &amp;&amp; codeChild.props) {
-+                       const className = codeChild.props.className || &#39;&#39;;
-+                       if (typeof className === &#39;string&#39; &amp;&amp; className.includes(&#39;language-mermaid&#39;)) {
++                     if (codeChild &amp;&amp; typeof codeChild === 'object' &amp;&amp; codeChild.props) {
++                       const className = codeChild.props.className || '';
++                       if (typeof className === 'string' &amp;&amp; className.includes('language-mermaid')) {
 +                         return true;
 +                       }
 +                     }
@@ -1089,17 +1089,17 @@ Lines added: 28, lines removed: 10
                   return false;
                 });
   
--               // If it&#39;s a mermaid diagram, don&#39;t apply the black background
-+               // If it&#39;s a mermaid diagram, render without the black background wrapper
+-               // If it's a mermaid diagram, don't apply the black background
++               // If it's a mermaid diagram, render without the black background wrapper
                 if (hasMermaid) {
--                 return &lt;div className=&quot;my-4&quot;&gt;{children}&lt;/div&gt;;
+-                 return &lt;div className="my-4"&gt;{children}&lt;/div&gt;;
 +                 return &lt;&gt;{children}&lt;/&gt;;
                 }
   
                 // Regular code block styling
                 return (
--                 &lt;pre className=&quot;not-prose my-4 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot;&gt;
-+                 &lt;pre className=&quot;not-prose my-4 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100&quot; {...props}&gt;
+-                 &lt;pre className="not-prose my-4 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100"&gt;
++                 &lt;pre className="not-prose my-4 overflow-x-auto rounded bg-gray-800 p-4 text-sm text-gray-100" {...props}&gt;
                     {children}
                   &lt;/pre&gt;
 ```
@@ -1122,7 +1122,7 @@ Checking the rendered structure. Inspecting the code element's className before 
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 16, lines removed: 22
@@ -1138,37 +1138,37 @@ Lines added: 16, lines removed: 22
 +               // We detect mermaid by checking if children is a div with bg-white (our MermaidDiagram wrapper)
                 const childrenArray = Array.isArray(children) ? children : [children];
                 
--               // Check if any child is a MermaidDiagram (by checking if it&#39;s a div with our specific structure)
--               // or if the pre&#39;s className indicates mermaid
+-               // Check if any child is a MermaidDiagram (by checking if it's a div with our specific structure)
+-               // or if the pre's className indicates mermaid
                 const hasMermaid = childrenArray.some((child: any) =&gt; {
 -                 // Check if child is our MermaidDiagram component
--                 if (child &amp;&amp; typeof child === &#39;object&#39;) {
+-                 if (child &amp;&amp; typeof child === 'object') {
 -                   // MermaidDiagram renders a div with bg-white class
 -                   if (child.props &amp;&amp; child.props.className &amp;&amp; 
--                       typeof child.props.className === &#39;string&#39; &amp;&amp; 
--                       child.props.className.includes(&#39;bg-white&#39;)) {
-+                 if (child &amp;&amp; typeof child === &#39;object&#39; &amp;&amp; child.props) {
+-                       typeof child.props.className === 'string' &amp;&amp; 
+-                       child.props.className.includes('bg-white')) {
++                 if (child &amp;&amp; typeof child === 'object' &amp;&amp; child.props) {
 +                   const className = child.props.className;
 +                   // MermaidDiagram renders a div with bg-white rounded-lg classes
-+                   if (className &amp;&amp; typeof className === &#39;string&#39; &amp;&amp; 
-+                       (className.includes(&#39;bg-white&#39;) || className.includes(&#39;mermaid&#39;))) {
++                   if (className &amp;&amp; typeof className === 'string' &amp;&amp; 
++                       (className.includes('bg-white') || className.includes('mermaid'))) {
                       return true;
                     }
--                   // Or check if it&#39;s wrapped in a code element with mermaid language
+-                   // Or check if it's wrapped in a code element with mermaid language
 -                   if (child.props &amp;&amp; child.props.children) {
 -                     const codeChild = child.props.children;
--                     if (codeChild &amp;&amp; typeof codeChild === &#39;object&#39; &amp;&amp; codeChild.props) {
--                       const className = codeChild.props.className || &#39;&#39;;
--                       if (typeof className === &#39;string&#39; &amp;&amp; className.includes(&#39;language-mermaid&#39;)) {
+-                     if (codeChild &amp;&amp; typeof codeChild === 'object' &amp;&amp; codeChild.props) {
+-                       const className = codeChild.props.className || '';
+-                       if (typeof className === 'string' &amp;&amp; className.includes('language-mermaid')) {
 -                         return true;
 -                       }
 -                     }
 -                   }
 -                 }
-+                   // Also check if it&#39;s a code element with language-mermaid (before replacement)
-+                   if (child.type === &#39;code&#39; || (child.props &amp;&amp; child.props.className)) {
-+                     const codeClassName = child.props?.className || &#39;&#39;;
-+                     if (typeof codeClassName === &#39;string&#39; &amp;&amp; codeClassName.includes(&#39;language-mermaid&#39;)) {
++                   // Also check if it's a code element with language-mermaid (before replacement)
++                   if (child.type === 'code' || (child.props &amp;&amp; child.props.className)) {
++                     const codeClassName = child.props?.className || '';
++                     if (typeof codeClassName === 'string' &amp;&amp; codeClassName.includes('language-mermaid')) {
 +                       return true;
 +                     }
 +                   }
@@ -1176,10 +1176,10 @@ Lines added: 16, lines removed: 22
                   return false;
                 });
   
-                // If it&#39;s a mermaid diagram, render without the black background wrapper
+                // If it's a mermaid diagram, render without the black background wrapper
                 if (hasMermaid) {
 -                 return &lt;&gt;{children}&lt;/&gt;;
-+                 return &lt;div className=&quot;my-4&quot;&gt;{children}&lt;/div&gt;;
++                 return &lt;div className="my-4"&gt;{children}&lt;/div&gt;;
                 }
   
 ```
@@ -1227,17 +1227,17 @@ Using React.Children utilities to inspect children:
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 1, lines removed: 1
 
 ```diff
 @@ -1,3 +1,3 @@
-- import { useEffect, useState, useRef } from &quot;react&quot;;
-+ import { useEffect, useState, useRef, Children, isValidElement } from &quot;react&quot;;
-  import ReactMarkdown from &quot;react-markdown&quot;;
-  import remarkGfm from &quot;remark-gfm&quot;;
+- import { useEffect, useState, useRef } from "react";
++ import { useEffect, useState, useRef, Children, isValidElement } from "react";
+  import ReactMarkdown from "react-markdown";
+  import remarkGfm from "remark-gfm";
 ```
 
 </details>
@@ -1248,7 +1248,7 @@ Lines added: 1, lines removed: 1
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 20, lines removed: 19
@@ -1265,31 +1265,31 @@ Lines added: 20, lines removed: 19
 +               let hasMermaid = false;
                 
 -               const hasMermaid = childrenArray.some((child: any) =&gt; {
--                 if (child &amp;&amp; typeof child === &#39;object&#39; &amp;&amp; child.props) {
+-                 if (child &amp;&amp; typeof child === 'object' &amp;&amp; child.props) {
 -                   const className = child.props.className;
 +               Children.forEach(children, (child) =&gt; {
 +                 if (isValidElement(child)) {
 +                   const className = child.props?.className;
                     // MermaidDiagram renders a div with bg-white rounded-lg classes
--                   if (className &amp;&amp; typeof className === &#39;string&#39; &amp;&amp; 
--                       (className.includes(&#39;bg-white&#39;) || className.includes(&#39;mermaid&#39;))) {
+-                   if (className &amp;&amp; typeof className === 'string' &amp;&amp; 
+-                       (className.includes('bg-white') || className.includes('mermaid'))) {
 -                     return true;
 -                   }
--                   // Also check if it&#39;s a code element with language-mermaid (before replacement)
--                   if (child.type === &#39;code&#39; || (child.props &amp;&amp; child.props.className)) {
--                     const codeClassName = child.props?.className || &#39;&#39;;
--                     if (typeof codeClassName === &#39;string&#39; &amp;&amp; codeClassName.includes(&#39;language-mermaid&#39;)) {
+-                   // Also check if it's a code element with language-mermaid (before replacement)
+-                   if (child.type === 'code' || (child.props &amp;&amp; child.props.className)) {
+-                     const codeClassName = child.props?.className || '';
+-                     if (typeof codeClassName === 'string' &amp;&amp; codeClassName.includes('language-mermaid')) {
 -                       return true;
 -                     }
 -                   }
 -                 }
 -                 return false;
-+                   if (className &amp;&amp; typeof className === &#39;string&#39;) {
-+                     if (className.includes(&#39;bg-white&#39;) &amp;&amp; className.includes(&#39;rounded-lg&#39;)) {
++                   if (className &amp;&amp; typeof className === 'string') {
++                     if (className.includes('bg-white') &amp;&amp; className.includes('rounded-lg')) {
 +                       hasMermaid = true;
 +                     }
 +                     // Also check for code element with language-mermaid (before MermaidDiagram replacement)
-+                     if (className.includes(&#39;language-mermaid&#39;)) {
++                     if (className.includes('language-mermaid')) {
 +                       hasMermaid = true;
 +                     }
 +                   }
@@ -1882,7 +1882,7 @@ I see the problem. By defining custom header components, we're likely overriding
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: undefined, lines removed: 6
@@ -2020,12 +2020,12 @@ Parameters:
 
 ```json
 {
-  &quot;tools&quot;: [
+  "tools": [
     {
-      &quot;name&quot;: &quot;browser_navigate&quot;,
-      &quot;description&quot;: &quot;Navigate to a URL&quot;,
-      &quot;parameters&quot;: &quot;{\&quot;url\&quot;: \&quot;http://localhost:5174/\&quot;}&quot;,
-      &quot;serverName&quot;: &quot;cursor-ide-browser&quot;
+      "name": "browser_navigate",
+      "description": "Navigate to a URL",
+      "parameters": "{\"url\": \"http://localhost:5174/\"}",
+      "serverName": "cursor-ide-browser"
     }
   ]
 }
@@ -2034,14 +2034,14 @@ Additional data:
 
 ```json
 {
-  &quot;status&quot;: &quot;cancelled&quot;,
-  &quot;reviewData&quot;: {
-    &quot;status&quot;: &quot;Done&quot;,
-    &quot;selectedOption&quot;: &quot;run&quot;,
-    &quot;isShowingInput&quot;: false,
-    &quot;approvalType&quot;: &quot;full_auto&quot;,
-    &quot;toolName&quot;: &quot;browser_navigate&quot;,
-    &quot;serverId&quot;: &quot;cursor-ide-browser&quot;
+  "status": "cancelled",
+  "reviewData": {
+    "status": "Done",
+    "selectedOption": "run",
+    "isShowingInput": false,
+    "approvalType": "full_auto",
+    "toolName": "browser_navigate",
+    "serverId": "cursor-ide-browser"
   }
 }
 ```
@@ -2049,8 +2049,8 @@ Result:
 
 ```json
 {
-  &quot;selectedTool&quot;: &quot;browser_navigate&quot;,
-  &quot;result&quot;: &quot;{\&quot;skipped\&quot;:true,\&quot;message\&quot;:\&quot;User cancelled the MCP tool execution\&quot;}&quot;
+  "selectedTool": "browser_navigate",
+  "result": "{\"skipped\":true,\"message\":\"User cancelled the MCP tool execution\"}"
 }
 ```
 Status: **completed**
@@ -2172,7 +2172,7 @@ Okay the web searches aren't helping. Let me actually TEST the page myself to se
 ---
 
 <tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
-<details><summary>Tool use: **command** • Run command: cd c:\Users\JohnDeHart\working\insightLM-LT && npx tailwindcss --help</summary>
+<details><summary>Tool use: **run_terminal_cmd** • Run command: cd c:\Users\JohnDeHart\working\insightLM-LT && npx tailwindcss --help</summary>
 
 ```bash
 cd c:\Users\JohnDeHart\working\insightLM-LT && npx tailwindcss --help
@@ -2182,7 +2182,7 @@ cd c:\Users\JohnDeHart\working\insightLM-LT && npx tailwindcss --help
 At line:1 char:45
 + cd c:\Users\JohnDeHart\working\insightLM-LT &amp;&amp; npx tailwindcss --help
 +                                             ~~
-The token &#39;&amp;&amp;&#39; is not a valid statement separator in this version.
+The token '&amp;&amp;' is not a valid statement separator in this version.
     + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordEx 
    ception
     + FullyQualifiedErrorId : InvalidEndOfLine
@@ -2343,7 +2343,7 @@ Let me create a test markdown file and actually inspect what's rendering in the 
 
 <tool-use data-tool-type="write" data-tool-name="write">
 
-<details><summary>Tool use: **code_edit** • Edit file: TEST_HEADERS.md</summary>
+<details><summary>Tool use: **write** • Edit file: TEST_HEADERS.md</summary>
 
 **Chunk 1**
 Lines added: 19, lines removed: 1
@@ -2480,14 +2480,14 @@ Let me check if maybe we need to ensure the prose styles are actually being gene
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: tailwind.config.js</summary>
+<details><summary>Tool use: **search_replace** • Edit file: tailwind.config.js</summary>
 
 **Chunk 1**
 Lines added: 3, lines removed: undefined
 
 ```diff
 @@ -8,4 +8,7 @@
-      require(&#39;@tailwindcss/typography&#39;),
+      require('@tailwindcss/typography'),
     ],
 +   corePlugins: {
 +     preflight: true, // Keep preflight but ensure prose works
@@ -2596,7 +2596,7 @@ I see the issue! The `prose` class is on the wrapper `div`, but according to the
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 4, lines removed: 4
@@ -2604,17 +2604,17 @@ Lines added: 4, lines removed: 4
 ```diff
 @@ -189,8 +189,8 @@
     const renderPreview = () =&gt; (
-      &lt;div className=&quot;h-full overflow-auto bg-white p-4&quot;&gt;
--       &lt;div className=&quot;prose prose-sm max-w-none&quot;&gt;
+      &lt;div className="h-full overflow-auto bg-white p-4"&gt;
+-       &lt;div className="prose prose-sm max-w-none"&gt;
 -         &lt;ReactMarkdown
 -           remarkPlugins={[remarkGfm]}
 -           components={{
 +       &lt;ReactMarkdown
-+         className=&quot;prose prose-sm max-w-none&quot;
++         className="prose prose-sm max-w-none"
 +         remarkPlugins={[remarkGfm]}
 +         components={{
               code({ inline, className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || &quot;&quot;);
+                const match = /language-(\w+)/.exec(className || "");
 ```
 
 </details>
@@ -2625,7 +2625,7 @@ Lines added: 4, lines removed: 4
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
+<details><summary>Tool use: **search_replace** • Edit file: src/components/DocumentViewer/MarkdownViewer.tsx</summary>
 
 **Chunk 1**
 Lines added: 4, lines removed: 5
@@ -2703,14 +2703,14 @@ Perfect! The structure looks good now. The prose className is directly on ReactM
 
 <tool-use data-tool-type="write" data-tool-name="search_replace">
 
-<details><summary>Tool use: **code_edit** • Edit file: tailwind.config.js</summary>
+<details><summary>Tool use: **search_replace** • Edit file: tailwind.config.js</summary>
 
 **Chunk 1**
 Lines added: undefined, lines removed: 3
 
 ```diff
 @@ -8,7 +8,4 @@
-      require(&#39;@tailwindcss/typography&#39;),
+      require('@tailwindcss/typography'),
     ],
 -   corePlugins: {
 -     preflight: true, // Keep preflight but ensure prose works

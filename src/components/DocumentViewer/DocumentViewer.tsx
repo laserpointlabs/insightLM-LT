@@ -3,14 +3,17 @@ import { MarkdownViewer } from "./MarkdownViewer";
 import { CSVViewer } from "./CSVViewer";
 import { PDFViewer } from "./PDFViewer";
 import { TextViewer } from "./TextViewer";
+import { DashboardViewer } from "./DashboardViewer";
 import { useDocumentStore } from "../../store/documentStore";
 
 export interface OpenDocument {
   id: string;
-  workbookId: string;
-  path: string;
+  workbookId?: string; // Optional for dashboards
+  path?: string; // Optional for dashboards
   filename: string;
   content?: string;
+  type?: "document" | "dashboard"; // Document type
+  dashboardId?: string; // For dashboard documents
 }
 
 interface DocumentViewerProps {
@@ -61,7 +64,8 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
   };
 
   const handleSave = useCallback(async () => {
-    if (!activeDocId || !activeDoc) return;
+    if (!activeDocId || !activeDoc || activeDoc.type === "dashboard") return;
+    if (!activeDoc.workbookId || !activeDoc.path) return;
 
     const unsavedContent = unsavedChanges.get(activeDocId);
     const contentToSave = unsavedContent || activeDoc.content || "";
@@ -120,6 +124,11 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
           No document selected
         </div>
       );
+    }
+
+    // Handle dashboard documents
+    if (activeDoc.type === "dashboard" && activeDoc.dashboardId) {
+      return <DashboardViewer dashboardId={activeDoc.dashboardId} />;
     }
 
     // Show loading state if content is empty and document was just opened
@@ -205,7 +214,7 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
           ))}
         </div>
       )}
-      {activeDoc && isEditableFileType(getFileExtension(activeDoc.filename)) && hasUnsaved && (
+      {activeDoc && activeDoc.type !== "dashboard" && isEditableFileType(getFileExtension(activeDoc.filename)) && hasUnsaved && (
         <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2">
           <span className="text-xs text-orange-500">Unsaved changes</span>
           <button

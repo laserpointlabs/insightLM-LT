@@ -40,12 +40,12 @@ export function Chat() {
   };
 
   return (
-    <div className="flex h-full flex-col border-t border-gray-200">
-      <div className="border-b border-gray-200 p-2">
-        <h2 className="text-sm font-semibold">Chat</h2>
+    <div className="flex h-full flex-col">
+      <div className="border-b border-gray-200 px-3 py-2">
+        <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Chat</h2>
       </div>
 
-      <div className="flex-1 space-y-2 overflow-y-auto p-2">
+      <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
         {messages.length === 0 && (
           <div className="mt-4 text-center text-sm text-gray-500">
             Start a conversation about your workbooks
@@ -57,7 +57,7 @@ export function Chat() {
         {loading && <div className="text-sm text-gray-500">Thinking...</div>}
       </div>
 
-      <div className="border-t border-gray-200 p-2">
+      <div className="border-t border-gray-200 px-3 py-2">
         <div className="flex gap-2">
           <input
             type="text"
@@ -65,13 +65,13 @@ export function Chat() {
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && handleSend()}
             placeholder="Ask about your workbooks..."
-            className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
             disabled={loading}
           />
           <button
             onClick={handleSend}
             disabled={loading || !input.trim()}
-            className="rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Send
           </button>

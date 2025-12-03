@@ -354,13 +354,14 @@ export function WorkbooksView() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-gray-200 p-2">
-        <h2 className="text-sm font-semibold">Workbooks</h2>
+      <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
+        <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Workbooks</h2>
         <button
           onClick={handleCreateWorkbook}
           className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600"
+          title="Create New Workbook"
         >
-          + New
+          +
         </button>
       </div>
 

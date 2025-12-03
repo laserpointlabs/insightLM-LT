@@ -43,29 +43,31 @@ export function DashboardQueryCard({
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="mb-3 flex items-start justify-between">
-        <div className="flex-1">
-          <h3 className="mb-1 text-sm font-semibold">{query.question}</h3>
+    <div className="rounded border border-gray-200 bg-white p-2">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <h3 className="mb-1 text-xs font-semibold text-gray-800 truncate">{query.question}</h3>
           <div className="text-xs text-gray-500">
-            Type: {query.queryType} |
+            {query.queryType}
             {query.lastRun &&
-              ` Last run: ${new Date(query.lastRun).toLocaleString()}`}
+              ` • ${new Date(query.lastRun).toLocaleTimeString()}`}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1 flex-shrink-0">
           <button
             onClick={runQuery}
             disabled={isRunning}
-            className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200 disabled:opacity-50"
+            className="rounded bg-gray-100 px-1.5 py-0.5 text-xs hover:bg-gray-200 disabled:opacity-50"
+            title="Refresh"
           >
-            {isRunning ? "Running..." : "Refresh"}
+            {isRunning ? "..." : "↻"}
           </button>
           <button
             onClick={() => removeQuery(dashboardId, query.id)}
-            className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+            className="rounded px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50"
+            title="Remove"
           >
-            Remove
+            ×
           </button>
         </div>
       </div>

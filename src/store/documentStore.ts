@@ -28,6 +28,44 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   lastOpenedDocId: null,
 
   openDocument: async (doc) => {
+    // Handle dashboard documents differently
+    if (doc.type === "dashboard" && doc.dashboardId) {
+      // Check if already open
+      const existing = get().openDocuments.find(
+        (d) => d.type === "dashboard" && d.dashboardId === doc.dashboardId,
+      );
+
+      if (existing) {
+        // Just make it active
+        set(() => ({
+          lastOpenedDocId: existing.id,
+        }));
+        return;
+      }
+
+      // Create dashboard document immediately
+      const tempDoc: OpenDocument = {
+        ...doc,
+        id: `doc-${nextDocId++}`,
+        type: "dashboard",
+        dashboardId: doc.dashboardId,
+        filename: doc.filename,
+        content: "",
+      };
+
+      set((state) => ({
+        openDocuments: [...state.openDocuments, tempDoc],
+        lastOpenedDocId: tempDoc.id,
+      }));
+      return;
+    }
+
+    // Handle regular documents
+    if (!doc.workbookId || !doc.path) {
+      console.error("Cannot open document: missing workbookId or path");
+      return;
+    }
+
     const docKey = `${doc.workbookId}:${doc.path}`;
 
     // Check if already open
@@ -60,6 +98,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const tempDoc: OpenDocument = {
       ...doc,
       id: `doc-${nextDocId++}`,
+      type: doc.type || "document",
       content: doc.content || "",
     };
 
@@ -74,7 +113,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // This allows the UI to update immediately before loading file content
         const loadContent = async () => {
         try {
-          const content = await window.electronAPI.file.read(doc.workbookId, doc.path);
+          const content = await window.electronAPI.file.read(doc.workbookId!, doc.path!);
 
           // Update document with content
           const newLoadingSet = new Set(get().loadingDocuments);
@@ -108,7 +147,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // Content already provided, just remove loading state
       const newLoadingSet = new Set(get().loadingDocuments);
       newLoadingSet.delete(docKey);
-      set((state) => ({
+      set(() => ({
         loadingDocuments: newLoadingSet,
       }));
     }

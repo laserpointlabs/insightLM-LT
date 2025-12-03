@@ -1,4 +1,4 @@
-import { Dashboard, DashboardQuery, DashboardResult } from "../types/dashboard";
+import { DashboardQuery, DashboardResult } from "../types/dashboard";
 
 export class DashboardService {
   /**
@@ -101,13 +101,11 @@ Examples:
       queryType = "filter";
     }
 
-    // Extract workbook name and ID
+    // Extract workbook ID
     let workbookId: string | undefined;
-    let workbookName: string | undefined;
     for (const wb of workbooks.filter((w) => !w.archived)) {
       if (lowerQuestion.includes(wb.name.toLowerCase())) {
         workbookId = wb.id;
-        workbookName = wb.name;
         break;
       }
     }
@@ -127,7 +125,6 @@ Examples:
     return {
       queryType,
       workbookId,
-      workbookName,
       filters: {
         ...(days && { days }),
         ...(documentType && { documentType }),
