@@ -53,9 +53,11 @@ export function DashboardGrid({ queries, dashboardId }: DashboardGridProps) {
       if (containerRef.current?.parentElement) {
         // Get the parent container (the div with overflow-auto p-4)
         const parent = containerRef.current.parentElement;
-        const parentRect = parent.getBoundingClientRect();
+        // Use clientWidth instead of getBoundingClientRect().width to exclude scrollbars
+        // clientWidth gives the inner width excluding scrollbars and borders
+        const parentClientWidth = parent.clientWidth;
         // Account for padding (p-4 = 16px on each side = 32px total)
-        const availableWidth = parentRect.width - 32; // Subtract padding
+        const availableWidth = Math.max(0, parentClientWidth - 32); // Subtract padding, ensure non-negative
         setContainerWidth(availableWidth);
       }
     };
@@ -256,6 +258,8 @@ export function DashboardGrid({ queries, dashboardId }: DashboardGridProps) {
         left: "0px", // Always start at left edge
         top: `${position.y * (GRID_ROW_HEIGHT + GRID_GAP)}px`,
         width: `${containerWidth}px`, // Use full container width
+        maxWidth: "100%", // Ensure tile never exceeds container width
+        boxSizing: "border-box" as const, // Include padding/borders in width calculation
         height: `${height * GRID_ROW_HEIGHT + (height - 1) * GRID_GAP}px`, // Use height instead of minHeight for tighter fit
       };
     }
@@ -265,6 +269,8 @@ export function DashboardGrid({ queries, dashboardId }: DashboardGridProps) {
       left: `${position.x * (GRID_COLUMN_SIZE + GRID_GAP)}px`,
       top: `${position.y * (GRID_ROW_HEIGHT + GRID_GAP)}px`,
       width: `${width * GRID_COLUMN_SIZE + (width - 1) * GRID_GAP}px`,
+      maxWidth: "100%", // Ensure tile never exceeds container width
+      boxSizing: "border-box" as const, // Include padding/borders in width calculation
       height: `${height * GRID_ROW_HEIGHT + (height - 1) * GRID_GAP}px`, // Use height instead of minHeight for tighter fit
     };
   };
@@ -322,7 +328,9 @@ export function DashboardGrid({ queries, dashboardId }: DashboardGridProps) {
         width: containerWidth > 0 && queries.some(q => q.tileSize === "full-width")
           ? `${containerWidth}px` // Use container width if there are full-width tiles
           : `${maxX * (GRID_COLUMN_SIZE + GRID_GAP) - GRID_GAP}px`,
+        maxWidth: "100%", // Ensure grid container never exceeds parent width
         minHeight: `${maxY * (GRID_ROW_HEIGHT + GRID_GAP) - GRID_GAP}px`,
+        boxSizing: "border-box" as const, // Include padding/borders in width calculation
       }}
     >
       {/* Grid lines (only visible when dragging) */}

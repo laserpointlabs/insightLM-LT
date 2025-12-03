@@ -288,6 +288,8 @@ export function DashboardTile({
       }`}
       style={{
         cursor: isDragging ? "grabbing" : "default",
+        maxWidth: "100%", // Ensure tile never exceeds its container width
+        boxSizing: "border-box", // Include padding/borders in width calculation
       }}
       tabIndex={0}
     >
