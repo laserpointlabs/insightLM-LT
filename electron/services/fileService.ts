@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { WorkbookService } from "./workbookService";
+import { DocumentExtractor } from "./documentExtractor";
 
 export class FileService {
   private workbookService: WorkbookService;
@@ -51,7 +52,7 @@ export class FileService {
     return Promise.resolve();
   }
 
-  readDocument(workbookId: string, relativePath: string): string {
+  async readDocument(workbookId: string, relativePath: string): Promise<string> {
     const workbookPath = path.join(
       this.workbookService["workbooksDir"],
       workbookId,
@@ -62,7 +63,8 @@ export class FileService {
       throw new Error(`File not found: ${relativePath}`);
     }
 
-    return fs.readFileSync(filePath, "utf-8");
+    // Use DocumentExtractor to handle PDF, Word, and text files
+    return await DocumentExtractor.extractText(filePath);
   }
 
   getFilePath(workbookId: string, relativePath: string): string {

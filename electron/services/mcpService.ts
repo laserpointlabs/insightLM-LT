@@ -11,9 +11,18 @@ export interface MCPServerConfig {
   enabled: boolean;
 }
 
+interface QueuedRequest {
+  method: string;
+  params: Record<string, any>;
+  resolve: (value: any) => void;
+  reject: (error: any) => void;
+}
+
 export class MCPService {
   private servers: Map<string, ChildProcess> = new Map();
   private serversDir: string;
+  private requestQueues: Map<string, QueuedRequest[]> = new Map();
+  private responseBuffers: Map<string, string> = new Map();
 
   constructor(serversDir: string) {
     this.serversDir = serversDir;
@@ -102,10 +111,46 @@ export class MCPService {
     // Capture stdout and stderr for debugging
     let stdout = "";
     let stderr = "";
+    let buffer = "";
 
+    // Handle stdout - parse JSON responses
+    // MCP servers respond sequentially (no request IDs)
+    let responseBuffer = "";
     proc.stdout?.on("data", (data) => {
-      stdout += data.toString();
-      console.log(`[MCP ${config.name}] ${data.toString().trim()}`);
+      const text = data.toString();
+      stdout += text;
+      responseBuffer += text;
+
+      // Try to parse complete JSON lines
+      const lines = responseBuffer.split('\n');
+      responseBuffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        try {
+          const response = JSON.parse(trimmed);
+          // Get the next pending request for this server
+          const queue = this.requestQueues.get(config.name);
+          if (queue && queue.length > 0) {
+            const queuedRequest = queue.shift()!;
+            if (response.error) {
+              queuedRequest.reject(new Error(response.error));
+            } else {
+              queuedRequest.resolve(response.result || response);
+            }
+            // Process next request in queue
+            this.processNextRequest(config.name);
+          } else {
+            // No pending request, treat as log
+            console.log(`[MCP ${config.name}] ${trimmed}`);
+          }
+        } catch (e) {
+          // Not JSON, treat as log
+          console.log(`[MCP ${config.name}] ${trimmed}`);
+        }
+      }
     });
 
     proc.stderr?.on("data", (data) => {
@@ -146,6 +191,83 @@ export class MCPService {
   stopAll(): void {
     for (const [name] of this.servers) {
       this.stopServer(name);
+    }
+  }
+
+  /**
+   * Send a request to an MCP server and wait for response
+   * Servers respond sequentially, so we use a queue
+   */
+  async sendRequest(serverName: string, method: string, params: Record<string, any>, timeout: number = 30000): Promise<any> {
+    const proc = this.servers.get(serverName);
+    if (!proc || proc.killed) {
+      throw new Error(`MCP server ${serverName} is not running`);
+    }
+
+    // Initialize queue if needed
+    if (!this.requestQueues.has(serverName)) {
+      this.requestQueues.set(serverName, []);
+    }
+
+    return new Promise((resolve, reject) => {
+      const queue = this.requestQueues.get(serverName)!;
+
+      // Set timeout
+      const timeoutId = setTimeout(() => {
+        const index = queue.findIndex(q => q.resolve === resolve);
+        if (index >= 0) {
+          queue.splice(index, 1);
+        }
+        reject(new Error(`MCP request to ${serverName} timed out after ${timeout}ms`));
+      }, timeout);
+
+      // Add to queue with request data
+      const queuedRequest: QueuedRequest = {
+        method,
+        params,
+        resolve: (response: any) => {
+          clearTimeout(timeoutId);
+          resolve(response);
+        },
+        reject: (error: any) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        },
+      };
+
+      queue.push(queuedRequest);
+
+      // Send request if this is the first in queue
+      if (queue.length === 1) {
+        this.processNextRequest(serverName);
+      }
+    });
+  }
+
+  /**
+   * Process the next request in queue for a server
+   */
+  private processNextRequest(serverName: string): void {
+    const proc = this.servers.get(serverName);
+    const queue = this.requestQueues.get(serverName);
+
+    if (!proc || !queue || queue.length === 0 || proc.killed) {
+      return;
+    }
+
+    const request = queue[0];
+    const mcpRequest = {
+      method: request.method,
+      params: request.params,
+    };
+
+    try {
+      proc.stdin?.write(JSON.stringify(mcpRequest) + '\n');
+    } catch (error) {
+      const failedRequest = queue.shift()!;
+      failedRequest.reject(error);
+      // Try next request
+      this.processNextRequest(serverName);
     }
   }
 }

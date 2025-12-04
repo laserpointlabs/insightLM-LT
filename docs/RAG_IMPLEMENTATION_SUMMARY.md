@@ -135,4 +135,3 @@ Make sure these environment variables are set:
 2. **Auto-indexing**: Happens automatically after first manual index
 3. **Performance**: Indexing is async and non-blocking
 4. **Large codebases**: Initial indexing may take time, but subsequent updates are fast
-

@@ -3,6 +3,7 @@ import * as path from "path";
 import { LLMConfig } from "./configService";
 import { WorkbookService } from "./workbookService";
 import { FileService } from "./fileService";
+import { MCPService } from "./mcpService";
 
 export interface LLMMessage {
   role: "user" | "assistant" | "system" | "tool";
@@ -40,6 +41,7 @@ export class LLMService {
   private workbookService: WorkbookService;
   private fileService: FileService;
   private ragIndexService?: any; // RAGIndexService
+  private mcpService?: MCPService;
   private availableTools: ToolDefinition[] = [];
   private filesReadInCurrentChat: Array<{ workbookId: string; workbookName: string; filePath: string; filename: string }> = [];
 
@@ -48,11 +50,13 @@ export class LLMService {
     workbookService: WorkbookService,
     fileService: FileService,
     ragIndexService?: any,
+    mcpService?: MCPService,
   ) {
     this.config = config;
     this.workbookService = workbookService;
     this.fileService = fileService;
     this.ragIndexService = ragIndexService;
+    this.mcpService = mcpService;
     this.initializeTools();
   }
 
@@ -125,6 +129,25 @@ export class LLMService {
         },
       },
       {
+        name: "rag_search_content",
+        description:
+          "Search document CONTENT (not just filenames) across all workbooks. This searches inside PDFs, Word docs, and text files. Use this when users ask about specific terms, concepts, or information that might be inside documents. Returns full content of matching files.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "What to search for (e.g., 'BSEO', 'authentication', 'expiration dates', 'NDA terms')",
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of workbooks to search (default: 5)",
+            },
+          },
+          required: ["query"],
+        },
+      },
+      {
         name: "list_all_workbook_files",
         description:
           "List all files in all workbooks. Use this to see what documents are available.",
@@ -168,24 +191,67 @@ export class LLMService {
 
     // Add file references if any files were read
     if (this.filesReadInCurrentChat.length > 0) {
-      const references = this.filesReadInCurrentChat.map(f =>
-        `📄 [${f.filename}](workbook://${f.workbookId}/${f.filePath})`
-      ).join('\n\n');
+      const references = this.filesReadInCurrentChat.map(f => {
+        // URL-encode the file path to handle spaces and special characters
+        const encodedPath = f.filePath.split('/').map(part => encodeURIComponent(part)).join('/');
+        return `📄 [${f.filename}](workbook://${f.workbookId}/${encodedPath})`;
+      }).join('\n\n');
       response += `\n\n---\n\n**Sources:**\n\n${references}`;
     }
 
     return response;
   }
 
+  /**
+   * Track files from RAG server response
+   * RAG response format:
+   * **filename** (workbook)
+   * Workbook ID: xxx
+   * Path: yyy
+   */
+  private trackFilesFromRAGResponse(content: string): void {
+    const filePattern = /\*\*([^*]+)\*\*\s*\(([^)]+)\)\s*\n\s*Workbook ID:\s*([^\n]+)\s*\n\s*Path:\s*([^\n]+)/g;
+
+    let match;
+    const seenFiles = new Set<string>();
+
+    while ((match = filePattern.exec(content)) !== null) {
+      const filename = match[1].trim();
+      const workbookName = match[2].trim();
+      const workbookId = match[3].trim();
+      const filePath = match[4].trim();
+
+      const fileKey = `${workbookId}:${filePath}`;
+
+      if (!seenFiles.has(fileKey)) {
+        seenFiles.add(fileKey);
+        this.filesReadInCurrentChat.push({
+          workbookId,
+          workbookName,
+          filePath,
+          filename
+        });
+      }
+    }
+  }
+
   private getSystemPrompt(): string {
     return `You are an AI assistant helping users manage and analyze their workbooks and documents.
 
 CRITICAL: When users ask questions about document content, you MUST:
-1. Use list_workbooks or list_all_workbook_files to find relevant files
-2. Use read_workbook_file to READ the actual file content
-3. Answer based on what you READ from the files
+1. If you don't know which files contain the answer, use rag_search_content to search document CONTENT (searches inside PDFs, Word docs, etc.)
+2. If you know the filename, use search_workbooks or list_all_workbook_files
+3. Use read_workbook_file to READ the actual file content if needed
+4. Answer based on what you READ from the files
 
-DO NOT try to answer questions about document content without reading the files first.
+IMPORTANT: Use rag_search_content when users ask about:
+- Specific terms or concepts (e.g., "What is BSEO?", "authentication methods")
+- Information that might be inside documents (not just filenames)
+- Questions where you need to search document content, not just metadata
+
+DO NOT try to answer questions about document content without searching or reading the files first.
+
+IMPORTANT: Do NOT include a "Sources:" section in your response. The system will automatically add source references at the end.
 
 Available tools:
 ${this.availableTools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
@@ -320,6 +386,39 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           return fileList.length > 0
             ? `All files (${fileList.length} total):\n\n${fileList.join("\n\n")}\n\nTo read a file, use read_workbook_file with the workbook ID and file path.`
             : "No files found in workbooks";
+
+        case "rag_search_content":
+          if (!this.mcpService) {
+            return "Error: RAG search service is not available. Please ensure the workbook-rag MCP server is running.";
+          }
+
+          try {
+            const query = args.query || "";
+            const limit = args.limit || 5;
+
+            if (!query) {
+              return "Error: Query parameter is required for content search.";
+            }
+
+            // Call MCP server's rag/search_content method
+            const result = await this.mcpService.sendRequest(
+              "workbook-rag",
+              "rag/search_content",
+              { query, limit },
+              60000 // 60 second timeout for content search
+            );
+
+            if (result && result.content) {
+              // Parse RAG response to track sources
+              this.trackFilesFromRAGResponse(result.content);
+              return result.content;
+            } else {
+              return `No content found matching "${query}". Try a different search term or check if documents exist in workbooks.`;
+            }
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            return `Error searching document content: ${errorMsg}`;
+          }
 
         default:
           return `Unknown tool: ${toolName}`;

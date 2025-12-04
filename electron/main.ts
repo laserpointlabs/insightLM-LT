@@ -176,6 +176,7 @@ app.whenReady().then(() => {
     workbookServiceForLLM,
     fileServiceForLLM,
     ragIndexService, // Pass RAG service for LLM integration
+    mcpService, // Pass MCP service for RAG content search
   );
 
   // Setup IPC handlers

@@ -114,3 +114,5 @@ The chunking function (`chunk_text`) automatically splits large files into multi
 - [ ] Chat persistence → verify chats saved
 - [ ] Chat indexing → verify chats searchable
 
+
+

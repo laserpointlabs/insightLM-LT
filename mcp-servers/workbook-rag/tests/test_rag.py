@@ -5,6 +5,9 @@ Tests that the server can read and answer questions correctly.
 """
 import json
 import sys
+import os
+# Add parent directory to path to import server
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server import handle_request, read_workbook_file, search_workbooks
 
 # Test questions based on actual document content
@@ -131,4 +134,3 @@ def test_server():
 
 if __name__ == "__main__":
     sys.exit(test_server())
-

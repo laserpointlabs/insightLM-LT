@@ -131,3 +131,5 @@ To test file format support:
 3. Check the output for any errors
 4. Search for content from each file type to verify indexing
 
+
+

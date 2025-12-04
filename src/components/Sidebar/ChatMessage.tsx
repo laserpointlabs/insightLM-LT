@@ -41,8 +41,8 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
         if (href) {
           const workbookPath = href.replace('__workbook_link__', '').replace('__', '');
           const urlParts = workbookPath.split('/');
-          const workbookId = urlParts[0];
-          const filePath = urlParts.slice(1).join('/');
+          const workbookId = decodeURIComponent(urlParts[0]);
+          const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
           console.log(`[ChatMessage] Global handler opening:`, { workbookId, filePath });
           openDocument({
@@ -68,8 +68,8 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
 
         if (href) {
           const urlParts = href.replace('workbook://', '').split('/');
-          const workbookId = urlParts[0];
-          const filePath = urlParts.slice(1).join('/');
+          const workbookId = decodeURIComponent(urlParts[0]);
+          const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
           console.log(`[ChatMessage] Global handler opening:`, { workbookId, filePath });
           openDocument({
@@ -116,8 +116,8 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
               if (href?.startsWith('__workbook_link__')) {
                 const workbookPath = href.replace('__workbook_link__', '').replace('__', '');
                 const urlParts = workbookPath.split('/');
-                const workbookId = urlParts[0];
-                const filePath = urlParts.slice(1).join('/');
+                const workbookId = decodeURIComponent(urlParts[0]);
+                const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
                 console.log(`[ChatMessage] Parsed workbook link (marker format) - workbookId: ${workbookId}, filePath: ${filePath}`);
 
@@ -201,8 +201,8 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
               if (href?.startsWith('workbook://')) {
                 // Parse workbook://workbookId/path
                 const urlParts = href.replace('workbook://', '').split('/');
-                const workbookId = urlParts[0];
-                const filePath = urlParts.slice(1).join('/');
+                const workbookId = decodeURIComponent(urlParts[0]);
+                const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
                 console.log(`[ChatMessage] Parsed workbook link - workbookId: ${workbookId}, filePath: ${filePath}`);
 

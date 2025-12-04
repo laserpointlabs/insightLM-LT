@@ -312,3 +312,5 @@ On-demand reading isn't just a different approach to RAG—it's a **fundamentall
 
 As we grow this system, we're building toward a **true AI research assistant** that actively works with your documents, not just searches through them. The future is on-demand, intelligent, and powerful.
 
+
+

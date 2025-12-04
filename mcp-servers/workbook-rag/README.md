@@ -1,5 +1,31 @@
 # Workbook RAG MCP Server
 
+## Directory Structure
+
+```
+workbook-rag/
+├── server.py              # Main server implementation
+├── config.json            # MCP server configuration
+├── requirements.txt       # Python dependencies
+├── README.md             # This file
+├── docs/                 # Documentation
+│   ├── README.md         # Documentation index
+│   ├── IMPLEMENTATION_SUMMARY.md
+│   ├── IMPLEMENTATION_NOTES.md
+│   ├── ON_DEMAND_READING.md
+│   ├── README_CONTENT_SEARCH.md
+│   ├── FILE_FORMATS.md
+│   ├── HOW_TO_TEST.md
+│   ├── CHECK_AUTO_INDEXING.md
+│   └── TEST_RESULTS.md
+└── tests/                # Test files
+    ├── test_content_search_simple.py
+    ├── test_rag.py
+    └── test_llm_flow.py
+```
+
+## Quick Start
+
 Custom RAG (Retrieval-Augmented Generation) system for workbook documents using OpenAI embeddings and LanceDB, following [Continue.dev's custom RAG guide](https://docs.continue.dev/guides/custom-code-rag).
 
 ## Features

@@ -3,6 +3,10 @@
 Test the complete LLM flow for answering questions about documents.
 Simulates what should happen when user asks about static structural testing.
 """
+import sys
+import os
+# Add parent directory to path to import server
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server import handle_request, read_workbook_file
 
 print("=" * 80)
@@ -102,4 +106,3 @@ else:
 
 print()
 print("=" * 80)
-

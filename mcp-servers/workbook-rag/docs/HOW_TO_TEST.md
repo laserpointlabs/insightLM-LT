@@ -257,3 +257,5 @@ Once basic tests pass:
 4. Integrate RAG search into LLM service
 5. Add chat persistence and indexing
 
+
+
