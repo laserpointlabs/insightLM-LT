@@ -134,11 +134,43 @@ Examples:
 
   /**
    * Execute a dashboard query and return results
+   * Now uses the MCP Dashboard Server for dynamic code generation
    */
   async executeQuery(
     query: DashboardQuery,
     workbooks: any[],
   ): Promise<DashboardResult> {
+    // Try to use MCP Dashboard Server if available
+    if (window.electronAPI?.mcp?.dashboardQuery) {
+      try {
+        const response = await window.electronAPI.mcp.dashboardQuery(
+          query.question,
+          query.workbookId
+        );
+
+        // Check if MCP call was successful
+        if (response && response.success && response.result) {
+          // Store the generated code in the query (caller will save it)
+          if (response.generatedCode && query.id) {
+            // We can't modify query here, but caller will handle it
+            console.log("Generated code:", response.generatedCode.substring(0, 100) + "...");
+          }
+
+          return response.result;
+        } else if (response && response.error) {
+          console.error("MCP Dashboard error:", response.error);
+          return {
+            type: "error",
+            error: response.error
+          };
+        }
+      } catch (error) {
+        console.error("Failed to call MCP Dashboard Server, falling back to legacy:", error);
+        // Fall through to legacy implementation
+      }
+    }
+
+    // Legacy implementation (fallback)
     const targetWorkbook = query.workbookId
       ? workbooks.find((w) => w.id === query.workbookId)
       : workbooks.find((w) => !w.archived);
