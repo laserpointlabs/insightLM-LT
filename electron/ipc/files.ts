@@ -1,10 +1,13 @@
 import { ipcMain } from "electron";
 import { FileService } from "../services/fileService";
 import { getWorkbookService } from "./workbooks";
+import { RAGIndexService } from "../services/ragIndexService";
 
 let fileService: FileService;
+let ragIndexService: RAGIndexService | null = null;
 
-export function setupFileIPC() {
+export function setupFileIPC(ragService?: RAGIndexService) {
+  ragIndexService = ragService || null;
   fileService = new FileService(getWorkbookService());
 
   ipcMain.handle(
@@ -12,6 +15,13 @@ export function setupFileIPC() {
     async (_, workbookId: string, sourcePath: string, filename?: string) => {
       try {
         await fileService.addDocument(workbookId, sourcePath, filename);
+        // Auto-index the new file
+        if (ragIndexService) {
+          const finalFilename = filename || require("path").basename(sourcePath);
+          ragIndexService.indexFile(workbookId, `documents/${finalFilename}`).catch((err) => {
+            console.error("Error auto-indexing file:", err);
+          });
+        }
       } catch (error) {
         console.error("Error adding file:", error);
         throw error;
@@ -48,6 +58,12 @@ export function setupFileIPC() {
     async (_, workbookId: string, relativePath: string) => {
       try {
         await fileService.deleteDocument(workbookId, relativePath);
+        // Remove from index
+        if (ragIndexService) {
+          ragIndexService.removeFileFromIndex(workbookId, relativePath).catch((err) => {
+            console.error("Error removing file from index:", err);
+          });
+        }
       } catch (error) {
         console.error("Error deleting file:", error);
         throw error;
@@ -86,6 +102,12 @@ export function setupFileIPC() {
     ) => {
       try {
         await fileService.writeDocument(workbookId, relativePath, content);
+        // Auto-index the updated file
+        if (ragIndexService) {
+          ragIndexService.indexFile(workbookId, relativePath).catch((err) => {
+            console.error("Error auto-indexing updated file:", err);
+          });
+        }
       } catch (error) {
         console.error("Error writing file:", error);
         throw error;

@@ -98,6 +98,28 @@ async function createWindow() {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  // Prevent external links from opening new windows
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    console.log(`[Electron] setWindowOpenHandler called with url:`, url);
+    // Block workbook:// protocol links from opening externally
+    if (url.startsWith('workbook://')) {
+      console.log(`[Electron] BLOCKING workbook:// link from opening new window`);
+      return { action: 'deny' };
+    }
+    // Allow other links to open in default browser
+    console.log(`[Electron] Allowing link to open:`, url);
+    return { action: 'allow' };
+  });
+
+  // Intercept navigation to prevent workbook:// links from navigating
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    console.log(`[Electron] will-navigate event fired with url:`, url);
+    if (url.startsWith('workbook://')) {
+      console.log(`[Electron] PREVENTING navigation to workbook:// link`);
+      event.preventDefault();
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -121,6 +143,18 @@ app.whenReady().then(() => {
         "mcp-servers",
         serverConfig.name,
       );
+
+      // For workbook-rag server, ensure OpenAI API key is passed
+      if (serverConfig.name === "workbook-rag" && !serverConfig.env?.OPENAI_API_KEY) {
+        const llmConfig = configService.loadLLMConfig();
+        if (llmConfig.apiKey) {
+          serverConfig.env = {
+            ...serverConfig.env,
+            OPENAI_API_KEY: llmConfig.apiKey,
+          };
+        }
+      }
+
       mcpService.startServer(serverConfig, serverPath);
     }
   }
@@ -132,16 +166,21 @@ app.whenReady().then(() => {
   workbookServiceForLLM.initialize(appConfig.dataDir);
   const fileServiceForLLM = new FileService(workbookServiceForLLM);
 
+  // Initialize RAG indexing service
+  const { RAGIndexService } = require("./services/ragIndexService");
+  const ragIndexService = new RAGIndexService(appConfig.dataDir, configService);
+
   // Initialize LLM service
   const llmService = new LLMService(
     llmConfig,
     workbookServiceForLLM,
     fileServiceForLLM,
+    ragIndexService, // Pass RAG service for LLM integration
   );
 
   // Setup IPC handlers
   setupWorkbookIPC(configService);
-  setupFileIPC();
+  setupFileIPC(ragIndexService); // Pass RAG service for auto-indexing
   setupArchiveIPC(configService);
   setupDashboardIPC(configService);
 

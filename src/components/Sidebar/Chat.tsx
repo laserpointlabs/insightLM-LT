@@ -63,8 +63,14 @@ export function Chat({ onActionButton }: ChatProps = {}) {
 
     const userMessage = input.trim();
     setInput("");
+    
+    // Filter out any tool or system messages - only send user and assistant messages
+    const cleanedMessages = messages.filter(
+      msg => msg.role === "user" || msg.role === "assistant"
+    );
+    
     const newMessages = [
-      ...messages,
+      ...cleanedMessages,
       { role: "user" as const, content: userMessage },
     ];
     setMessages(newMessages);

@@ -1,7 +1,10 @@
 {
   "name": "workbook-rag",
-  "description": "Vector search for workbook documents",
-  "command": "python",
+  "description": "Vector search for workbook documents using OpenAI embeddings and LanceDB",
+  "command": ".venv\\Scripts\\python.exe",
   "args": ["server.py"],
-  "enabled": true
+  "enabled": true,
+  "env": {
+    "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+  }
 }

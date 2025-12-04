@@ -31,3 +31,5 @@ export function WorkbenchViewSwitcher({ views }: WorkbenchViewSwitcherProps) {
     </div>
   );
 }
+
+

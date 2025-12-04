@@ -2,7 +2,7 @@
   "name": "insightlm-lt",
   "version": "1.0.0",
   "description": "Lightweight desktop application for workbook management and AI chat",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "clean": "kill-port 5173 5174 5175 5176 5177 5178 5179 5180",
     "predev": "npm run clean || echo \"No ports to clean\"",

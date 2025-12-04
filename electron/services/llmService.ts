@@ -9,6 +9,14 @@ export interface LLMMessage {
   content: string;
   tool_call_id?: string;
   name?: string;
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
 }
 
 export interface ToolCall {
@@ -31,16 +39,20 @@ export class LLMService {
   private config: LLMConfig;
   private workbookService: WorkbookService;
   private fileService: FileService;
+  private ragIndexService?: any; // RAGIndexService
   private availableTools: ToolDefinition[] = [];
+  private filesReadInCurrentChat: Array<{ workbookId: string; workbookName: string; filePath: string; filename: string }> = [];
 
   constructor(
     config: LLMConfig,
     workbookService: WorkbookService,
     fileService: FileService,
+    ragIndexService?: any,
   ) {
     this.config = config;
     this.workbookService = workbookService;
     this.fileService = fileService;
+    this.ragIndexService = ragIndexService;
     this.initializeTools();
   }
 
@@ -103,19 +115,32 @@ export class LLMService {
       {
         name: "search_workbooks",
         description:
-          "Search for files across workbooks by filename or content. Use this to find relevant documents.",
+          "Search for files across workbooks by filename. Use this to find relevant documents.",
         parameters: {
           type: "object",
           properties: {
-            query: { type: "string", description: "The search query" },
+            query: { type: "string", description: "The search query (filename)" },
           },
           required: ["query"],
+        },
+      },
+      {
+        name: "list_all_workbook_files",
+        description:
+          "List all files in all workbooks. Use this to see what documents are available.",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: [],
         },
       },
     ];
   }
 
   async chat(messages: LLMMessage[]): Promise<string> {
+    // Reset files read tracker for new chat request
+    this.filesReadInCurrentChat = [];
+
     // Add system message with tool definitions if not present
     const systemMessage: LLMMessage = {
       role: "system",
@@ -126,33 +151,52 @@ export class LLMService {
       ? messages
       : [systemMessage, ...messages];
 
+    let response: string;
     switch (this.config.provider) {
       case "openai":
-        return this.chatWithToolsOpenAI(messagesWithSystem);
+        response = await this.chatWithToolsOpenAI(messagesWithSystem);
+        break;
       case "claude":
-        return this.chatWithToolsClaude(messagesWithSystem);
+        response = await this.chatWithToolsClaude(messagesWithSystem);
+        break;
       case "ollama":
-        return this.chatWithToolsOllama(messagesWithSystem);
+        response = await this.chatWithToolsOllama(messagesWithSystem);
+        break;
       default:
         throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
     }
+
+    // Add file references if any files were read
+    if (this.filesReadInCurrentChat.length > 0) {
+      const references = this.filesReadInCurrentChat.map(f =>
+        `📄 [${f.filename}](workbook://${f.workbookId}/${f.filePath})`
+      ).join('\n\n');
+      response += `\n\n---\n\n**Sources:**\n\n${references}`;
+    }
+
+    return response;
   }
 
   private getSystemPrompt(): string {
     return `You are an AI assistant helping users manage and analyze their workbooks and documents.
 
+CRITICAL: When users ask questions about document content, you MUST:
+1. Use list_workbooks or list_all_workbook_files to find relevant files
+2. Use read_workbook_file to READ the actual file content
+3. Answer based on what you READ from the files
+
+DO NOT try to answer questions about document content without reading the files first.
+
 Available tools:
 ${this.availableTools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
 
-When users ask questions about their documents:
-1. First use list_workbooks to see what workbooks exist
-2. Use read_workbook_file to read relevant documents
-3. Answer questions based on the document content
-4. When asked to create summaries, tables, or analyses, use create_file_in_workbook to save them as markdown files
+Example workflow:
+User: "What are the key tests for static structural testing?"
+You: Call list_all_workbook_files() → find test_plan.md → call read_workbook_file(workbookId, "documents/test_plan.md") → read content → answer with actual content from file
 
-Always render markdown tables and formatting properly in your responses. When creating files, use proper markdown formatting including tables, headers, lists, etc.
+When creating summaries/tables/analyses, use create_file_in_workbook to save as markdown.
 
-Workbook file paths are relative to the workbook root, typically starting with "documents/" for files in the documents folder.`;
+File paths are relative to workbook root (e.g., "documents/filename.ext").`;
   }
 
   private async executeTool(
@@ -162,11 +206,30 @@ Workbook file paths are relative to the workbook root, typically starting with "
     try {
       switch (toolName) {
         case "read_workbook_file":
-          const content = await this.fileService.readDocument(
-            args.workbookId,
-            args.filePath,
-          );
-          return `File content:\n${content}`;
+          try {
+            const content = await this.fileService.readDocument(
+              args.workbookId,
+              args.filePath,
+            );
+
+            // Track file for references
+            const workbook = await this.workbookService.getWorkbook(args.workbookId);
+            if (workbook) {
+              const filename = args.filePath.split('/').pop() || args.filePath;
+              this.filesReadInCurrentChat.push({
+                workbookId: args.workbookId,
+                workbookName: workbook.name,
+                filePath: args.filePath,
+                filename: filename
+              });
+            }
+
+            return `File content:\n${content}`;
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error(`[LLM] Error reading file:`, errorMsg);
+            return `Error reading file: ${errorMsg}. Make sure you're using the workbook ID (UUID), not the workbook name.`;
+          }
 
         case "list_workbooks":
           const workbooks = await this.workbookService.getWorkbooks();
@@ -180,9 +243,9 @@ Workbook file paths are relative to the workbook root, typically starting with "
                 .filter((d: any) => !d.archived)
                 .map((d: any) => `  - ${d.filename}`)
                 .join("\n");
-              return `Workbook: ${w.name} (ID: ${w.id})\nDocuments:\n${docList || "  (no documents)"}`;
+              return `Workbook: ${w.name}\nID: ${w.id}\nDocuments:\n${docList || "  (no documents)"}`;
             })
-            .join("\n\n");
+            .join("\n\n") + "\n\nTo read a file, use the workbook ID (not the name) and the file path shown.";
 
         case "create_file_in_workbook":
           const fileName = args.fileName.startsWith("documents/")
@@ -244,6 +307,20 @@ Workbook file paths are relative to the workbook root, typically starting with "
             ? `Found ${results.length} file(s):\n${results.map((r) => `- ${r}`).join("\n")}`
             : `No files found matching "${args.query}"`;
 
+        case "list_all_workbook_files":
+          const allWb = await this.workbookService.getWorkbooks();
+          const fileList: string[] = [];
+
+          for (const wb of allWb.filter((w) => !w.archived)) {
+            for (const doc of wb.documents.filter((d: any) => !d.archived)) {
+              fileList.push(`Workbook: ${wb.name} (ID: ${wb.id})\n  File: ${doc.filename}\n  Path: ${doc.path}`);
+            }
+          }
+
+          return fileList.length > 0
+            ? `All files (${fileList.length} total):\n\n${fileList.join("\n\n")}\n\nTo read a file, use read_workbook_file with the workbook ID and file path.`
+            : "No files found in workbooks";
+
         default:
           return `Unknown tool: ${toolName}`;
       }
@@ -253,6 +330,9 @@ Workbook file paths are relative to the workbook root, typically starting with "
   }
 
   private async chatWithToolsOpenAI(messages: LLMMessage[]): Promise<string> {
+    console.log(`[LLM] Calling OpenAI with ${this.availableTools.length} tools available`);
+    console.log(`[LLM] Tools: ${this.availableTools.map(t => t.name).join(", ")}`);
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -286,12 +366,15 @@ Workbook file paths are relative to the workbook root, typically starting with "
 
     // Handle tool calls
     if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+      console.log(`[LLM] Tool calls requested: ${choice.message.tool_calls.length}`);
       const toolResults: LLMMessage[] = [];
 
       for (const toolCall of choice.message.tool_calls) {
         const toolName = toolCall.function.name;
         const toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+        console.log(`[LLM] Executing tool: ${toolName}`, toolArgs);
         const result = await this.executeTool(toolName, toolArgs);
+        console.log(`[LLM] Tool result length: ${result.length} characters`);
 
         toolResults.push({
           role: "tool",
@@ -305,6 +388,7 @@ Workbook file paths are relative to the workbook root, typically starting with "
       messages.push({
         role: "assistant",
         content: choice.message.content || "",
+        tool_calls: choice.message.tool_calls,
       });
 
       // Add tool results
@@ -455,25 +539,63 @@ Workbook file paths are relative to the workbook root, typically starting with "
   }
 
   private formatMessagesForOpenAI(messages: LLMMessage[]): any[] {
-    return messages.map((msg) => {
+    const formatted: any[] = [];
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+
       if (msg.role === "tool") {
-        return {
+        // Tool messages must have a tool_call_id
+        if (!msg.tool_call_id) {
+          console.warn("Skipping tool message without tool_call_id");
+          continue;
+        }
+        // Check if there's a preceding assistant message with tool_calls in the ORIGINAL messages array
+        // Look backwards from current position to find the most recent assistant message with tool_calls
+        let foundAssistantWithToolCalls = false;
+        for (let j = i - 1; j >= 0; j--) {
+          const prevMsg = messages[j];
+          if (prevMsg.role === "assistant" && prevMsg.tool_calls) {
+            // Verify this tool_call_id exists in the assistant's tool_calls
+            const toolCallExists = prevMsg.tool_calls.some(
+              (tc: any) => tc.id === msg.tool_call_id
+            );
+            if (toolCallExists) {
+              foundAssistantWithToolCalls = true;
+              break;
+            }
+          }
+          // Stop if we hit a non-assistant message (user/system) - tool messages must follow their assistant message
+          if (prevMsg.role !== "assistant" && prevMsg.role !== "tool") {
+            break;
+          }
+        }
+
+        if (!foundAssistantWithToolCalls) {
+          console.warn(`Tool message without preceding assistant message with matching tool_calls for tool_call_id: ${msg.tool_call_id}, skipping`);
+          continue;
+        }
+
+        formatted.push({
           role: "tool",
           content: msg.content,
           tool_call_id: msg.tool_call_id,
-        };
-      }
-      if (msg.role === "assistant" && msg.name) {
-        return {
+        });
+      } else if (msg.role === "assistant" && msg.tool_calls) {
+        formatted.push({
           role: "assistant",
+          content: msg.content || null,
+          tool_calls: msg.tool_calls,
+        });
+      } else {
+        // Regular user, assistant, or system message
+        formatted.push({
+          role: msg.role,
           content: msg.content,
-          tool_calls: [], // Will be populated by API
-        };
+        });
       }
-      return {
-        role: msg.role,
-        content: msg.content,
-      };
-    });
+    }
+
+    return formatted;
   }
 }

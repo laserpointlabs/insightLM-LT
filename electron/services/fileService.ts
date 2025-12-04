@@ -9,7 +9,7 @@ export class FileService {
     this.workbookService = workbookService;
   }
 
-  addDocument(workbookId: string, sourcePath: string, filename?: string): void {
+  addDocument(workbookId: string, sourcePath: string, filename?: string): Promise<void> {
     const workbook = this.workbookService.getWorkbook(workbookId);
     if (!workbook) {
       throw new Error(`Workbook not found: ${workbookId}`);
@@ -47,6 +47,8 @@ export class FileService {
 
     metadata.updated = new Date().toISOString();
     fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+
+    return Promise.resolve();
   }
 
   readDocument(workbookId: string, relativePath: string): string {
@@ -95,7 +97,7 @@ export class FileService {
     workbookId: string,
     relativePath: string,
     content: string,
-  ): void {
+  ): Promise<void> {
     const workbookPath = path.join(
       this.workbookService["workbooksDir"],
       workbookId,
@@ -113,13 +115,15 @@ export class FileService {
       metadata.updated = new Date().toISOString();
       return metadata;
     });
+
+    return Promise.resolve();
   }
 
   renameDocument(
     workbookId: string,
     oldRelativePath: string,
     newName: string,
-  ): void {
+  ): Promise<void> {
     const workbookPath = path.join(
       this.workbookService["workbooksDir"],
       workbookId,
@@ -150,9 +154,11 @@ export class FileService {
       }
       return metadata;
     });
+
+    return Promise.resolve();
   }
 
-  deleteDocument(workbookId: string, relativePath: string): void {
+  deleteDocument(workbookId: string, relativePath: string): Promise<void> {
     const workbookPath = path.join(
       this.workbookService["workbooksDir"],
       workbookId,
@@ -175,6 +181,8 @@ export class FileService {
       );
       return metadata;
     });
+
+    return Promise.resolve();
   }
 
   moveDocument(
