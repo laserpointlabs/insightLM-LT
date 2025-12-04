@@ -1,5 +1,17 @@
 import { DashboardResult } from "../../types/dashboard";
 import ReactMarkdown from "react-markdown";
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 
 interface DashboardResultsProps {
   result: DashboardResult;
@@ -59,11 +71,161 @@ export function DashboardResults({ result }: DashboardResultsProps) {
         {result.subtitle && (
           <div className="mt-1 text-xs opacity-80">{result.subtitle}</div>
         )}
+        {result.items && result.items.length > 0 && (
+          <div className="mt-2 text-xs opacity-90">
+            {result.items.map((item, idx) => (
+              <div key={idx}>• {item}</div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
 
-  // Graph type (Plotly HTML)
+  // Date type
+  if (result.type === "date") {
+    const daysUntil = result.daysUntil || 0;
+    const levelClass = daysUntil < 30 ? "border-red-200 bg-red-50 text-red-600" :
+                       daysUntil < 90 ? "border-yellow-200 bg-yellow-50 text-yellow-700" :
+                       "border-blue-200 bg-blue-50 text-blue-600";
+
+    return (
+      <div className={`mt-2 rounded border p-3 ${levelClass}`}>
+        <div className="text-2xl font-bold">
+          {result.date ? new Date(result.date).toLocaleDateString() : "N/A"}
+        </div>
+        {result.label && (
+          <div className="mt-1 text-sm font-medium">{result.label}</div>
+        )}
+        {result.daysUntil !== undefined && (
+          <div className="mt-1 text-xs opacity-80">
+            {result.daysUntil} days {result.daysUntil < 0 ? "overdue" : "remaining"}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Color/status type
+  if (result.type === "color") {
+    const colorClasses = {
+      green: "border-green-300 bg-green-100",
+      yellow: "border-yellow-300 bg-yellow-100",
+      red: "border-red-300 bg-red-100",
+    };
+    const textColorClasses = {
+      green: "text-green-700",
+      yellow: "text-yellow-800",
+      red: "text-red-700",
+    };
+    const color = result.color || "green";
+
+    return (
+      <div className={`mt-2 rounded border-4 p-3 ${colorClasses[color]}`}>
+        <div className={`text-4xl font-bold text-center ${textColorClasses[color]}`}>
+          {color === "green" && "✓"}
+          {color === "yellow" && "⚠"}
+          {color === "red" && "✗"}
+        </div>
+        {result.label && (
+          <div className={`mt-2 text-sm font-bold text-center ${textColorClasses[color]}`}>
+            {result.label}
+          </div>
+        )}
+        {result.message && (
+          <div className={`mt-1 text-xs text-center ${textColorClasses[color]}`}>
+            {result.message}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Graph type (new JSON data format)
+  if (result.type === "graph" && result.data) {
+    // Validate data structure
+    if (!result.data.labels || !result.data.values) {
+      console.error("Invalid graph data:", result.data);
+      return (
+        <div className="mt-2 rounded border border-red-200 bg-red-50 p-3">
+          <div className="text-sm font-semibold text-red-700">Invalid Graph Data</div>
+          <div className="mt-1 text-xs text-red-600">
+            Data must have 'labels' and 'values' arrays
+          </div>
+          <div className="mt-1 text-xs text-gray-600">
+            Received: {JSON.stringify(result.data)}
+          </div>
+        </div>
+      );
+    }
+
+    const { labels, values } = result.data;
+
+    // Validate arrays
+    if (!Array.isArray(labels) || !Array.isArray(values)) {
+      console.error("Graph labels/values not arrays:", { labels, values });
+      return (
+        <div className="mt-2 rounded border border-red-200 bg-red-50 p-3">
+          <div className="text-sm font-semibold text-red-700">Invalid Graph Data</div>
+          <div className="mt-1 text-xs text-red-600">
+            Labels and values must be arrays
+          </div>
+        </div>
+      );
+    }
+
+    const chartData = labels.map((label: string, idx: number) => ({
+      name: label,
+      value: values[idx],
+    }));
+
+    const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+
+    // Determine chart type (default to bar)
+    const chartType = result.chartType || "bar";
+
+    if (chartType === "pie") {
+      return (
+        <div className="mt-2 rounded border border-gray-200 bg-white p-2">
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie
+                data={chartData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={60}
+                label
+              >
+                {chartData.map((entry: any, index: number) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      );
+    } else {
+      // Default to bar chart
+      return (
+        <div className="mt-2 rounded border border-gray-200 bg-white p-2">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={chartData}>
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Bar dataKey="value" fill="#3b82f6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      );
+    }
+  }
+
+  // Legacy: Graph type (Plotly HTML - for backward compatibility)
   if (result.type === "graph" && result.html) {
     return (
       <div className="mt-2 rounded border border-gray-200 bg-white">

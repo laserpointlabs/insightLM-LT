@@ -226,6 +226,11 @@ app.whenReady().then(() => {
 
       const llmResponse = await llmService.chat(llmMessages);
 
+      // Log for debugging
+      console.log("[Dashboard MCP] Question:", question);
+      console.log("[Dashboard MCP] Tile Type:", tileType);
+      console.log("[Dashboard MCP] LLM Response:", llmResponse.substring(0, 200));
+
       // Step 3: Format LLM response for visualization
       const formattedResult = await mcpService.sendRequest(
         "workbook-dashboard",
@@ -234,11 +239,13 @@ app.whenReady().then(() => {
           name: "format_llm_response",
           arguments: {
             llmResponse: llmResponse,
-            expectedFormat: queryConfig.llm_request.expected_format,
+            expectedSchema: queryConfig.llm_request.expected_schema,
             tileType: queryConfig.tile_type
           }
         }
       );
+
+      console.log("[Dashboard MCP] Formatted Result:", JSON.stringify(formattedResult).substring(0, 200));
 
       return formattedResult;
     } catch (error) {

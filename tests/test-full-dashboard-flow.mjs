@@ -68,26 +68,26 @@ async function callDashboardMCP(toolName, args) {
   });
 }
 
-// Simulate LLM call (in real app, this would call llmService.chat)
-// For testing, we return mock responses
+// Simulate LLM call (in real app, this would call llmService.chat with RAG tools)
+// For testing, we return mock JSON responses matching the new schemas
 function simulateLLM(systemPrompt, userQuestion) {
   console.log(`\n📝 LLM Call (simulated):`);
   console.log(`   System: ${systemPrompt.substring(0, 80)}...`);
   console.log(`   User: ${userQuestion}`);
 
-  // Mock responses based on question
+  // Mock responses based on question - all in JSON format matching schemas
   if (userQuestion.includes("main gear brake assembly MOS")) {
-    return "0.24";
+    return '{"value": 0.24, "label": "Main Gear Brake MOS", "unit": ""}';
   } else if (userQuestion.includes("tests are due within 90 days")) {
-    return "2";
+    return '{"value": 2, "label": "Tests Due Soon", "severity": "medium", "items": ["Main Gear Static (45 days)", "Nose Gear Static (85 days)"]}';
   } else if (userQuestion.includes("document types")) {
-    return '{"labels": ["PDF", "Markdown", "CSV"], "values": [0, 11, 1]}';
+    return '{"labels": ["Markdown", "CSV"], "values": [11, 1], "title": "Document Types"}';
   } else if (userQuestion.includes("tests due soon")) {
-    return '[{"test": "Main Gear Static", "days": 45, "status": "Due Soon"}, {"test": "Nose Gear Static", "days": 85, "status": "Upcoming"}]';
+    return '{"rows": [{"Test": "Main Gear Static", "Days": 45, "Status": "Due Soon"}, {"Test": "Nose Gear Static", "Days": 85, "Status": "Upcoming"}]}';
   } else if (userQuestion.includes("budget status")) {
-    return "**Budget Status**: Project is 3.4% over budget at $3,515,000 vs $3,400,000 planned. Manufacturing is running 12.5% over budget.";
+    return '{"summary": "**Budget Status**: Project is 3.4% over budget at $3,515,000 vs $3,400,000 planned. Manufacturing is running 12.5% over budget.", "keyFacts": ["Total variance: -$115,000", "Manufacturing: -$150,000 over", "Engineering: $15,000 under"]}';
   } else {
-    return "12"; // Default fallback
+    return '{"value": 12, "label": "Total Documents", "unit": "documents"}';
   }
 }
 
@@ -111,7 +111,7 @@ async function testFullFlow(question, tileType, expectedValue = null) {
     }
 
     console.log(`✓ Query config created`);
-    console.log(`  Expected format: ${queryConfig.llm_request.expected_format}`);
+    console.log(`  Expected schema: ${JSON.stringify(queryConfig.llm_request.expected_schema)}`);
 
     // STEP 2: Call LLM (simulated - in real app this calls llmService.chat)
     console.log('\n[STEP 2] Calling LLM (simulated)');
@@ -125,7 +125,7 @@ async function testFullFlow(question, tileType, expectedValue = null) {
     console.log('\n[STEP 3] Calling Dashboard MCP: format_llm_response');
     const formatted = await callDashboardMCP('format_llm_response', {
       llmResponse,
-      expectedFormat: queryConfig.llm_request.expected_format,
+      expectedSchema: queryConfig.llm_request.expected_schema,
       tileType: queryConfig.tile_type
     });
 

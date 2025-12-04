@@ -31,11 +31,12 @@ export function DashboardQueryCard({
     try {
       // Execute query via MCP Dashboard Server (new prompt manager flow)
       if (window.electronAPI?.mcp?.dashboardQuery) {
-        // Determine tile type from query type or result
-        const tileType = query.queryType === "date_range" ? "counter_warning" :
-                        query.queryType === "filter" ? "table" :
-                        query.queryType === "aggregate" ? "graph" :
-                        "counter"; // default
+        // Use tileType if set, otherwise infer from queryType
+        const tileType = query.tileType ||
+                        (query.queryType === "date_range" ? "counter_warning" :
+                         query.queryType === "filter" ? "table" :
+                         query.queryType === "aggregate" ? "graph" :
+                         "counter"); // default
 
         const response = await window.electronAPI.mcp.dashboardQuery(
           query.question,

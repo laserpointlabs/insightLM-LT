@@ -7,104 +7,240 @@ It does NOT read files or couple with other MCP servers.
 import os
 import sys
 import json
+import re
 from typing import Dict, Any, Optional
 
-# Prompt templates for each tile type
-TILE_PROMPTS = {
+# JSON schemas for each tile type
+TILE_SCHEMAS = {
     "counter": {
         "system": """You are a data extraction assistant for dashboard counters.
 The user will ask a question about their documents.
-You must:
+
+You MUST respond with ONLY valid JSON in this exact format:
+{
+  "value": <number>,
+  "label": "<short label>",
+  "unit": "<optional unit like 'documents', 'tests', etc>"
+}
+
+Rules:
 1. Search the documents using available tools
 2. Extract the specific numeric value requested
-3. Return ONLY a single number (no units, no explanation, no formatting)
-4. If you cannot find a specific number, return "N/A"
+3. Return ONLY the JSON object (no markdown, no explanation)
+4. If you cannot find a value, use "value": null
 
 Examples:
-- Question: "What is the main gear brake assembly MOS?"
-  Response: 0.24
+Question: "What is the main gear brake assembly MOS?"
+Response: {"value": 0.24, "label": "Main Gear Brake MOS", "unit": ""}
 
-- Question: "How many tests are due within 90 days?"
-  Response: 2
+Question: "How many tests are due within 90 days?"
+Response: {"value": 2, "label": "Tests Due Soon", "unit": "tests"}
 
-- Question: "What is the manufacturing budget variance?"
-  Response: -150000""",
-        "format": "single_number"
+Question: "What is the manufacturing budget variance?"
+Response: {"value": -150000, "label": "Manufacturing Variance", "unit": "USD"}""",
+        "schema": {
+            "value": "number or null",
+            "label": "string",
+            "unit": "string (optional)"
+        }
     },
-    
+
     "counter_warning": {
         "system": """You are a data extraction assistant for dashboard warning counters.
-The user will ask a question about items that may need attention.
-You must:
-1. Search the documents using available tools
-2. Count items that match the warning criteria (e.g., expiring soon, below threshold)
-3. Return ONLY the count as a number
-4. If zero items match, return "0"
+The user will ask about items that may need attention (expiring, below threshold, etc).
+
+You MUST respond with ONLY valid JSON in this exact format:
+{
+  "value": <number>,
+  "label": "<short label>",
+  "severity": "low|medium|high",
+  "items": ["<item1>", "<item2>"]
+}
+
+Severity levels:
+- "low": 0 items or minor concern
+- "medium": 1-4 items need attention
+- "high": 5+ items need attention
 
 Examples:
-- Question: "How many NDAs are expiring within 90 days?"
-  Response: 2
+Question: "How many NDAs are expiring within 90 days?"
+Response: {"value": 2, "label": "NDAs Expiring Soon", "severity": "medium", "items": ["Acme Aerospace", "Global Avionics"]}
 
-- Question: "How many components have MOS below 0.25?"
-  Response: 2""",
-        "format": "single_number"
+Question: "How many components have MOS below 0.25?"
+Response: {"value": 2, "label": "Low MOS Components", "severity": "high", "items": ["Brake Assembly (0.24)", "Wing Spar Outboard (0.21)"]}""",
+        "schema": {
+            "value": "number",
+            "label": "string",
+            "severity": "low|medium|high",
+            "items": "array of strings"
+        }
     },
-    
+
     "graph": {
         "system": """You are a data extraction assistant for dashboard charts.
 The user will ask for data to visualize.
-You must:
+
+You MUST respond with ONLY valid JSON in this exact format:
+{
+  "labels": ["label1", "label2", "label3"],
+  "values": [number1, number2, number3],
+  "title": "<chart title>"
+}
+
+Rules:
 1. Search the documents using available tools
 2. Extract the relevant data
-3. Return data in JSON format: {"labels": [...], "values": [...]}
-4. Labels should be strings, values should be numbers
-5. Return ONLY the JSON object, no explanation
+3. Labels must be strings, values must be numbers
+4. Arrays must be same length
+5. Return ONLY the JSON object (no markdown, no explanation)
 
 Examples:
-- Question: "Show document types breakdown"
-  Response: {"labels": ["PDF", "Markdown", "CSV"], "values": [0, 11, 1]}
+Question: "Show document types breakdown"
+Response: {"labels": ["PDF", "Markdown", "CSV"], "values": [0, 11, 1], "title": "Document Types"}
 
-- Question: "Show tests by days until due"
-  Response: {"labels": ["Main Gear", "Nose Gear", "Wing Spar"], "values": [45, 85, 125]}""",
-        "format": "json_chart_data"
+Question: "Show tests by days until due"
+Response: {"labels": ["Main Gear", "Nose Gear", "Wing Spar"], "values": [45, 85, 125], "title": "Tests by Days Until Due"}
+
+Question: "Show MOS values for main gear components"
+Response: {"labels": ["Trunnion", "Shock Strut", "Axle", "Brake"], "values": [0.33, 0.32, 0.31, 0.24], "title": "Main Gear MOS Values"}""",
+        "schema": {
+            "labels": "array of strings",
+            "values": "array of numbers",
+            "title": "string"
+        }
     },
-    
+
     "table": {
         "system": """You are a data extraction assistant for dashboard tables.
 The user will ask for a list of items.
-You must:
+
+You MUST respond with ONLY valid JSON in this exact format:
+{
+  "rows": [
+    {"column1": "value1", "column2": "value2"},
+    {"column1": "value3", "column2": "value4"}
+  ]
+}
+
+Rules:
 1. Search the documents using available tools
-2. Extract the relevant items
-3. Return data as JSON array: [{"col1": "val1", "col2": "val2"}, ...]
-4. Each object is one table row
-5. Return ONLY the JSON array, no explanation
+2. Extract all relevant items
+3. Each row must have the same columns
+4. Keep column names short and clear
+5. Return ONLY the JSON object (no markdown, no explanation)
 
 Examples:
-- Question: "List all tests due soon"
-  Response: [{"test": "Main Gear Static", "days": 45, "status": "Due Soon"}, {"test": "Nose Gear Static", "days": 85, "status": "Upcoming"}]
+Question: "List all tests due soon"
+Response: {"rows": [{"Test": "Main Gear Static", "Days": 45, "Status": "Due Soon"}, {"Test": "Nose Gear Static", "Days": 85, "Status": "Upcoming"}]}
 
-- Question: "List components with low MOS"
-  Response: [{"component": "Brake Assembly", "mos": 0.24, "location": "Main Gear"}, {"component": "Wing Spar Outboard", "mos": 0.21, "location": "Wing"}]""",
-        "format": "json_table_data"
+Question: "List components with low MOS"
+Response: {"rows": [{"Component": "Brake Assembly", "MOS": 0.24, "Location": "Main Gear"}, {"Component": "Wing Spar Outboard", "MOS": 0.21, "Location": "Wing"}]}
+
+Question: "List all NDAs expiring in 2025"
+Response: {"rows": [{"Company": "Acme Aerospace", "Expires": "2025-08-15", "Days": 253}, {"Company": "Global Avionics", "Expires": "2025-06-30", "Days": 207}]}""",
+        "schema": {
+            "rows": "array of objects with consistent columns"
+        }
     },
-    
+
     "text": {
         "system": """You are a data extraction assistant for dashboard text summaries.
 The user will ask for a summary or explanation.
-You must:
+
+You MUST respond with ONLY valid JSON in this exact format:
+{
+  "summary": "<brief markdown-formatted text>",
+  "keyFacts": ["<fact1>", "<fact2>", "<fact3>"]
+}
+
+Rules:
 1. Search the documents using available tools
-2. Provide a brief, informative summary
-3. Use markdown formatting for emphasis
-4. Keep it concise (2-4 sentences)
-5. Include key numbers and facts
+2. Provide a brief summary (2-4 sentences max)
+3. Use markdown for emphasis (**, *, etc)
+4. Include 2-5 key facts as bullet points
+5. Return ONLY the JSON object (no markdown, no explanation)
 
 Examples:
-- Question: "Summarize budget status"
-  Response: **Budget Status**: Project is 3.4% over budget at $3,515,000 vs $3,400,000 planned. Manufacturing is the primary concern, running 12.5% over budget at $150,000 overspend.
+Question: "Summarize budget status"
+Response: {"summary": "**Budget Status**: Project is 3.4% over budget at $3,515,000 vs $3,400,000 planned. Manufacturing is the primary concern, running 12.5% over budget.", "keyFacts": ["Total variance: -$115,000", "Manufacturing: -$150,000 (12.5% over)", "Engineering: $15,000 under budget"]}
 
-- Question: "Summarize test readiness"
-  Response: **Test Readiness**: 2 tests due within 90 days. Main Gear Static Test in 45 days requires immediate action. Nose Gear Static Test in 85 days is on track.""",
-        "format": "markdown_text"
+Question: "Summarize test readiness"
+Response: {"summary": "**Test Readiness**: 2 tests due within 90 days require immediate preparation.", "keyFacts": ["Main Gear Static: 45 days (Critical)", "Nose Gear Static: 85 days (On track)", "Wing Spar Static: 125 days (Planned)"]}""",
+        "schema": {
+            "summary": "string (markdown formatted)",
+            "keyFacts": "array of strings"
+        }
+    },
+
+    "date": {
+        "system": """You are a data extraction assistant for dashboard date displays.
+The user will ask for specific dates or date ranges.
+
+You MUST respond with ONLY valid JSON in this exact format:
+{
+  "date": "<YYYY-MM-DD>",
+  "label": "<short label>",
+  "daysUntil": <number or null>
+}
+
+Rules:
+1. Search the documents using available tools
+2. Extract the specific date requested
+3. Calculate days until that date from today
+4. Return ONLY the JSON object (no markdown, no explanation)
+
+Examples:
+Question: "When does the Acme Aerospace NDA expire?"
+Response: {"date": "2025-08-15", "label": "Acme Aerospace NDA Expiration", "daysUntil": 253}
+
+Question: "When is the main gear static test?"
+Response: {"date": "2025-02-18", "label": "Main Gear Static Test", "daysUntil": 45}
+
+Question: "What is the PDR date?"
+Response: {"date": "2025-03-15", "label": "Preliminary Design Review", "daysUntil": 70}""",
+        "schema": {
+            "date": "string (ISO date YYYY-MM-DD)",
+            "label": "string",
+            "daysUntil": "number or null"
+        }
+    },
+
+    "color": {
+        "system": """You are a data extraction assistant for dashboard status indicators.
+The user will ask about status or health of something.
+
+You MUST respond with ONLY valid JSON in this exact format:
+{
+  "color": "green|yellow|red",
+  "label": "<status label>",
+  "message": "<brief explanation>"
+}
+
+Color meanings:
+- "green": Good status, no issues, passing
+- "yellow": Warning, needs attention, marginal
+- "red": Critical, failing, immediate action required
+
+Rules:
+1. Search the documents using available tools
+2. Assess the status/health
+3. Choose appropriate color
+4. Return ONLY the JSON object (no markdown, no explanation)
+
+Examples:
+Question: "What is the status of the wing spar outboard?"
+Response: {"color": "yellow", "label": "Wing Spar Outboard", "message": "MOS of 0.21 is below preferred 0.25 threshold"}
+
+Question: "What is the budget health?"
+Response: {"color": "red", "label": "Project Budget", "message": "3.4% over budget, manufacturing 12.5% over"}
+
+Question: "What is the test readiness status?"
+Response: {"color": "yellow", "label": "Test Readiness", "message": "2 tests due within 90 days, main gear test in 45 days"}""",
+        "schema": {
+            "color": "green|yellow|red",
+            "label": "string",
+            "message": "string"
+        }
     }
 }
 
@@ -113,123 +249,206 @@ def create_llm_request(question: str, tile_type: str) -> Dict[str, Any]:
     """
     Create an LLM request with the appropriate prompt for the tile type
     """
-    if tile_type not in TILE_PROMPTS:
+    if tile_type not in TILE_SCHEMAS:
         tile_type = "text"  # Default fallback
-    
-    prompt_config = TILE_PROMPTS[tile_type]
-    
+
+    schema_config = TILE_SCHEMAS[tile_type]
+
     return {
-        "system_prompt": prompt_config["system"],
+        "system_prompt": schema_config["system"],
         "user_question": question,
-        "expected_format": prompt_config["format"]
+        "expected_schema": schema_config["schema"]
     }
 
 
-def parse_llm_response(response: str, expected_format: str, tile_type: str) -> Dict[str, Any]:
+def parse_llm_response(response: str, expected_schema: Dict[str, Any], tile_type: str) -> Dict[str, Any]:
     """
-    Parse LLM response and format for visualization
+    Parse LLM response (JSON) and format for visualization
+    All responses should now be JSON objects
     """
     response = response.strip()
-    
+
+    # Extract JSON from response - find first complete JSON object
+    json_str = None
+
+    # First check for markdown code block
+    if '```' in response:
+        code_block_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', response)
+        if code_block_match:
+            json_str = code_block_match.group(1)
+
+    # If no code block, find first { and match braces to get complete object
+    if not json_str:
+        start_idx = response.find('{')
+        if start_idx != -1:
+            brace_count = 0
+            in_string = False
+            escape_next = False
+
+            for i in range(start_idx, len(response)):
+                char = response[i]
+
+                if escape_next:
+                    escape_next = False
+                    continue
+
+                if char == '\\':
+                    escape_next = True
+                    continue
+
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            json_str = response[start_idx:i+1]
+                            break
+
+    if not json_str:
+        return {
+            "success": False,
+            "error": f"No valid JSON found in response: {response[:200]}"
+        }
+
     try:
-        if expected_format == "single_number":
-            # Try to extract a number
-            if response.lower() == "n/a":
-                return {
-                    "success": True,
-                    "result": {
-                        "type": tile_type,
-                        "value": "N/A",
-                        "label": "",
-                        "subtitle": "Data not available"
-                    }
+        # Parse JSON response
+        data = json.loads(json_str)
+
+        # Format based on tile type
+        if tile_type == "counter":
+            if "value" not in data:
+                return {"success": False, "error": "Counter response must have 'value' field"}
+
+            return {
+                "success": True,
+                "result": {
+                    "type": "counter",
+                    "value": data["value"],
+                    "label": data.get("label", ""),
+                    "subtitle": data.get("unit", "")
                 }
-            
-            # Extract number from response
-            import re
-            numbers = re.findall(r'-?\d+\.?\d*', response)
-            if numbers:
-                value = float(numbers[0]) if '.' in numbers[0] else int(numbers[0])
-                
-                # Determine warning level for counter_warning
-                level = "success"
-                if tile_type == "counter_warning" and value > 0:
-                    if value >= 5:
-                        level = "danger"
-                    elif value >= 2:
-                        level = "warning"
-                
-                return {
-                    "success": True,
-                    "result": {
-                        "type": tile_type,
-                        "value": value,
-                        "label": "",
-                        "subtitle": "",
-                        **({"level": level} if tile_type == "counter_warning" else {})
-                    }
+            }
+
+        elif tile_type == "counter_warning":
+            if "value" not in data:
+                return {"success": False, "error": "Counter warning response must have 'value' field"}
+
+            # Map severity to level
+            severity_map = {"low": "success", "medium": "warning", "high": "danger"}
+            level = severity_map.get(data.get("severity", "low"), "success")
+
+            return {
+                "success": True,
+                "result": {
+                    "type": "counter_warning",
+                    "value": data["value"],
+                    "label": data.get("label", ""),
+                    "level": level,
+                    "items": data.get("items", [])
                 }
-            else:
-                return {
-                    "success": False,
-                    "error": f"Could not extract number from response: {response}"
-                }
-        
-        elif expected_format == "json_chart_data":
-            # Parse JSON for chart data
-            data = json.loads(response)
+            }
+
+        elif tile_type == "graph":
             if "labels" not in data or "values" not in data:
-                return {
-                    "success": False,
-                    "error": "Chart data must have 'labels' and 'values' fields"
-                }
-            
+                return {"success": False, "error": "Graph data must have 'labels' and 'values' fields"}
+
             return {
                 "success": True,
                 "result": {
                     "type": "graph",
                     "chartType": "bar",  # Default, can be overridden
-                    "data": data
+                    "data": {
+                        "labels": data["labels"],
+                        "values": data["values"]
+                    },
+                    "title": data.get("title", "")
                 }
             }
-        
-        elif expected_format == "json_table_data":
-            # Parse JSON for table data
-            data = json.loads(response)
-            if not isinstance(data, list) or len(data) == 0:
+
+        elif tile_type == "table":
+            if "rows" not in data:
+                return {"success": False, "error": "Table data must have 'rows' field"}
+
+            rows = data["rows"]
+            if len(rows) == 0:
                 return {
-                    "success": False,
-                    "error": "Table data must be a non-empty array of objects"
+                    "success": True,
+                    "result": {
+                        "type": "table",
+                        "columns": [],
+                        "rows": [],
+                        "totalRows": 0
+                    }
                 }
-            
-            columns = list(data[0].keys())
-            
+
+            columns = list(rows[0].keys())
+
             return {
                 "success": True,
                 "result": {
                     "type": "table",
                     "columns": columns,
-                    "rows": data,
-                    "totalRows": len(data)
+                    "rows": rows,
+                    "totalRows": len(rows)
                 }
             }
-        
-        elif expected_format == "markdown_text":
+
+        elif tile_type == "text":
+            if "summary" not in data:
+                return {"success": False, "error": "Text response must have 'summary' field"}
+
+            # Format with key facts as bullet points
+            content = data["summary"]
+            if "keyFacts" in data and data["keyFacts"]:
+                content += "\n\n**Key Facts:**\n"
+                for fact in data["keyFacts"]:
+                    content += f"- {fact}\n"
+
             return {
                 "success": True,
                 "result": {
                     "type": "text",
-                    "content": response,
+                    "content": content,
                     "format": "markdown"
                 }
             }
-        
-        else:
+
+        elif tile_type == "date":
+            if "date" not in data:
+                return {"success": False, "error": "Date response must have 'date' field"}
+
             return {
-                "success": False,
-                "error": f"Unknown format: {expected_format}"
+                "success": True,
+                "result": {
+                    "type": "date",
+                    "date": data["date"],
+                    "label": data.get("label", ""),
+                    "daysUntil": data.get("daysUntil")
+                }
             }
-    
+
+        elif tile_type == "color":
+            if "color" not in data:
+                return {"success": False, "error": "Color response must have 'color' field"}
+
+            return {
+                "success": True,
+                "result": {
+                    "type": "color",
+                    "color": data["color"],
+                    "label": data.get("label", ""),
+                    "message": data.get("message", "")
+                }
+            }
+
+        else:
+            return {"success": False, "error": f"Unknown tile type: {tile_type}"}
+
     except json.JSONDecodeError as e:
         return {
             "success": False,
@@ -249,16 +468,16 @@ def handle_dashboard_query(args: Dict[str, Any]) -> Dict[str, Any]:
     """
     question = args.get('question', '')
     tile_type = args.get('tileType', 'counter')
-    
+
     if not question:
         return {
             "success": False,
             "error": "No question provided"
         }
-    
+
     # Create the LLM request configuration
     llm_request = create_llm_request(question, tile_type)
-    
+
     return {
         "success": True,
         "llm_request": llm_request,
@@ -268,13 +487,13 @@ def handle_dashboard_query(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def handle_format_response(args: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Tool: Takes LLM response and formats it for visualization
+    Tool: Takes LLM response (JSON) and formats it for visualization
     """
     llm_response = args.get('llmResponse', '')
-    expected_format = args.get('expectedFormat', 'single_number')
+    expected_schema = args.get('expectedSchema', {})
     tile_type = args.get('tileType', 'counter')
-    
-    return parse_llm_response(llm_response, expected_format, tile_type)
+
+    return parse_llm_response(llm_response, expected_schema, tile_type)
 
 
 # MCP Server Implementation
@@ -284,18 +503,18 @@ def handle_tool_call(tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any
         "create_dashboard_query": handle_dashboard_query,
         "format_llm_response": handle_format_response,
     }
-    
+
     handler = handlers.get(tool_name)
     if not handler:
         return {"error": f"Unknown tool: {tool_name}"}
-    
+
     return handler(arguments)
 
 
 def main():
     """Main MCP server loop"""
     print("Dashboard Prompt Manager starting...", file=sys.stderr)
-    
+
     # MCP tool definitions
     tools = [
         {
@@ -310,7 +529,7 @@ def main():
                     },
                     "tileType": {
                         "type": "string",
-                        "enum": ["counter", "counter_warning", "graph", "table", "text"],
+                        "enum": ["counter", "counter_warning", "graph", "table", "text", "date", "color"],
                         "description": "Type of visualization tile"
                     }
                 },
@@ -327,21 +546,20 @@ def main():
                         "type": "string",
                         "description": "The raw LLM response text"
                     },
-                    "expectedFormat": {
-                        "type": "string",
-                        "enum": ["single_number", "json_chart_data", "json_table_data", "markdown_text"],
-                        "description": "Expected format of the response"
+                    "expectedSchema": {
+                        "type": "object",
+                        "description": "Expected JSON schema of the response"
                     },
                     "tileType": {
                         "type": "string",
                         "description": "Type of tile (for additional formatting)"
                     }
                 },
-                "required": ["llmResponse", "expectedFormat", "tileType"]
+                "required": ["llmResponse", "expectedSchema", "tileType"]
             }
         }
     ]
-    
+
     # Send initialization
     init_response = {
         "jsonrpc": "2.0",
@@ -357,29 +575,29 @@ def main():
             }
         }
     }
-    
+
     print(json.dumps(init_response), flush=True)
-    
+
     # Handle requests
     for line in sys.stdin:
         try:
             request = json.loads(line)
             method = request.get('method')
-            
+
             if method == 'tools/call':
                 params = request.get('params', {})
                 tool_name = params.get('name')
                 arguments = params.get('arguments', {})
-                
+
                 result = handle_tool_call(tool_name, arguments)
-                
+
                 response = {
                     "jsonrpc": "2.0",
                     "id": request.get('id'),
                     "result": result
                 }
                 print(json.dumps(response), flush=True)
-                
+
         except Exception as e:
             error_response = {
                 "jsonrpc": "2.0",
@@ -394,4 +612,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

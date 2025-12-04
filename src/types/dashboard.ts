@@ -3,6 +3,7 @@ export interface DashboardQuery {
   question: string;
   title?: string; // Optional custom title (defaults to question if not set)
   queryType: "count" | "filter" | "date_range" | "aggregate" | "custom";
+  tileType?: "counter" | "counter_warning" | "graph" | "table" | "text" | "date" | "color"; // Visualization type
   workbookId?: string;
   filters?: Record<string, any>;
   createdAt: string;
@@ -22,13 +23,22 @@ export interface DashboardResult {
   metadata?: Record<string, any>;
 
   // New MCP format
-  type?: "counter" | "counter_warning" | "graph" | "table" | "text" | "error";
+  type?: "counter" | "counter_warning" | "graph" | "table" | "text" | "date" | "color" | "error";
 
   // Counter types
   label?: string;
   subtitle?: string;
   level?: "success" | "warning" | "danger"; // For counter_warning
   threshold?: number;
+  items?: string[]; // For counter_warning - list of items
+
+  // Date type
+  date?: string; // ISO date
+  daysUntil?: number;
+
+  // Color/status type
+  color?: "green" | "yellow" | "red";
+  message?: string;
 
   // Graph type
   html?: string; // Plotly HTML for interactive charts

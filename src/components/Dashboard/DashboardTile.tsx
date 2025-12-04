@@ -71,13 +71,41 @@ export function DashboardTile({
     setIsRunning(true);
     setError(null);
     try {
-      const queryResult = await dashboardService.executeQuery(query, workbooks);
-      setResult(queryResult);
-      setError(null);
-      updateQuery(dashboardId, query.id, {
-        result: queryResult,
-        lastRun: new Date().toISOString(),
-      });
+      // Execute query via MCP Dashboard Server (new prompt manager flow)
+      if (window.electronAPI?.mcp?.dashboardQuery) {
+        // Determine tile type from query type or explicit tileType
+        const tileType = query.tileType ||
+                        (query.queryType === "date_range" ? "counter_warning" :
+                         query.queryType === "filter" ? "table" :
+                         query.queryType === "aggregate" ? "graph" :
+                         "counter"); // default
+
+        const response = await window.electronAPI.mcp.dashboardQuery(
+          query.question,
+          tileType
+        );
+
+        if (response && response.success && response.result) {
+          setResult(response.result);
+          setError(null);
+          updateQuery(dashboardId, query.id, {
+            result: response.result,
+            lastRun: new Date().toISOString(),
+          });
+        } else if (response && response.error) {
+          setError(response.error);
+          setResult(undefined);
+        }
+      } else {
+        // Fallback to legacy implementation
+        const queryResult = await dashboardService.executeQuery(query, workbooks);
+        setResult(queryResult);
+        setError(null);
+        updateQuery(dashboardId, query.id, {
+          result: queryResult,
+          lastRun: new Date().toISOString(),
+        });
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       console.error("Failed to run query:", err);
