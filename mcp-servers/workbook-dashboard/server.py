@@ -62,12 +62,21 @@ Severity levels:
 - "medium": 1-4 items need attention
 - "high": 5+ items need attention
 
+For expiration questions:
+- Search documents for expiration dates
+- Compare to CURRENT DATE (provided above)
+- Calculate days until expiration
+- Count items expiring within the requested timeframe
+
 Examples:
 Question: "How many NDAs are expiring within 90 days?"
-Response: {"value": 2, "label": "NDAs Expiring Soon", "severity": "medium", "items": ["Acme Aerospace", "Global Avionics"]}
+Response: {"value": 2, "label": "NDAs Expiring Soon", "severity": "medium", "items": ["Acme Aerospace (expires 2025-08-15)", "Global Avionics (expires 2025-06-30)"]}
 
 Question: "How many components have MOS below 0.25?"
-Response: {"value": 2, "label": "Low MOS Components", "severity": "high", "items": ["Brake Assembly (0.24)", "Wing Spar Outboard (0.21)"]}""",
+Response: {"value": 2, "label": "Low MOS Components", "severity": "high", "items": ["Brake Assembly (0.24)", "Wing Spar Outboard (0.21)"]}
+
+Question: "How many tests are due within 90 days?"
+Response: {"value": 2, "label": "Tests Due Soon", "severity": "medium", "items": ["Main Gear Static (45 days)", "Nose Gear Static (85 days)"]}""",
         "schema": {
             "value": "number",
             "label": "string",
@@ -186,18 +195,19 @@ You MUST respond with ONLY valid JSON in this exact format:
 Rules:
 1. Search the documents using available tools
 2. Extract the specific date requested
-3. Calculate days until that date from today
-4. Return ONLY the JSON object (no markdown, no explanation)
+3. Calculate days until that date from CURRENT DATE (provided above)
+4. Use positive numbers for future dates, negative for past dates
+5. Return ONLY the JSON object (no markdown, no explanation)
 
 Examples:
 Question: "When does the Acme Aerospace NDA expire?"
-Response: {"date": "2025-08-15", "label": "Acme Aerospace NDA Expiration", "daysUntil": 253}
+Response: {"date": "2025-08-15", "label": "Acme Aerospace NDA", "daysUntil": 253}
 
 Question: "When is the main gear static test?"
 Response: {"date": "2025-02-18", "label": "Main Gear Static Test", "daysUntil": 45}
 
 Question: "What is the PDR date?"
-Response: {"date": "2025-03-15", "label": "Preliminary Design Review", "daysUntil": 70}""",
+Response: {"date": "2025-03-15", "label": "PDR", "daysUntil": 70}""",
         "schema": {
             "date": "string (ISO date YYYY-MM-DD)",
             "label": "string",
@@ -217,25 +227,42 @@ You MUST respond with ONLY valid JSON in this exact format:
 }
 
 Color meanings:
-- "green": Good status, no issues, passing
-- "yellow": Warning, needs attention, marginal
-- "red": Critical, failing, immediate action required
+- "green": Good status, no issues, passing, within limits
+- "yellow": Warning, needs attention, marginal, approaching limits
+- "red": Critical, failing, immediate action required, exceeded limits
+
+Evaluation Guidelines:
+- For MOS (Margin of Safety):
+  - Green: MOS >= 0.25
+  - Yellow: 0.15 <= MOS < 0.25
+  - Red: MOS < 0.15
+
+- For expirations:
+  - Green: > 90 days until expiration
+  - Yellow: 30-90 days until expiration
+  - Red: < 30 days or already expired
+
+- For budget:
+  - Green: Within budget or < 3% over
+  - Yellow: 3-10% over budget
+  - Red: > 10% over budget
 
 Rules:
 1. Search the documents using available tools
-2. Assess the status/health
-3. Choose appropriate color
-4. Return ONLY the JSON object (no markdown, no explanation)
+2. Extract relevant values (MOS, dates, budget numbers)
+3. Evaluate against thresholds using CURRENT DATE
+4. Choose appropriate color
+5. Return ONLY the JSON object (no markdown, no explanation)
 
 Examples:
-Question: "What is the status of the wing spar outboard?"
-Response: {"color": "yellow", "label": "Wing Spar Outboard", "message": "MOS of 0.21 is below preferred 0.25 threshold"}
+Question: "What is the status of the brake assembly?"
+Response: {"color": "yellow", "label": "Main Gear Brake Assembly", "message": "MOS 0.24 is below preferred 0.25"}
 
 Question: "What is the budget health?"
-Response: {"color": "red", "label": "Project Budget", "message": "3.4% over budget, manufacturing 12.5% over"}
+Response: {"color": "yellow", "label": "Project Budget", "message": "3.4% over budget (-$115,000)"}
 
-Question: "What is the test readiness status?"
-Response: {"color": "yellow", "label": "Test Readiness", "message": "2 tests due within 90 days, main gear test in 45 days"}""",
+Question: "What is the Acme NDA status?"
+Response: {"color": "yellow", "label": "Acme Aerospace NDA", "message": "Expires 2025-08-15 (253 days)"}""",
         "schema": {
             "color": "green|yellow|red",
             "label": "string",
@@ -248,14 +275,25 @@ Response: {"color": "yellow", "label": "Test Readiness", "message": "2 tests due
 def create_llm_request(question: str, tile_type: str) -> Dict[str, Any]:
     """
     Create an LLM request with the appropriate prompt for the tile type
+    Injects current date for time-based calculations
     """
     if tile_type not in TILE_SCHEMAS:
         tile_type = "text"  # Default fallback
 
     schema_config = TILE_SCHEMAS[tile_type]
 
+    # Inject current date into system prompt
+    from datetime import datetime
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
+    system_prompt_with_date = f"""CURRENT DATE: {current_date}
+
+{schema_config["system"]}
+
+Important: Use the current date ({current_date}) for all time-based calculations (days until, expiring soon, etc)."""
+
     return {
-        "system_prompt": schema_config["system"],
+        "system_prompt": system_prompt_with_date,
         "user_question": question,
         "expected_schema": schema_config["schema"]
     }

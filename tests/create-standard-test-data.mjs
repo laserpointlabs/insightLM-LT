@@ -132,28 +132,26 @@ const ac1000Docs = [
 - **Applied Load**: 45,000 lbs
 - **Allowable Load**: 60,000 lbs
 - **Margin of Safety (MOS)**: **0.33**
-- **Status**: ✅ PASS
 
 ### Shock Strut
 - **Applied Load**: 38,000 lbs
 - **Allowable Load**: 50,000 lbs
 - **Margin of Safety (MOS)**: **0.32**
-- **Status**: ✅ PASS
 
 ### Axle
 - **Applied Load**: 52,000 lbs
 - **Allowable Load**: 68,000 lbs
 - **Margin of Safety (MOS)**: **0.31**
-- **Status**: ✅ PASS
 
 ### Brake Assembly
 - **Applied Load**: 42,000 lbs
 - **Allowable Load**: 52,000 lbs
 - **Margin of Safety (MOS)**: **0.24**
-- **Status**: ⚠️ MARGINAL (Review Required)
 
-## Overall Assessment
-Main landing gear meets all structural requirements. Brake assembly MOS is below preferred threshold of 0.25 - recommend design review.
+## Design Requirements
+- **Minimum MOS Required**: 0.15
+- **Preferred MOS**: 0.25
+- **Critical Components MOS**: > 0.25
 `
   },
   {
@@ -171,22 +169,20 @@ Main landing gear meets all structural requirements. Brake assembly MOS is below
 - **Applied Load**: 18,000 lbs
 - **Allowable Load**: 28,000 lbs
 - **Margin of Safety (MOS)**: **0.56**
-- **Status**: ✅ PASS
 
 ### Shock Strut
 - **Applied Load**: 16,500 lbs
 - **Allowable Load**: 24,000 lbs
 - **Margin of Safety (MOS)**: **0.45**
-- **Status**: ✅ PASS
 
 ### Steering Actuator
 - **Applied Load**: 12,000 lbs
 - **Allowable Load**: 15,000 lbs
 - **Margin of Safety (MOS)**: **0.25**
-- **Status**: ✅ PASS
 
-## Overall Assessment
-Nose landing gear exceeds all structural requirements with healthy margins.
+## Design Requirements
+- **Minimum MOS Required**: 0.15
+- **Preferred MOS**: 0.25
 `
   },
   {
@@ -200,25 +196,21 @@ Nose landing gear exceeds all structural requirements with healthy margins.
 - **Bending Moment**: 450,000 in-lbs
 - **Allowable**: 600,000 in-lbs
 - **Margin of Safety (MOS)**: **0.33**
-- **Status**: ✅ PASS
 
 ### Mid-Span (Station 100)
 - **Bending Moment**: 280,000 in-lbs
 - **Allowable**: 350,000 in-lbs
 - **Margin of Safety (MOS)**: **0.25**
-- **Status**: ✅ PASS
 
 ### Outboard (Station 180)
 - **Bending Moment**: 95,000 in-lbs
 - **Allowable**: 115,000 in-lbs
 - **Margin of Safety (MOS)**: **0.21**
-- **Status**: ⚠️ MARGINAL
 
-## Recommendations
-Outboard spar section MOS of 0.21 is below preferred 0.25. Recommend:
-1. Material upgrade to 7075-T6
-2. Increase web thickness by 0.020"
-3. Re-analyze with updated geometry
+## Design Requirements
+- **Minimum MOS Required**: 0.15
+- **Preferred MOS**: 0.25
+- **Critical Sections MOS**: > 0.25
 `
   }
 ];
@@ -240,22 +232,16 @@ const testDocs = [
 
 ### Main Gear Static Test
 - **Test Date**: ${new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-- **Days Until Test**: 45 days
-- **Status**: 🔴 **DUE SOON** (< 60 days)
 - **Prerequisites**: Complete
 - **Test Article**: Ready
 
 ### Nose Gear Static Test
 - **Test Date**: ${new Date(today.getTime() + 85 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-- **Days Until Test**: 85 days
-- **Status**: ⚠️ **UPCOMING** (< 90 days)
 - **Prerequisites**: 90% complete
 - **Test Article**: In fabrication
 
 ### Wing Spar Static Test
 - **Test Date**: ${new Date(today.getTime() + 125 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-- **Days Until Test**: 125 days
-- **Status**: ✅ **ON TRACK**
 - **Prerequisites**: 60% complete
 - **Test Article**: Not started
 
@@ -263,14 +249,12 @@ const testDocs = [
 
 ### Landing Gear Fatigue
 - **Test Date**: ${new Date(today.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-- **Days Until Test**: 180 days
-- **Status**: ✅ **PLANNED**
 - **Cycles Required**: 30,000
 - **Duration**: 8 weeks
 
 ## Milestones
-- **Critical Design Review (CDR)**: ${new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]} (30 days)
-- **First Flight**: ${new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]} (1 year)
+- **Critical Design Review (CDR)**: ${new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+- **First Flight**: ${new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
 `
   },
   {
@@ -278,17 +262,17 @@ const testDocs = [
     addedAt: '2025-01-11T10:00:00Z',
     content: `# Test Readiness Status
 
-## Tests Due Within 90 Days: **2 Tests** 🔴
+## Upcoming Tests
 
-### Immediate Action Required (< 60 days)
-1. **Main Gear Static Test** - 45 days remaining
-   - Action: Final instrumentation checkout
-   - Owner: Structures Team
+### Main Gear Static Test
+- **Action Required**: Final instrumentation checkout
+- **Owner**: Structures Team
+- **Priority**: Critical
 
-### Upcoming (60-90 days)
-2. **Nose Gear Static Test** - 85 days remaining
-   - Action: Complete test article fabrication
-   - Owner: Test Lab
+### Nose Gear Static Test
+- **Action Required**: Complete test article fabrication
+- **Owner**: Test Lab
+- **Priority**: High
 
 ## Risk Items
 - Main gear test fixture requires calibration (15 day lead time)
@@ -312,8 +296,7 @@ const supplierDocs = [
 **Company**: Acme Aerospace Inc.
 **Agreement Type**: Mutual NDA
 **Signed Date**: 2024-08-15
-**Expiration Date**: **2025-08-15**
-**Status**: ⚠️ **EXPIRING IN ${Math.ceil((new Date('2025-08-15') - today) / (24 * 60 * 60 * 1000))} DAYS**
+**Expiration Date**: 2025-08-15
 
 ## Scope
 - Landing gear components
@@ -334,8 +317,7 @@ const supplierDocs = [
 **Company**: TitaniumWorks LLC
 **Agreement Type**: Mutual NDA
 **Signed Date**: 2025-01-10
-**Expiration Date**: **2026-03-20**
-**Status**: ✅ **ACTIVE**
+**Expiration Date**: 2026-03-20
 
 ## Scope
 - Wing spar materials
@@ -356,8 +338,7 @@ const supplierDocs = [
 **Company**: Global Avionics Corp
 **Agreement Type**: One-way NDA
 **Signed Date**: 2024-06-30
-**Expiration Date**: **2025-06-30**
-**Status**: ⚠️ **EXPIRING IN ${Math.ceil((new Date('2025-06-30') - today) / (24 * 60 * 60 * 1000))} DAYS**
+**Expiration Date**: 2025-06-30
 
 ## Scope
 - Flight control systems
@@ -399,36 +380,47 @@ Total,3400000,3515000,-115000,103.4
 ## Budget Overview
 - **Total Budget**: $3,400,000
 - **Actual Spend**: $3,515,000
-- **Variance**: -$115,000 (3.4% over budget) ⚠️
+- **Variance**: -$115,000
 
 ## Cost Breakdown
 
-### Engineering: $485,000 (97% of budget) ✅
+### Engineering
+- **Budgeted**: $500,000
+- **Actual**: $485,000
+- **Variance**: $15,000
 - Design: $280,000
 - Analysis: $125,000
 - CAD/CAM: $80,000
 
-### Manufacturing: $1,350,000 (112.5% of budget) 🔴
-- **OVER BUDGET by $150,000**
-- Tooling: $450,000 (over by $50,000)
-- Fabrication: $600,000 (over by $75,000)
-- Assembly: $300,000 (over by $25,000)
+### Manufacturing
+- **Budgeted**: $1,200,000
+- **Actual**: $1,350,000
+- **Variance**: -$150,000
+- Tooling: $450,000
+- Fabrication: $600,000
+- Assembly: $300,000
 
-### Testing: $275,000 (91.7% of budget) ✅
+### Testing
+- **Budgeted**: $300,000
+- **Actual**: $275,000
+- **Variance**: $25,000
 - Test fixtures: $125,000
 - Instrumentation: $85,000
 - Lab time: $65,000
 
-### Materials: $825,000 (103.1% of budget) ⚠️
+### Materials
+- **Budgeted**: $800,000
+- **Actual**: $825,000
+- **Variance**: -$25,000
 - Aluminum: $300,000
 - Titanium: $225,000
 - Composites: $180,000
 - Hardware: $120,000
 
 ## Risk Items
-- Manufacturing costs trending 12.5% over budget
-- Material costs up 3.1% due to titanium price increase
-- Need cost reduction measures in fabrication
+- Manufacturing costs require review
+- Material costs increased due to titanium price increase
+- Cost reduction measures needed in fabrication
 `
   }
 ];
