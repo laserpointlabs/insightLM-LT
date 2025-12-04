@@ -28,10 +28,10 @@ async function callDashboardMCP(question, workbookId = null) {
   return new Promise((resolve, reject) => {
     const serverPath = path.join(rootDir, 'mcp-servers', 'workbook-dashboard', 'server.py');
     const venvPython = path.join(rootDir, 'mcp-servers', 'workbook-dashboard', '.venv', 'Scripts', 'python.exe');
-    
+
     // Check if venv python exists, otherwise use system python
     const pythonCmd = fs.existsSync(venvPython) ? venvPython : 'python';
-    
+
     const proc = spawn(pythonCmd, [serverPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: path.join(rootDir, 'mcp-servers', 'workbook-dashboard'),
@@ -79,7 +79,7 @@ async function callDashboardMCP(question, workbookId = null) {
       try {
         // Parse responses (skip initialization response)
         const lines = output.split('\n').filter(l => l.trim() && l.startsWith('{'));
-        
+
         if (lines.length < 2) {
           console.error('STDERR:', stderr);
           reject(new Error('No JSON response from server'));
@@ -88,12 +88,12 @@ async function callDashboardMCP(question, workbookId = null) {
 
         // Second response is our result
         const response = JSON.parse(lines[1]);
-        
+
         if (response.error) {
           reject(new Error(`MCP error: ${JSON.stringify(response.error)}`));
           return;
         }
-        
+
         resolve(response.result);
       } catch (error) {
         console.error('Output:', output);
@@ -108,12 +108,12 @@ async function callDashboardMCP(question, workbookId = null) {
 function loadWorkbooks() {
   const dataDir = getDataDir();
   const workbooksFile = path.join(dataDir, 'workbooks.json');
-  
+
   if (!fs.existsSync(workbooksFile)) {
     console.log('No workbooks found. Creating test data...');
     return [];
   }
-  
+
   const data = fs.readFileSync(workbooksFile, 'utf-8');
   return JSON.parse(data);
 }
@@ -156,7 +156,7 @@ async function runTests() {
   // Check workbooks
   const workbooks = loadWorkbooks();
   console.log(`📁 Found ${workbooks.length} workbook(s)`);
-  
+
   if (workbooks.length === 0) {
     console.log('⚠️  No workbooks found. Please create a workbook with some documents first.');
     console.log('   You can do this through the Electron app UI.');
@@ -165,7 +165,7 @@ async function runTests() {
 
   const activeWorkbooks = workbooks.filter(wb => !wb.archived);
   console.log(`📂 Active workbooks: ${activeWorkbooks.map(wb => wb.name).join(', ')}`);
-  
+
   const firstWorkbook = activeWorkbooks[0];
   const docCount = firstWorkbook.documents?.filter(d => !d.archived).length || 0;
   console.log(`📄 First workbook "${firstWorkbook.name}" has ${docCount} document(s)`);
@@ -184,7 +184,7 @@ async function runTests() {
       const response = await callDashboardMCP(test.question, firstWorkbook.id);
 
       console.log(`✓ MCP Call successful`);
-      
+
       if (!response.success) {
         console.log(`❌ FAILED: ${response.error || 'Unknown error'}`);
         if (response.code) {
@@ -281,4 +281,3 @@ runTests().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
-

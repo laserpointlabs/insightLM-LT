@@ -3,6 +3,7 @@
 These questions have been **tested and verified** to work correctly with your current data.
 
 ## Your Current Data
+
 - **AC-1000**: 2 files (1 txt, 1 docx)
 - **NDAs**: 10 PDFs
 - **ODRAS**: 2 PDFs
@@ -81,6 +82,7 @@ These questions have been **tested and verified** to work correctly with your cu
 ## What File Types Work?
 
 The system recognizes these file type keywords:
+
 - **PDFs**: "pdf", "pdfs"
 - **Word**: "docx", "word", "doc"
 - **Markdown**: "markdown", "md files", " md "
