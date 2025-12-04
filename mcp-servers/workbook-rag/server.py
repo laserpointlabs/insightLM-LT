@@ -68,6 +68,31 @@ def extract_text_from_docx(file_path: Path) -> str:
         return f"Error extracting DOCX: {e}"
 
 
+def extract_text_from_excel(file_path: Path) -> str:
+    """Extract text from Excel (XLSX, XLS)"""
+    try:
+        import pandas as pd
+
+        # Read all sheets
+        excel_file = pd.ExcelFile(str(file_path))
+        text_parts = []
+
+        for sheet_name in excel_file.sheet_names:
+            df = pd.read_excel(excel_file, sheet_name=sheet_name)
+
+            # Add sheet name as header
+            text_parts.append(f"=== Sheet: {sheet_name} ===")
+
+            # Convert dataframe to text representation
+            # Include column headers and all rows
+            text_parts.append(df.to_string(index=False))
+            text_parts.append("")  # Empty line between sheets
+
+        return '\n\n'.join(text_parts) if text_parts else ""
+    except Exception as e:
+        return f"Error extracting Excel: {e}"
+
+
 def read_file(file_path: Path) -> str:
     """Read any file type"""
     ext = file_path.suffix.lower()
@@ -76,8 +101,10 @@ def read_file(file_path: Path) -> str:
         return extract_text_from_pdf(file_path)
     elif ext in ['.docx', '.doc']:
         return extract_text_from_docx(file_path)
+    elif ext in ['.xlsx', '.xls']:
+        return extract_text_from_excel(file_path)
     else:
-        # Text file
+        # Text file (includes .csv, .txt, .md, etc.)
         encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
         for encoding in encodings:
             try:
@@ -235,6 +262,78 @@ def search_workbooks(query: str, limit: int = 20) -> List[Dict[str, Any]]:
     return results
 
 
+def extract_context_chunks(content: str, key_terms: List[str], chunk_size: int = 1000, max_chunks: int = 5) -> List[tuple[int, str]]:
+    """
+    Extract context chunks around keyword matches in document content.
+    Returns chunks of text surrounding where keywords are found.
+
+    Args:
+        content: Full document content
+        key_terms: List of keywords to search for
+        chunk_size: Size of chunk (chars before + after keyword)
+        max_chunks: Maximum number of chunks to return
+
+    Returns:
+        List of (position, chunk_text) tuples
+    """
+    content_lower = content.lower()
+    chunks = []
+    positions_covered = set()
+
+    # Find all keyword positions
+    for term in key_terms:
+        if not term or len(term) < 3:
+            continue
+
+        # Find all occurrences of this term
+        pattern = r'\b' + re.escape(term) + r'\b'
+        for match in re.finditer(pattern, content_lower):
+            pos = match.start()
+
+            # Skip if we already have a chunk covering this position
+            if any(abs(pos - covered) < chunk_size // 2 for covered in positions_covered):
+                continue
+
+            # Extract chunk around this position
+            start = max(0, pos - chunk_size // 2)
+            end = min(len(content), pos + chunk_size // 2)
+
+            # Try to break at word boundaries
+            if start > 0:
+                # Find previous space
+                space_before = content.rfind(' ', start - 100, start)
+                if space_before > 0:
+                    start = space_before + 1
+
+            if end < len(content):
+                # Find next space
+                space_after = content.find(' ', end, end + 100)
+                if space_after > 0:
+                    end = space_after
+
+            chunk_text = content[start:end].strip()
+
+            # Add ellipsis if not at document boundaries
+            if start > 0:
+                chunk_text = "..." + chunk_text
+            if end < len(content):
+                chunk_text = chunk_text + "..."
+
+            chunks.append((pos, chunk_text))
+            positions_covered.add(pos)
+
+            if len(chunks) >= max_chunks:
+                break
+
+        if len(chunks) >= max_chunks:
+            break
+
+    # Sort chunks by position in document
+    chunks.sort(key=lambda x: x[0])
+
+    return chunks
+
+
 def search_workbooks_with_content(query: str, limit: int = 5) -> str:
     """Search workbook documents using text matching and return FULL content.
     Returns only files that match the query (score >= 3) plus up to 2 relevant sibling files per workbook.
@@ -333,23 +432,48 @@ def search_workbooks_with_content(query: str, limit: int = 5) -> str:
     MAX_TOTAL_FILES = 2  # Return at most 2 files total
     filtered_docs = filtered_docs[:MAX_TOTAL_FILES]
 
-    # Format results with FULL content
+    # Format results with context-aware chunks
     results = []
     for score, doc in filtered_docs:
-        # Return FULL content so LLM doesn't make things up
-        # Limit per file to avoid token issues (max 10,000 chars per file)
-        max_chars = 10000
-        content = doc["content"]
-        if len(content) > max_chars:
-            content = content[:max_chars] + f"\n\n[Content truncated - total {len(doc['content'])} characters]"
+        # Extract context chunks around keywords instead of returning full content
+        chunks = extract_context_chunks(doc["content"], key_terms, chunk_size=1000, max_chunks=5)
 
-        results.append(f"""**{doc['filename']}** ({doc['workbook_name']})
+        if len(chunks) == 0:
+            # No specific keyword positions found, return beginning of file
+            max_chars = 2000
+            content_preview = doc["content"][:max_chars]
+            if len(doc["content"]) > max_chars:
+                content_preview += f"\n\n[Preview only - document is {len(doc['content'])} characters total. Use read_workbook_file to get the complete document.]"
+
+            results.append(f"""**{doc['filename']}** ({doc['workbook_name']})
 Workbook ID: {doc['workbook_id']}
 Path: {doc['path']}
 Relevance Score: {score}
+Total Length: {len(doc['content'])} characters
 
-=== FULL CONTENT ===
-{content}
+=== PREVIEW (first 2,000 chars) ===
+{content_preview}
+
+---
+""")
+        else:
+            # Return context chunks around keyword matches
+            chunks_text = "\n\n".join([f"[Excerpt {i+1} - Position {pos:,}]\n{chunk}"
+                                        for i, (pos, chunk) in enumerate(chunks)])
+
+            total_chunk_chars = sum(len(chunk) for _, chunk in chunks)
+
+            results.append(f"""**{doc['filename']}** ({doc['workbook_name']})
+Workbook ID: {doc['workbook_id']}
+Path: {doc['path']}
+Relevance Score: {score}
+Total Length: {len(doc['content'])} characters
+Chunks: {len(chunks)} excerpts ({total_chunk_chars} characters total)
+
+=== CONTEXT EXCERPTS (around keywords: {', '.join(key_terms[:5])}) ===
+{chunks_text}
+
+[NOTE: This shows only relevant excerpts. To read the complete document, use read_workbook_file with the workbook ID and path above.]
 
 ---
 """)
