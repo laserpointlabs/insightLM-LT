@@ -1,0 +1,7 @@
+{
+  "name": "workbook-manager",
+  "description": "Workbook CRUD operations",
+  "command": "python",
+  "args": ["server.py"],
+  "enabled": true
+}

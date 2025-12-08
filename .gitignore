@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+dist/
+dist-electron/
+
+# Build outputs
+*.log
+*.local
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Electron
+out/
+build/
+
+# Specstory
+.specstory/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+env.bak/
+env.bak.2/
+env.bak.3/
+env.bak.4/
+env.bak.5/
+env.bak.6/
+env.bak.7/
+env.bak.8/
