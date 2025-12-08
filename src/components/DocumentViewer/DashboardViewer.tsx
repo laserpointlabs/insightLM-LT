@@ -108,19 +108,48 @@ export function DashboardViewer({ dashboardId }: DashboardViewerProps) {
   }
 
   const handleRefreshAll = async () => {
-    // Trigger refresh on all queries by clearing their results
-    // This will cause auto-run to kick in
+    // Refresh all queries using the new MCP flow
     setIsCreating(true);
     try {
       for (const query of dashboard.queries) {
-        await dashboardService.executeQuery(query, workbooks).then(async (result) => {
-          await updateQuery(dashboard.id, query.id, {
-            result,
-            lastRun: new Date().toISOString(),
-          });
-        }).catch(err => {
+        try {
+          // Use MCP Dashboard Server (new prompt manager flow)
+          if (window.electronAPI?.mcp?.dashboardQuery) {
+            // Determine tile type from query
+            const tileType = query.tileType ||
+                            (query.queryType === "date_range" ? "counter_warning" :
+                             query.queryType === "filter" ? "table" :
+                             query.queryType === "aggregate" ? "graph" :
+                             "counter"); // default
+
+            const response = await window.electronAPI.mcp.dashboardQuery(
+              query.question,
+              tileType
+            );
+
+            if (response && response.success && response.result) {
+              await updateQuery(dashboard.id, query.id, {
+                result: response.result,
+                lastRun: new Date().toISOString(),
+              });
+            } else if (response && response.error) {
+              console.error(`Failed to refresh query ${query.id}:`, response.error);
+              await updateQuery(dashboard.id, query.id, {
+                result: { type: "error", error: response.error },
+                lastRun: new Date().toISOString(),
+              });
+            }
+          } else {
+            // Fallback to legacy
+            const result = await dashboardService.executeQuery(query, workbooks);
+            await updateQuery(dashboard.id, query.id, {
+              result,
+              lastRun: new Date().toISOString(),
+            });
+          }
+        } catch (err) {
           console.error(`Failed to refresh query ${query.id}:`, err);
-        });
+        }
       }
     } finally {
       setIsCreating(false);

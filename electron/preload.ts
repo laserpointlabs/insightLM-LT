@@ -82,6 +82,11 @@ try {
   llm: {
     chat: (messages: any[]) => ipcRenderer.invoke("llm:chat", messages),
   },
+
+  mcp: {
+    dashboardQuery: (question: string, tileType?: string) =>
+      ipcRenderer.invoke("mcp:dashboard:query", question, tileType || "counter"),
+  },
 });
 
   console.log("Preload script loaded successfully");

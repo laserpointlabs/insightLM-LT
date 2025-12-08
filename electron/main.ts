@@ -8,7 +8,7 @@ import { setupArchiveIPC } from "./ipc/archive";
 import { setupDashboardIPC } from "./ipc/dashboards";
 import { ConfigService } from "./services/configService";
 import { MCPService } from "./services/mcpService";
-import { LLMService } from "./services/llmService";
+import { LLMService, LLMMessage } from "./services/llmService";
 import { setupUpdater } from "./updater";
 
 let mainWindow: BrowserWindow | null = null;
@@ -192,6 +192,68 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error("Error in LLM chat:", error);
       throw error;
+    }
+  });
+
+  // MCP Dashboard IPC handlers - New 2-step flow
+  ipcMain.handle("mcp:dashboard:query", async (_, question: string, tileType: string = "counter") => {
+    try {
+      // Step 1: Get structured prompt from Dashboard MCP
+      const queryConfig = await mcpService.sendRequest(
+        "workbook-dashboard",
+        "tools/call",
+        {
+          name: "create_dashboard_query",
+          arguments: {
+            question,
+            tileType
+          }
+        }
+      );
+
+      if (!queryConfig.success) {
+        return {
+          success: false,
+          error: queryConfig.error || "Failed to create query"
+        };
+      }
+
+      // Step 2: Call LLM with structured prompt (LLM will use RAG tools)
+      const llmMessages: LLMMessage[] = [
+        { role: "system", content: queryConfig.llm_request.system_prompt },
+        { role: "user", content: queryConfig.llm_request.user_question }
+      ];
+
+      const llmResponse = await llmService.chat(llmMessages);
+
+      // Log for debugging
+      console.log("[Dashboard MCP] Question:", question);
+      console.log("[Dashboard MCP] Tile Type:", tileType);
+      console.log("[Dashboard MCP] LLM Response:", llmResponse.substring(0, 200));
+
+      // Step 3: Format LLM response for visualization
+      const formattedResult = await mcpService.sendRequest(
+        "workbook-dashboard",
+        "tools/call",
+        {
+          name: "format_llm_response",
+          arguments: {
+            llmResponse: llmResponse,
+            expectedSchema: queryConfig.llm_request.expected_schema,
+            tileType: queryConfig.tile_type
+          }
+        }
+      );
+
+      console.log("[Dashboard MCP] Formatted Result:", JSON.stringify(formattedResult).substring(0, 200));
+
+      return formattedResult;
+    } catch (error) {
+      console.error("Error in MCP dashboard query:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
     }
   });
 

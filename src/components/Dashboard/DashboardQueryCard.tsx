@@ -29,14 +29,57 @@ export function DashboardQueryCard({
   const runQuery = async () => {
     setIsRunning(true);
     try {
-      const queryResult = await dashboardService.executeQuery(query, workbooks);
-      setResult(queryResult);
-      updateQuery(dashboardId, query.id, {
-        result: queryResult,
-        lastRun: new Date().toISOString(),
-      });
+      // Execute query via MCP Dashboard Server (new prompt manager flow)
+      if (window.electronAPI?.mcp?.dashboardQuery) {
+        // Use tileType if set, otherwise infer from queryType
+        const tileType = query.tileType ||
+                        (query.queryType === "date_range" ? "counter_warning" :
+                         query.queryType === "filter" ? "table" :
+                         query.queryType === "aggregate" ? "graph" :
+                         "counter"); // default
+
+        const response = await window.electronAPI.mcp.dashboardQuery(
+          query.question,
+          tileType
+        );
+
+        if (response && response.success && response.result) {
+          setResult(response.result);
+          updateQuery(dashboardId, query.id, {
+            result: response.result,
+            lastRun: new Date().toISOString(),
+          });
+        } else if (response && response.error) {
+          const errorResult = {
+            type: "error" as const,
+            error: response.error
+          };
+          setResult(errorResult);
+          updateQuery(dashboardId, query.id, {
+            result: errorResult,
+            lastRun: new Date().toISOString(),
+          });
+        }
+      } else {
+        // Fallback to legacy implementation
+        const queryResult = await dashboardService.executeQuery(query, workbooks);
+        setResult(queryResult);
+        updateQuery(dashboardId, query.id, {
+          result: queryResult,
+          lastRun: new Date().toISOString(),
+        });
+      }
     } catch (error) {
       console.error("Failed to run query:", error);
+      const errorResult = {
+        type: "error" as const,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+      setResult(errorResult);
+      updateQuery(dashboardId, query.id, {
+        result: errorResult,
+        lastRun: new Date().toISOString(),
+      });
     } finally {
       setIsRunning(false);
     }
