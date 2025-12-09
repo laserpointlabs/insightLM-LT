@@ -170,3 +170,4 @@ export class RAGIndexService {
     console.log(`Indexing chat with ${messages.length} messages for workbook ${workbookId || 'global'}`);
   }
 }
+

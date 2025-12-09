@@ -23,3 +23,4 @@ This folder contains all documentation for the workbook-rag MCP server implement
 - **Main README**: See `../README.md` for server setup and configuration
 - **Tests**: See `../tests/` for all test files
 - **Server Code**: See `../server.py` for the main implementation
+

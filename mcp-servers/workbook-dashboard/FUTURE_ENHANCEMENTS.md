@@ -181,3 +181,4 @@ def handle_dashboard_query(args):
 **DECISION**: Document this for future enhancement, but keep LLM-based for MVP.
 
 **When to implement**: When users report accuracy issues with dates/math calculations.
+

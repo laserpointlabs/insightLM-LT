@@ -178,3 +178,4 @@ insightLM-LT/
 - Check documentation in `docs/` folder
 - Review existing issues on GitHub
 - Ask team members for help
+

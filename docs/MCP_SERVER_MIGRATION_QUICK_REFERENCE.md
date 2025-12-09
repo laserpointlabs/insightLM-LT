@@ -392,3 +392,4 @@ if __name__ == "__main__":
 4. Move to next server
 
 See `docs/MCP_SERVER_MIGRATION_PLAN.md` for full migration plan.
+
