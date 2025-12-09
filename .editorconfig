@@ -1,41 +1,30 @@
-# EditorConfig is awesome: https://EditorConfig.org
-
-# top-most EditorConfig file
+# Root EditorConfig
 root = true
 
-# All files
 [*]
-charset = utf-8
 end_of_line = lf
-insert_final_newline = true
-trim_trailing_whitespace = true
-
-# Markdown files
-[*.md]
-trim_trailing_whitespace = true
-insert_final_newline = true
-
-# Code files
-[*.{ts,tsx,js,jsx,py,json,yaml,yml}]
-trim_trailing_whitespace = true
-insert_final_newline = true
+insert_final_newline = false
+charset = utf-8
 indent_style = space
 indent_size = 2
 
-# TypeScript/JavaScript
-[*.{ts,tsx,js,jsx}]
-indent_size = 2
+[*.md]
+end_of_line = lf
 
-# Python
-[*.py]
-indent_size = 4
-
-# JSON
 [*.json]
-indent_size = 2
+end_of_line = lf
 
-# YAML
-[*.{yaml,yml}]
-indent_size = 2
+[*.js]
+end_of_line = lf
 
+[*.ts]
+end_of_line = lf
 
+[*.py]
+end_of_line = lf
+
+[*.yaml]
+end_of_line = lf
+
+[*.yml]
+end_of_line = lf
