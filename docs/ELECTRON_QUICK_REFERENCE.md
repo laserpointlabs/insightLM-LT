@@ -252,3 +252,4 @@ declare global {
 - **electron-updater**: https://www.electron.build/auto-update
 - **IPC Guide**: https://www.electronjs.org/docs/latest/tutorial/ipc
 
+
