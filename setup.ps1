@@ -1,8 +1,8 @@
 # InsightLM-LT Setup Script
-# Installs dependencies, builds, and optionally runs the application
+# Installs dependencies and runs the application
 
 param(
-    [switch]$SkipBuild = $false,
+    [switch]$Build = $false,
     [switch]$SkipRun = $false
 )
 
@@ -43,27 +43,30 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "OK Dependencies installed successfully" -ForegroundColor Green
 
-# Build the application
-if (-not $SkipBuild) {
+# Build the application (optional, requires GTK on Windows)
+if ($Build) {
     Write-Host "`nBuilding application..." -ForegroundColor Yellow
-    
+    Write-Host "Note: Production build requires GTK for Windows (for canvas package)" -ForegroundColor Gray
+
     npm run build
-    
+
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "`nX Build failed" -ForegroundColor Red
-        exit 1
+        Write-Host "`nX Build failed (this is OK for development - use 'npm run dev' instead)" -ForegroundColor Yellow
+        Write-Host "Production builds require GTK: https://github.com/Automattic/node-canvas/wiki/Installation:-Windows" -ForegroundColor Gray
     }
-    
-    Write-Host "OK Build completed successfully" -ForegroundColor Green
+    else {
+        Write-Host "OK Build completed successfully" -ForegroundColor Green
+    }
 }
 
 # Run the application
 if (-not $SkipRun) {
     Write-Host "`n========================================" -ForegroundColor Cyan
-    Write-Host "  Starting InsightLM-LT..." -ForegroundColor Cyan
+    Write-Host "  Starting InsightLM-LT in DEV mode..." -ForegroundColor Cyan
     Write-Host "========================================`n" -ForegroundColor Cyan
-    
+
     npm run dev
 }
-
-Write-Host "`nSetup complete! Run 'npm run dev' to start the application." -ForegroundColor Green
+else {
+    Write-Host "`nSetup complete! Run 'npm run dev' to start the application." -ForegroundColor Green
+}
