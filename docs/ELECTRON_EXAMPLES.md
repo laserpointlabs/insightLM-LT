@@ -774,11 +774,3 @@ export function usePlugins() {
 3. **Convert Core Features**: Refactor existing workbenches to plugin format
 4. **Add Plugin UI**: Create plugin manager interface
 5. **Test Auto-Updates**: Set up GitHub Releases and test update flow
-
-
-
-
-
-
-
-

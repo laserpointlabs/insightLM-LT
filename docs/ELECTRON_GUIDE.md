@@ -777,11 +777,3 @@ A: Use `electron-builder` to include Python runtime, or bundle Python scripts an
 
 **Q: Can plugins be written in languages other than TypeScript?**
 A: Yes, but they need to communicate via IPC or spawn as child processes (like your MCP servers).
-
-
-
-
-
-
-
-

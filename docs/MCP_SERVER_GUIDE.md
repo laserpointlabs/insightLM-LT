@@ -1216,11 +1216,3 @@ console.assert(result.success === true);
 2. Test it manually and with the app
 3. Add more tools as needed
 4. Consider deterministic calculation server for math-heavy workflows
-
-
-
-
-
-
-
-

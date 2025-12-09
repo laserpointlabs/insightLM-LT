@@ -525,11 +525,3 @@ A: FastMCP is flexible - we can extend it or fall back to raw implementation if 
 **Status**: 📋 Planning
 **Last Updated**: 2024-01-XX
 **Owner**: Development Team
-
-
-
-
-
-
-
-
