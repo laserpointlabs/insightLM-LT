@@ -40,3 +40,10 @@ env.bak.5/
 env.bak.6/
 env.bak.7/
 env.bak.8/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
