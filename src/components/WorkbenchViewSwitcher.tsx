@@ -1,4 +1,4 @@
-import { useWorkbenchStore, WorkbenchView } from "../store/workbenchStore";
+﻿import { useWorkbenchStore, WorkbenchView } from "../store/workbenchStore";
 
 interface WorkbenchViewSwitcherProps {
   views: WorkbenchView[];
@@ -31,5 +31,3 @@ export function WorkbenchViewSwitcher({ views }: WorkbenchViewSwitcherProps) {
     </div>
   );
 }
-
-

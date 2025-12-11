@@ -776,3 +776,14 @@ export function usePlugins() {
 5. **Test Auto-Updates**: Set up GitHub Releases and test update flow
 
 
+
+
+
+
+
+
+
+
+
+
+

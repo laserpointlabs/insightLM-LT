@@ -253,3 +253,14 @@ declare global {
 - **IPC Guide**: https://www.electronjs.org/docs/latest/tutorial/ipc
 
 
+
+
+
+
+
+
+
+
+
+
+

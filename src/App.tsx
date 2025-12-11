@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { WorkbooksView } from "./components/Sidebar/WorkbooksView";
 import { Chat } from "./components/Sidebar/Chat";
 import { DashboardView } from "./components/Sidebar/DashboardView";
@@ -9,6 +9,9 @@ import { ResizablePane } from "./components/ResizablePane";
 import { useDocumentStore } from "./store/documentStore";
 import { useLayoutStore } from "./store/layoutStore";
 import { useWorkbenchStore } from "./store/workbenchStore";
+import { extensionRegistry } from "./services/extensionRegistry";
+import { jupyterExtensionManifest } from "./extensions/jupyter";
+import { ExtensionToggle } from "./components/Extensions/ExtensionToggle";
 
 function App() {
   const [dashboardActionButton, setDashboardActionButton] = useState<React.ReactNode>(null);
@@ -26,6 +29,11 @@ function App() {
   const { activeWorkbenchId, workbenches } = useWorkbenchStore();
 
   const activeWorkbench = workbenches.find((w) => w.id === activeWorkbenchId);
+
+  // Register extensions on app startup
+  useEffect(() => {
+    extensionRegistry.register(jupyterExtensionManifest);
+  }, []);
 
   const renderWorkbenchContent = () => {
     // For Insight Workbench (file), show all views stacked vertically with resizing
@@ -164,8 +172,9 @@ function App() {
         className="flex flex-col border-r border-gray-300 bg-white"
         style={{ width: `${sidebarWidth}px` }}
       >
-        <div className="border-b border-gray-200 px-3 py-2">
+        <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
           <h1 className="text-sm font-semibold text-gray-700">insightLM-LT</h1>
+          <ExtensionToggle />
         </div>
         <div className="flex flex-1 flex-col overflow-hidden">
           {renderWorkbenchContent()}

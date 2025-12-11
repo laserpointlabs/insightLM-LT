@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Test context-aware chunking functionality
 """
@@ -158,5 +158,3 @@ def run_all_tests():
 
 if __name__ == "__main__":
     sys.exit(run_all_tests())
-
-

@@ -5,6 +5,35 @@ import { PDFViewer } from "./PDFViewer";
 import { TextViewer } from "./TextViewer";
 import { DashboardViewer } from "./DashboardViewer";
 import { useDocumentStore } from "../../store/documentStore";
+import { extensionRegistry } from "../../services/extensionRegistry";
+
+// Component to handle async component loading
+function AsyncComponentLoader({ componentPromise, props }: { componentPromise: Promise<any>, props: any }) {
+  const [Component, setComponent] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    componentPromise
+      .then((LoadedComponent) => {
+        console.log('AsyncComponentLoader: Component loaded successfully');
+        setComponent(() => LoadedComponent);
+      })
+      .catch((err) => {
+        console.error('AsyncComponentLoader: Failed to load component:', err);
+        setError(err.message);
+      });
+  }, [componentPromise]);
+
+  if (error) {
+    return <div className="p-4 text-red-500">Error loading component: {error}</div>;
+  }
+
+  if (!Component) {
+    return <div className="p-4 text-gray-500">Loading component...</div>;
+  }
+
+  return <Component {...props} />;
+}
 
 export interface OpenDocument {
   id: string;
@@ -25,6 +54,7 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
   const [activeDocId, setActiveDocId] = useState<string | null>(
     documents.length > 0 ? documents[0].id : null,
   );
+  const [, forceExtensionUpdate] = useState(0);
   const {
     hasUnsavedChanges,
     setUnsavedContent,
@@ -99,6 +129,13 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeDocId, activeDoc, handleSave]);
 
+  useEffect(() => {
+    const unsubscribe = extensionRegistry.subscribe(() => {
+      forceExtensionUpdate((v) => v + 1);
+    });
+    return unsubscribe;
+  }, []);
+
   const handleContentChange = (newContent: string) => {
     if (activeDocId) {
       setUnsavedContent(activeDocId, newContent);
@@ -149,6 +186,52 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
       ? (unsavedChanges.get(activeDocId) || activeDoc.content || "")
       : (activeDoc.content || "");
 
+    // Check for extension file handlers first
+    const fileHandlers = extensionRegistry.getFileHandlers(ext);
+    console.log(`DocumentViewer: Looking for handlers for extension "${ext}", found ${fileHandlers.length} handlers`);
+    console.log(`DocumentViewer: Current filename: ${activeDoc.filename}, full path: ${activeDoc.path}`);
+    if (fileHandlers.length > 0) {
+      // Use the first (highest priority) file handler
+      const handler = fileHandlers[0];
+      console.log(`DocumentViewer: Using handler for ${ext}`, handler);
+      try {
+        // Handle async component loading
+        const ComponentPromise = handler.component();
+        if (ComponentPromise instanceof Promise) {
+          // Async component - render a loading state while it loads
+          console.log(`DocumentViewer: Loading async component for ${ext}`);
+          return <AsyncComponentLoader
+            componentPromise={ComponentPromise}
+            props={{
+              content: currentContent,
+              filename: activeDoc.filename,
+              workbookId: activeDoc.workbookId,
+              path: activeDoc.path,
+              onContentChange: handleContentChange
+            }}
+          />;
+        } else {
+          // Sync component
+          console.log(`DocumentViewer: Rendering sync component for ${ext}`);
+          return (
+            <ComponentPromise
+              content={currentContent}
+              filename={activeDoc.filename}
+              workbookId={activeDoc.workbookId}
+              path={activeDoc.path}
+              onContentChange={handleContentChange}
+            />
+          );
+        }
+      } catch (error) {
+        console.error(`DocumentViewer: Error rendering component for ${ext}:`, error);
+        // Fall back to default viewer
+      }
+    } else {
+      console.log(`DocumentViewer: No handlers found for ${ext}, using default viewer`);
+    }
+
+    // Fall back to built-in viewers
     if (ext === "md" || ext === "markdown") {
       return (
         <MarkdownViewer

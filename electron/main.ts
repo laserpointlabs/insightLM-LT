@@ -7,11 +7,12 @@ import { setupFileIPC } from "./ipc/files";
 import { setupArchiveIPC } from "./ipc/archive";
 import { setupDashboardIPC } from "./ipc/dashboards";
 import { ConfigService } from "./services/configService";
-import { MCPService } from "./services/mcpService";
+import { MCPService, MCPServerConfig } from "./services/mcpService";
 import { LLMService, LLMMessage } from "./services/llmService";
 import { setupUpdater } from "./updater";
 
 let mainWindow: BrowserWindow | null = null;
+let mcpService!: MCPService;
 
 // Function to check if a port is available (Vite is running)
 function checkPort(port: number): Promise<boolean> {
@@ -51,6 +52,12 @@ async function createWindow() {
 
   console.log("Preload path:", preloadPath);
   console.log("Preload exists:", fs.existsSync(preloadPath));
+
+  // Enable remote debugging in development mode for MCP server access
+  if (isDev) {
+    app.commandLine.appendSwitch('remote-debugging-port', '9222');
+    console.log("Remote debugging enabled on port 9222");
+  }
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -134,9 +141,14 @@ app.whenReady().then(() => {
   const llmConfig = configService.loadLLMConfig();
 
   // Initialize MCP service
-  const mcpService = new MCPService(path.join(process.cwd(), "mcp-servers"));
+  mcpService = new MCPService(path.join(process.cwd(), "mcp-servers"));
   const mcpServers = mcpService.discoverServers();
   for (const serverConfig of mcpServers) {
+    // Jupyter server is managed by the Jupyter extension toggle; skip auto-start
+    if (serverConfig.name === "jupyter-server") {
+      console.log("[MCP] Skipping auto-start for jupyter-server (extension-managed)");
+      continue;
+    }
     if (serverConfig.enabled) {
       const serverPath = path.join(
         process.cwd(),
@@ -257,6 +269,45 @@ app.whenReady().then(() => {
     }
   });
 
+  // General MCP call handler
+  ipcMain.handle("mcp:call", async (_, serverName: string, method: string, params?: any) => {
+    try {
+      return await mcpService.sendRequest(serverName, method, params);
+    } catch (error) {
+      console.error("Error in MCP call:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  });
+
+  // Jupyter notebook execution handler - uses real MCP jupyter-server
+  ipcMain.handle("mcp:jupyter:executeCell", async (_, workbookId: string, notebookPath: string, cellIndex: number, code: string) => {
+    try {
+      console.log('Executing cell via real Jupyter kernel:', { workbookId, notebookPath, cellIndex, codeLength: code.length });
+
+      // Use the real jupyter-server MCP to execute code
+      const result = await mcpService.sendRequest(
+        "jupyter-server",
+        "tools/call",
+        {
+          name: "execute_cell",
+          arguments: {
+            code: code,
+            kernel_name: "python3"
+          }
+        }
+      );
+
+      console.log('Jupyter execution result:', result);
+      return result;
+    } catch (error) {
+      console.error("Error executing jupyter cell:", error);
+      throw error;
+    }
+  });
+
   // File dialog handlers
   ipcMain.handle("dialog:openFile", async () => {
     const result = await dialog.showOpenDialog({
@@ -298,4 +349,59 @@ app.on("window-all-closed", () => {
 // IPC handlers will be added here
 ipcMain.handle("app:getVersion", () => {
   return app.getVersion();
+});
+
+// Extension lifecycle for MCP servers
+ipcMain.handle("extensions:setEnabled", async (_event, extensionId: string, enabled: boolean, server?: {
+  name: string;
+  description?: string;
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  serverPath: string;
+}) => {
+  try {
+    if (!mcpService) {
+      throw new Error("MCP service not initialized");
+    }
+
+    if (!server) {
+      console.warn(`[extensions] No server config provided for ${extensionId}, nothing to ${enabled ? 'start' : 'stop'}`);
+      return;
+    }
+
+    // Resolve server path
+    const serverPath = path.isAbsolute(server.serverPath)
+      ? server.serverPath
+      : path.join(process.cwd(), server.serverPath);
+
+    // Build MCPServerConfig
+    const config: MCPServerConfig = {
+      name: server.name,
+      description: server.description || "",
+      command: server.command,
+      args: server.args,
+      env: server.env,
+      enabled,
+    };
+
+    // Ensure INSIGHTLM_DATA_DIR is set if provided by app config
+    if (!config.env) config.env = {};
+    if (!config.env.INSIGHTLM_DATA_DIR) {
+      const configService = new ConfigService();
+      const appConfig = configService.loadAppConfig();
+      if (appConfig.dataDir) {
+        config.env.INSIGHTLM_DATA_DIR = appConfig.dataDir;
+      }
+    }
+
+    if (enabled) {
+      mcpService.startServer(config, serverPath);
+    } else {
+      mcpService.stopServer(config.name);
+    }
+  } catch (err) {
+    console.error(`Failed to ${enabled ? 'enable' : 'disable'} extension server for ${extensionId}:`, err);
+    throw err;
+  }
 });

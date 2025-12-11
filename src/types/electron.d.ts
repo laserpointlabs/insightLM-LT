@@ -1,5 +1,15 @@
 export interface ElectronAPI {
   getVersion: () => Promise<string>;
+  extensions?: {
+    setEnabled: (extensionId: string, enabled: boolean, server?: {
+      name: string;
+      description?: string;
+      command: string;
+      args: string[];
+      env?: Record<string, string>;
+      serverPath: string;
+    }) => Promise<void>;
+  };
   workbook: {
     create: (name: string) => Promise<any>;
     getAll: () => Promise<any[]>;

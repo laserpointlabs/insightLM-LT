@@ -47,6 +47,7 @@ export class MCPService {
         try {
           const content = fs.readFileSync(configPath, "utf-8");
           const config = JSON.parse(content) as MCPServerConfig;
+          console.log(`[MCP Discovery] Found server: ${config.name}, enabled: ${config.enabled}`);
           configs.push(config);
         } catch (error) {
           console.error(
@@ -61,6 +62,8 @@ export class MCPService {
   }
 
   startServer(config: MCPServerConfig, serverPath: string): void {
+    console.log(`[MCP] Starting server: ${config.name}, enabled: ${config.enabled}`);
+
     if (this.servers.has(config.name)) {
       console.warn(`Server ${config.name} is already running`);
       return;

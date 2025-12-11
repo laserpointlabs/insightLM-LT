@@ -106,15 +106,31 @@ export class FileService {
     );
     const filePath = path.join(workbookPath, relativePath);
 
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`File not found: ${relativePath}`);
+    // Ensure the directory exists
+    const dirPath = path.dirname(filePath);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
     }
 
     fs.writeFileSync(filePath, content, "utf-8");
 
-    // Update workbook metadata timestamp
+    // Update workbook metadata
     this.updateWorkbookMetadata(workbookId, (metadata) => {
       metadata.updated = new Date().toISOString();
+
+      // Add the document to the workbook metadata if it's not already there
+      const existingIndex = metadata.documents.findIndex(
+        (doc: any) => doc.filename === path.basename(relativePath),
+      );
+
+      if (existingIndex < 0) {
+        metadata.documents.push({
+          filename: path.basename(relativePath),
+          path: relativePath,
+          addedAt: new Date().toISOString(),
+        });
+      }
+
       return metadata;
     });
 

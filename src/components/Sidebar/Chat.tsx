@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { AddIcon, HistoryIcon, GearIcon } from "../Icons";
 
@@ -63,12 +63,12 @@ export function Chat({ onActionButton }: ChatProps = {}) {
 
     const userMessage = input.trim();
     setInput("");
-    
+
     // Filter out any tool or system messages - only send user and assistant messages
     const cleanedMessages = messages.filter(
       msg => msg.role === "user" || msg.role === "assistant"
     );
-    
+
     const newMessages = [
       ...cleanedMessages,
       { role: "user" as const, content: userMessage },

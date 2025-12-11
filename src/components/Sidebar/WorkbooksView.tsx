@@ -3,7 +3,9 @@ import { useDocumentStore } from "../../store/documentStore";
 import { useWorkbookStore } from "../../store/workbookStore";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { InputDialog } from "../InputDialog";
-import { AddIcon, RefreshIcon, CollapseAllIcon, FileIcon, NotebookIcon } from "../Icons";
+import { AddIcon, RefreshIcon, CollapseAllIcon, FileIcon } from "../Icons";
+import { extensionRegistry } from "../../services/extensionRegistry";
+import { WorkbookActionContribution } from "../../types";
 
 interface WorkbooksViewProps {
   onActionButton?: (button: React.ReactNode) => void;
@@ -12,6 +14,7 @@ interface WorkbooksViewProps {
 export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
   const { workbooks, setWorkbooks, loading, setLoading, error, setError } =
     useWorkbookStore();
+  const [workbookActions, setWorkbookActions] = useState<WorkbookActionContribution[]>(extensionRegistry.getWorkbookActions());
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -137,6 +140,13 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
 
   const handleCollapseAll = useCallback(() => {
     setExpandedWorkbooks(new Set());
+  }, []);
+
+  useEffect(() => {
+    const updateActions = () => setWorkbookActions(extensionRegistry.getWorkbookActions());
+    updateActions();
+    const unsubscribe = extensionRegistry.subscribe(updateActions);
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -317,6 +327,20 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     });
   };
 
+  const runWorkbookAction = async (action: WorkbookActionContribution, workbookId: string) => {
+    try {
+      const result = await action.onClick(workbookId);
+      await loadWorkbooks();
+      if (action.id === "jupyter.create-notebook" && typeof result === "string") {
+        alert(`Notebook "${result}" created successfully!`);
+      }
+    } catch (error) {
+      console.error(`Failed to run action ${action.id}:`, error);
+      const actionLabel = action.title || "action";
+      alert(`Failed to ${actionLabel.toLowerCase()}: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  };
+
   const handleAddFile = async (workbookId: string) => {
     if (!window.electronAPI?.dialog || !window.electronAPI?.file) {
       alert("Electron API not available");
@@ -439,17 +463,19 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                   >
                     <FileIcon className="h-4 w-4" />
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // TODO: Implement notebook creation
-                      console.log("Create notebook for workbook:", workbook.id);
-                    }}
-                    className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
-                    title="Create New Notebook"
-                  >
-                    <NotebookIcon className="h-4 w-4" />
-                  </button>
+                  {workbookActions.map((action) => (
+                    <button
+                      key={action.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        runWorkbookAction(action, workbook.id);
+                      }}
+                      className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                      title={action.title}
+                    >
+                      {action.icon ? <action.icon className="h-4 w-4" /> : <span className="text-xs">{action.title}</span>}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>

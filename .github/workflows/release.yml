@@ -1,0 +1,49 @@
+name: Release Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag or ref to build"
+        required: false
+        default: ""
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "npm"
+
+      - name: Install GTK/Cairo (for canvas)
+        run: choco install -y gtk-runtime
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (tsc + react)
+        run: npm run build
+
+      - name: Package (electron-builder)
+        env:
+          # adjust if you need GH_TOKEN for publishing
+          CI: true
+        run: npm run package
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            dist-electron/dist/*
+            dist-electron/*.exe
+            dist-electron/*.zip
+

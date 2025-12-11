@@ -86,6 +86,22 @@ try {
   mcp: {
     dashboardQuery: (question: string, tileType?: string) =>
       ipcRenderer.invoke("mcp:dashboard:query", question, tileType || "counter"),
+    jupyterExecuteCell: (workbookId: string, notebookPath: string, cellIndex: number, code: string) =>
+      ipcRenderer.invoke("mcp:jupyter:executeCell", workbookId, notebookPath, cellIndex, code),
+    call: (serverName: string, method: string, params?: any) =>
+      ipcRenderer.invoke("mcp:call", serverName, method, params),
+  },
+
+  // Extension lifecycle controls
+  extensions: {
+    setEnabled: (extensionId: string, enabled: boolean, server?: {
+      name: string;
+      description?: string;
+      command: string;
+      args: string[];
+      env?: Record<string, string>;
+      serverPath: string;
+    }) => ipcRenderer.invoke("extensions:setEnabled", extensionId, enabled, server),
   },
 });
 

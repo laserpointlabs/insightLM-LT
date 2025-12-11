@@ -1,4 +1,4 @@
-import * as fs from "fs";
+﻿import * as fs from "fs";
 import * as path from "path";
 import { spawn } from "child_process";
 import { ConfigService } from "./configService";
@@ -170,5 +170,3 @@ export class RAGIndexService {
     console.log(`Indexing chat with ${messages.length} messages for workbook ${workbookId || 'global'}`);
   }
 }
-
-
