@@ -171,6 +171,21 @@ app.whenReady().then(() => {
     }
   }
 
+  // Lightweight RAG health check (logs green light or failure for telemetry)
+  const checkRagHealth = async () => {
+    try {
+      const result = await mcpService.sendRequest("workbook-rag", "rag/health", {}, 10000);
+      console.log("[RAG] Health check OK:", result);
+    } catch (err) {
+      console.warn("[RAG] Health check FAILED:", err instanceof Error ? err.message : err);
+    }
+  };
+
+  // Kick off health check without blocking startup
+  checkRagHealth().catch((err) =>
+    console.warn("[RAG] Health check error (async):", err instanceof Error ? err.message : err),
+  );
+
   // Initialize services for LLM (need separate instances)
   const { WorkbookService } = require("./services/workbookService");
   const { FileService } = require("./services/fileService");

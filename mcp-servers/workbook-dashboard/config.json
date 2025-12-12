@@ -1,7 +1,7 @@
 {
   "name": "workbook-dashboard",
   "description": "Dashboard visualization server that generates and executes plotting code",
-  "command": ".venv\\Scripts\\python.exe",
+  "command": "python",
   "args": ["server.py"],
   "enabled": true,
   "env": {

@@ -417,6 +417,7 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
             }
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("[RAG] Content search failed:", errorMsg);
             return `Error searching document content: ${errorMsg}`;
           }
 
