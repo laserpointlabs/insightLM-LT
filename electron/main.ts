@@ -14,6 +14,12 @@ import { setupUpdater } from "./updater";
 let mainWindow: BrowserWindow | null = null;
 let mcpService!: MCPService;
 
+// Enable remote debugging in development mode (must be before app.whenReady())
+if (process.env.NODE_ENV === "development" || !app.isPackaged) {
+  app.commandLine.appendSwitch('remote-debugging-port', '9222');
+  console.log("Remote debugging enabled on port 9222");
+}
+
 // Function to check if a port is available (Vite is running)
 function checkPort(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -53,12 +59,6 @@ async function createWindow() {
   console.log("Preload path:", preloadPath);
   console.log("Preload exists:", fs.existsSync(preloadPath));
 
-  // Enable remote debugging in development mode for MCP server access
-  if (isDev) {
-    app.commandLine.appendSwitch('remote-debugging-port', '9222');
-    console.log("Remote debugging enabled on port 9222");
-  }
-
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -68,7 +68,7 @@ async function createWindow() {
       nodeIntegration: false,
     },
     titleBarStyle: "default",
-    show: false, // Don't show until ready
+    show: true, // Show immediately to debug UI issues
   });
 
   // Log when the window is ready
@@ -129,7 +129,7 @@ async function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Setup updater (check for updates on startup)
   if (app.isPackaged) {
     setupUpdater();
@@ -140,51 +140,121 @@ app.whenReady().then(() => {
   const appConfig = configService.loadAppConfig();
   const llmConfig = configService.loadLLMConfig();
 
-  // Initialize MCP service
-  mcpService = new MCPService(path.join(process.cwd(), "mcp-servers"));
-  const mcpServers = mcpService.discoverServers();
-  for (const serverConfig of mcpServers) {
-    // Jupyter server is managed by the Jupyter extension toggle; skip auto-start
-    if (serverConfig.name === "jupyter-server") {
-      console.log("[MCP] Skipping auto-start for jupyter-server (extension-managed)");
-      continue;
-    }
-    if (serverConfig.enabled) {
-      const serverPath = path.join(
-        process.cwd(),
-        "mcp-servers",
-        serverConfig.name,
-      );
+  // Initialize Tool Registry for dynamic tool discovery
+  const { ToolRegistry } = require("./services/toolRegistry");
+  const toolRegistry = new ToolRegistry();
 
-      // For workbook-rag server, ensure OpenAI API key is passed
-      if (serverConfig.name === "workbook-rag" && !serverConfig.env?.OPENAI_API_KEY) {
-        const llmConfig = configService.loadLLMConfig();
-        if (llmConfig.apiKey) {
-          serverConfig.env = {
-            ...serverConfig.env,
-            OPENAI_API_KEY: llmConfig.apiKey,
-          };
-        }
+  // Initialize Tool Provider Registry (Phase 3: Generic tool execution)
+  const { ToolProviderRegistry } = require("./services/toolProviderRegistry");
+  const { MCPToolProvider } = require("./services/providers/mcpToolProvider");
+  const toolProviderRegistry = new ToolProviderRegistry(toolRegistry);
+
+  // Initialize MCP service (non-blocking)
+  try {
+    mcpService = new MCPService(path.join(process.cwd(), "mcp-servers"));
+
+    // Wire MCP service to tool registry for dynamic tool discovery
+    mcpService.setToolDiscoveryCallback((serverName, tools) => {
+      console.log(`[Main] Tools discovered from ${serverName}: ${tools.length} tools`);
+      toolRegistry.registerTools(serverName, tools);
+    });
+
+    // Wire MCP service to tool registry for tool cleanup on server stop
+    mcpService.setServerStopCallback((serverName) => {
+      console.log(`[Main] Server ${serverName} stopped, unregistering tools`);
+      console.log(`[Main] ToolRegistry instance:`, toolRegistry ? 'exists' : 'missing');
+      console.log(`[Main] Calling unregisterTools for ${serverName}`);
+      toolRegistry.unregisterTools(serverName);
+      console.log(`[Main] unregisterTools call completed for ${serverName}`);
+    });
+
+    // Mark extension-managed servers (will be populated by extensions)
+    // jupyter-server is managed by jupyter extension
+    mcpService.markExtensionManaged("jupyter-server");
+
+    const mcpServers = mcpService.discoverServers();
+
+    // Initialize Tool Provider Registry
+    await toolProviderRegistry.initialize();
+
+    // Register MCP Tool Provider
+    const mcpProvider = new MCPToolProvider(
+      "mcp-provider",
+      mcpService,
+      toolRegistry,
+      mcpServers, // All discovered MCP servers
+      100 // Priority
+    );
+    await toolProviderRegistry.registerProvider({ provider: mcpProvider });
+
+    for (const serverConfig of mcpServers) {
+      // Skip extension-managed servers (they're started by extensions)
+      if (mcpService.isExtensionManaged(serverConfig.name)) {
+        console.log(`[MCP] Skipping auto-start for ${serverConfig.name} (extension-managed)`);
+        continue;
       }
 
-      mcpService.startServer(serverConfig, serverPath);
+      const serverPath = path.join(mcpService["serversDir"], serverConfig.name);
+      if (fs.existsSync(serverPath)) {
+        console.log(`[MCP] Auto-starting server: ${serverConfig.name}`);
+        mcpService.startServer(serverConfig, serverPath);
+      } else {
+        console.warn(`[MCP] Server directory not found: ${serverPath}`);
+      }
+    }
+  } catch (error) {
+    console.warn("MCP service initialization failed, continuing without MCP servers:", error);
+    // Create a minimal MCP service stub to prevent crashes
+    mcpService = {
+      isServerRunning: () => false,
+      sendRequest: async () => { throw new Error("MCP service not available"); },
+      stopAll: () => {},
+    } as any;
+  }
+
+  // Initialize Tool Provider Registry (only if MCP service is available)
+  if (mcpService && typeof mcpService.discoverServers === 'function') {
+    try {
+      await toolProviderRegistry.initialize();
+
+      // Register MCP Tool Provider
+      const mcpProvider = new MCPToolProvider(
+        "mcp-provider",
+        mcpService,
+        toolRegistry,
+        [], // Empty array since we don't have mcpServers in catch block
+        100 // Priority
+      );
+      await toolProviderRegistry.registerProvider({ provider: mcpProvider });
+    } catch (error) {
+      console.warn("Tool provider registry initialization failed:", error);
     }
   }
 
-  // Lightweight RAG health check (logs green light or failure for telemetry)
-  const checkRagHealth = async () => {
+  // Generic health check for servers that support rag/health endpoint
+  const checkServerHealth = async (serverName: string) => {
     try {
-      const result = await mcpService.sendRequest("workbook-rag", "rag/health", {}, 10000);
-      console.log("[RAG] Health check OK:", result);
+      const result = await mcpService.sendRequest(serverName, "rag/health", {}, 10000);
+      console.log(`[${serverName}] Health check OK:`, result);
     } catch (err) {
-      console.warn("[RAG] Health check FAILED:", err instanceof Error ? err.message : err);
+      console.warn(`[${serverName}] Health check FAILED:`, err instanceof Error ? err.message : err);
     }
   };
 
-  // Kick off health check without blocking startup
-  checkRagHealth().catch((err) =>
-    console.warn("[RAG] Health check error (async):", err instanceof Error ? err.message : err),
-  );
+  // Check health for servers that might support it (non-blocking)
+  // Find server that provides rag_search_content tool (workbook-rag)
+  setTimeout(() => {
+    try {
+      const ragServer = toolRegistry.getToolServer("rag_search_content");
+      if (ragServer && mcpService.isServerRunning(ragServer)) {
+        checkServerHealth(ragServer).catch((err) =>
+          console.warn(`[${ragServer}] Health check error (async):`, err instanceof Error ? err.message : err),
+        );
+      }
+    } catch (error) {
+      console.warn("Health check setup failed:", error);
+    }
+  }, 2000); // Wait for tools to be discovered
 
   // Initialize services for LLM (need separate instances)
   const { WorkbookService } = require("./services/workbookService");
@@ -203,8 +273,16 @@ app.whenReady().then(() => {
     workbookServiceForLLM,
     fileServiceForLLM,
     ragIndexService, // Pass RAG service for LLM integration
-    mcpService, // Pass MCP service for RAG content search
+    mcpService, // Pass MCP service for RAG content search (legacy)
+    toolRegistry, // Pass tool registry for dynamic tool discovery
+    toolProviderRegistry, // Pass tool provider registry for generic execution
   );
+
+  // Initialize Dashboard Query Service (after LLM service is created)
+  const { DashboardQueryService } = require("./services/dashboardService");
+  const { DashboardPromptService } = require("./services/dashboardPromptService");
+  const dashboardPromptService = new DashboardPromptService();
+  const dashboardQueryService = new DashboardQueryService(mcpService, toolRegistry, llmService, dashboardPromptService);
 
   // Setup IPC handlers
   setupWorkbookIPC(configService);
@@ -222,66 +300,9 @@ app.whenReady().then(() => {
     }
   });
 
-  // MCP Dashboard IPC handlers - New 2-step flow
+  // MCP Dashboard IPC handlers - Uses DashboardQueryService
   ipcMain.handle("mcp:dashboard:query", async (_, question: string, tileType: string = "counter") => {
-    try {
-      // Step 1: Get structured prompt from Dashboard MCP
-      const queryConfig = await mcpService.sendRequest(
-        "workbook-dashboard",
-        "tools/call",
-        {
-          name: "create_dashboard_query",
-          arguments: {
-            question,
-            tileType
-          }
-        }
-      );
-
-      if (!queryConfig.success) {
-        return {
-          success: false,
-          error: queryConfig.error || "Failed to create query"
-        };
-      }
-
-      // Step 2: Call LLM with structured prompt (LLM will use RAG tools)
-      const llmMessages: LLMMessage[] = [
-        { role: "system", content: queryConfig.llm_request.system_prompt },
-        { role: "user", content: queryConfig.llm_request.user_question }
-      ];
-
-      const llmResponse = await llmService.chat(llmMessages);
-
-      // Log for debugging
-      console.log("[Dashboard MCP] Question:", question);
-      console.log("[Dashboard MCP] Tile Type:", tileType);
-      console.log("[Dashboard MCP] LLM Response:", llmResponse.substring(0, 200));
-
-      // Step 3: Format LLM response for visualization
-      const formattedResult = await mcpService.sendRequest(
-        "workbook-dashboard",
-        "tools/call",
-        {
-          name: "format_llm_response",
-          arguments: {
-            llmResponse: llmResponse,
-            expectedSchema: queryConfig.llm_request.expected_schema,
-            tileType: queryConfig.tile_type
-          }
-        }
-      );
-
-      console.log("[Dashboard MCP] Formatted Result:", JSON.stringify(formattedResult).substring(0, 200));
-
-      return formattedResult;
-    } catch (error) {
-      console.error("Error in MCP dashboard query:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error"
-      };
-    }
+    return await dashboardQueryService.executeQuery({ question, tileType });
   });
 
   // General MCP call handler
@@ -297,14 +318,124 @@ app.whenReady().then(() => {
     }
   });
 
-  // Jupyter notebook execution handler - uses real MCP jupyter-server
+  // Debug: Get tool registry state
+  ipcMain.handle("debug:getTools", () => {
+    const allTools = toolRegistry.getAllTools();
+    const toolsByServer: Record<string, Array<{ name: string; description: string }>> = {};
+    
+    // Group tools by server
+    allTools.forEach((tool: { name: string; description: string }) => {
+      const serverName = toolRegistry.getToolServer(tool.name);
+      if (serverName) {
+        if (!toolsByServer[serverName]) {
+          toolsByServer[serverName] = [];
+        }
+        toolsByServer[serverName].push({
+          name: tool.name,
+          description: tool.description
+        });
+      }
+    });
+
+    return {
+      totalTools: allTools.length,
+      toolsByServer,
+      allTools: allTools.map((t: { name: string; description: string }) => ({
+        name: t.name,
+        description: t.description,
+        server: toolRegistry.getToolServer(t.name)
+      }))
+    };
+  });
+
+  // Debug: Test unregisterTools directly
+  ipcMain.handle("debug:unregisterTools", async (_, serverName: string) => {
+    try {
+      console.log(`[Debug] Directly calling unregisterTools for ${serverName}`);
+      const before = toolRegistry.getAllTools().length;
+      toolRegistry.unregisterTools(serverName);
+      const after = toolRegistry.getAllTools().length;
+      return {
+        success: true,
+        before,
+        after,
+        removed: before - after
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  });
+
+  // Debug: Stop an MCP server (for testing tool unregistration)
+  ipcMain.handle("debug:stopServer", async (_, serverName: string) => {
+    try {
+      if (!mcpService) {
+        throw new Error("MCP service not initialized");
+      }
+      console.log(`[Debug] Stopping server: ${serverName}`);
+      
+      // Check if server is running
+      const isRunning = mcpService.isServerRunning(serverName);
+      console.log(`[Debug] Server ${serverName} is running: ${isRunning}`);
+      
+      // Get tool count before stopping
+      const toolsBefore = toolRegistry.getAllTools();
+      const toolsBeforeCount = toolsBefore.filter((t: { name: string }) => toolRegistry.getToolServer(t.name) === serverName).length;
+      console.log(`[Debug] Tools before stop: ${toolsBeforeCount}`);
+      
+      // Manually call unregisterTools to ensure it happens
+      console.log(`[Debug] Manually unregistering tools for ${serverName}`);
+      toolRegistry.unregisterTools(serverName);
+      
+      // Also call stopServer to clean up the process
+      mcpService.stopServer(serverName);
+      
+      // Wait a moment for cleanup
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Get tool count after stopping
+      const toolsAfter = toolRegistry.getAllTools();
+      const toolsAfterCount = toolsAfter.filter((t: { name: string }) => toolRegistry.getToolServer(t.name) === serverName).length;
+      console.log(`[Debug] Tools after stop: ${toolsAfterCount}`);
+      
+      return { 
+        success: true, 
+        message: `Server ${serverName} stopped`,
+        toolsBefore: toolsBeforeCount,
+        toolsAfter: toolsAfterCount,
+        unregistered: toolsBeforeCount - toolsAfterCount,
+        wasRunning: isRunning
+      };
+    } catch (error) {
+      console.error(`[Debug] Error stopping server ${serverName}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  });
+
+  // Jupyter notebook execution handler - Dynamic server discovery
   ipcMain.handle("mcp:jupyter:executeCell", async (_, workbookId: string, notebookPath: string, cellIndex: number, code: string) => {
     try {
-      console.log('Executing cell via real Jupyter kernel:', { workbookId, notebookPath, cellIndex, codeLength: code.length });
+      console.log('Executing cell via Jupyter kernel:', { workbookId, notebookPath, cellIndex, codeLength: code.length });
 
-      // Use the real jupyter-server MCP to execute code
+      // Find server that provides execute_cell tool
+      const jupyterServer = toolRegistry.getToolServer("execute_cell");
+      if (!jupyterServer) {
+        throw new Error("No Jupyter server available. Please ensure jupyter-server MCP server is enabled.");
+      }
+
+      if (!mcpService.isServerRunning(jupyterServer)) {
+        throw new Error(`Jupyter server ${jupyterServer} is not running`);
+      }
+
+      // Use the MCP server to execute code
       const result = await mcpService.sendRequest(
-        "jupyter-server",
+        jupyterServer,
         "tools/call",
         {
           name: "execute_cell",
@@ -411,9 +542,13 @@ ipcMain.handle("extensions:setEnabled", async (_event, extensionId: string, enab
     }
 
     if (enabled) {
+      // Mark as extension-managed before starting
+      mcpService.markExtensionManaged(config.name);
       mcpService.startServer(config, serverPath);
     } else {
       mcpService.stopServer(config.name);
+      // Note: We keep it marked as extension-managed even when disabled
+      // so it doesn't auto-start on next discovery
     }
   } catch (err) {
     console.error(`Failed to ${enabled ? 'enable' : 'disable'} extension server for ${extensionId}:`, err);

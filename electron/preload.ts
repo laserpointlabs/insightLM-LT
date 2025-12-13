@@ -103,6 +103,13 @@ try {
       serverPath: string;
     }) => ipcRenderer.invoke("extensions:setEnabled", extensionId, enabled, server),
   },
+
+  // Debug endpoints
+  debug: {
+    getTools: () => ipcRenderer.invoke("debug:getTools"),
+    stopServer: (serverName: string) => ipcRenderer.invoke("debug:stopServer", serverName),
+    unregisterTools: (serverName: string) => ipcRenderer.invoke("debug:unregisterTools", serverName),
+  },
 });
 
   console.log("Preload script loaded successfully");

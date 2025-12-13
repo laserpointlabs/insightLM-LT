@@ -142,49 +142,170 @@ def handle_request(request: dict) -> dict:
     """Handle MCP requests"""
     method = request.get('method', '')
     params = request.get('params', {})
+    request_id = request.get('id')
 
     try:
-        if method == 'spreadsheet/calculate_cell':
+        if method == 'initialize':
+            # MCP protocol initialization
+            return {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'result': {
+                    'protocolVersion': '2024-11-05',
+                    'capabilities': {
+                        'tools': {
+                            'listChanged': True
+                        }
+                    },
+                    'serverInfo': {
+                        'name': 'spreadsheet-server',
+                        'version': '0.1.0'
+                    }
+                }
+            }
+        
+        elif method == 'tools/list':
+            # List available tools
+            return {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'result': {
+                    'tools': [
+                        {
+                            'name': 'calculate_cell',
+                            'description': 'Calculate a spreadsheet cell formula with context',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'formula': {'type': 'string', 'description': 'Cell formula to calculate'},
+                                    'context': {'type': 'object', 'description': 'Cell values for formula context'}
+                                },
+                                'required': ['formula']
+                            }
+                        },
+                        {
+                            'name': 'get_sheet_data_for_rag',
+                            'description': 'Get spreadsheet data formatted for RAG indexing (formulas visible)',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'sheet_id': {'type': 'string', 'description': 'Sheet identifier'},
+                                    'workbook_id': {'type': 'string', 'description': 'Workbook identifier'},
+                                    'filename': {'type': 'string', 'description': 'Spreadsheet filename'}
+                                },
+                                'required': ['sheet_id', 'workbook_id', 'filename']
+                            }
+                        }
+                    ]
+                }
+            }
+        
+        elif method == 'tools/call':
+            # Handle tool calls
+            tool_name = params.get('name', '')
+            tool_args = params.get('arguments', {})
+            
+            if tool_name == 'calculate_cell':
+                formula = tool_args.get('formula', '')
+                context = tool_args.get('context', {})
+                result = calculate_cell(formula, context)
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request_id,
+                    'result': result
+                }
+            
+            elif tool_name == 'get_sheet_data_for_rag':
+                sheet_id = tool_args.get('sheet_id', '')
+                workbook_id = tool_args.get('workbook_id', '')
+                filename = tool_args.get('filename', '')
+                
+                # TODO: Load actual spreadsheet data
+                text_content = f"Spreadsheet: {filename}\n\n"
+                text_content += "Formulas are visible in this context (no hidden equations).\n"
+                
+                result = {
+                    'text_content': text_content,
+                    'formulas': {},
+                    'metadata': {
+                        'workbook_id': workbook_id,
+                        'filename': filename,
+                        'sheet_name': sheet_id
+                    }
+                }
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request_id,
+                    'result': result
+                }
+            
+            else:
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request_id,
+                    'error': {
+                        'code': -32601,
+                        'message': f'Unknown tool: {tool_name}'
+                    }
+                }
+
+        # Legacy methods (backward compatibility)
+        elif method == 'spreadsheet/calculate_cell':
             sheet_id = params.get('sheet_id', '')
             cell_ref = params.get('cell_ref', '')
             formula = params.get('formula', '')
             context = params.get('context', {})
             
             result = calculate_cell(formula, context)
-            return {'result': result}
+            return {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'result': result
+            }
 
         elif method == 'spreadsheet/get_cell':
             # TODO: Implement cell retrieval from stored spreadsheet
-            return {'result': {'value': None, 'formula': None, 'format': None}}
+            return {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'result': {'value': None, 'formula': None, 'format': None}
+            }
 
         elif method == 'spreadsheet/set_cell':
             # TODO: Implement cell setting and dependency recalculation
-            return {'result': {'success': True, 'recalculated_cells': []}}
+            return {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'result': {'success': True, 'recalculated_cells': []}
+            }
 
         elif method == 'spreadsheet/recalculate':
             # TODO: Implement full sheet recalculation
-            return {'result': {'success': True, 'cells_updated': []}}
+            return {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'result': {'success': True, 'cells_updated': []}
+            }
 
         elif method == 'spreadsheet/get_sheet_data':
             # TODO: Implement sheet data retrieval
-            return {'result': {'cells': {}, 'formulas': {}, 'metadata': {}}}
+            return {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'result': {'cells': {}, 'formulas': {}, 'metadata': {}}
+            }
 
         elif method == 'spreadsheet/get_sheet_data_for_rag':
-            """
-            Get spreadsheet data formatted for RAG indexing.
-            This ensures formulas are visible in context!
-            """
             sheet_id = params.get('sheet_id', '')
             workbook_id = params.get('workbook_id', '')
             filename = params.get('filename', '')
-            
-            # TODO: Load actual spreadsheet data
-            # Format: "Cell A1: 100, Cell B1: =A1*2 (calculated: 200)"
             
             text_content = f"Spreadsheet: {filename}\n\n"
             text_content += "Formulas are visible in this context (no hidden equations).\n"
             
             return {
+                'jsonrpc': '2.0',
+                'id': request_id,
                 'result': {
                     'text_content': text_content,
                     'formulas': {},
@@ -197,24 +318,67 @@ def handle_request(request: dict) -> dict:
             }
 
         elif method == 'spreadsheet/health':
-            return {'result': {'status': 'healthy', 'mode': 'formula-calculation'}}
+            return {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'result': {'status': 'healthy', 'mode': 'formula-calculation'}
+            }
 
         else:
-            return {'error': f'Unknown method: {method}'}
+            return {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'error': {
+                    'code': -32601,
+                    'message': f'Unknown method: {method}'
+                }
+            }
 
     except Exception as e:
-        return {'error': str(e)}
+        return {
+            'jsonrpc': '2.0',
+            'id': request_id,
+            'error': {
+                'code': -32603,
+                'message': str(e)
+            }
+        }
 
 
 if __name__ == '__main__':
+    # Send initialization message on startup
+    init_response = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {
+                "name": "spreadsheet-server",
+                "version": "0.1.0"
+            },
+            "capabilities": {
+                "tools": {
+                    "listChanged": True
+                }
+            }
+        }
+    }
+    print(json.dumps(init_response), flush=True)
+    
     # MCP stdio protocol
     for line in sys.stdin:
         try:
             request = json.loads(line.strip())
             response = handle_request(request)
-            print(json.dumps(response))
-            sys.stdout.flush()
+            if response:
+                print(json.dumps(response), flush=True)
         except Exception as e:
-            error_response = {'error': str(e)}
-            print(json.dumps(error_response))
-            sys.stdout.flush()
+            error_response = {
+                'jsonrpc': '2.0',
+                'id': request.get('id') if 'request' in locals() else None,
+                'error': {
+                    'code': -32603,
+                    'message': str(e)
+                }
+            }
+            print(json.dumps(error_response), flush=True)

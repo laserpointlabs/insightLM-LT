@@ -4,6 +4,9 @@ import { LLMConfig } from "./configService";
 import { WorkbookService } from "./workbookService";
 import { FileService } from "./fileService";
 import { MCPService } from "./mcpService";
+import { ToolRegistry } from "./toolRegistry";
+import { ToolProviderRegistry } from "./toolProviderRegistry";
+import { ToolExecutionContext } from "./types/toolProvider";
 
 export interface LLMMessage {
   role: "user" | "assistant" | "system" | "tool";
@@ -42,6 +45,8 @@ export class LLMService {
   private fileService: FileService;
   private ragIndexService?: any; // RAGIndexService
   private mcpService?: MCPService;
+  private toolRegistry: ToolRegistry;
+  private toolProviderRegistry?: ToolProviderRegistry;
   private availableTools: ToolDefinition[] = [];
   private filesReadInCurrentChat: Array<{ workbookId: string; workbookName: string; filePath: string; filename: string }> = [];
 
@@ -51,17 +56,32 @@ export class LLMService {
     fileService: FileService,
     ragIndexService?: any,
     mcpService?: MCPService,
+    toolRegistry?: ToolRegistry,
+    toolProviderRegistry?: ToolProviderRegistry,
   ) {
     this.config = config;
     this.workbookService = workbookService;
     this.fileService = fileService;
     this.ragIndexService = ragIndexService;
     this.mcpService = mcpService;
-    this.initializeTools();
+    this.toolRegistry = toolRegistry || new ToolRegistry();
+    this.toolProviderRegistry = toolProviderRegistry;
+
+    // Subscribe to tool registry changes
+    this.toolRegistry.subscribe((tools) => {
+      this.updateAvailableTools();
+    });
+
+    // Register core tools through ToolRegistry for consistency
+    this.registerCoreTools();
+    this.updateAvailableTools();
   }
 
-  private initializeTools() {
-    this.availableTools = [
+  /**
+   * Register core tools through ToolRegistry (for consistency with MCP tools)
+   */
+  private registerCoreTools() {
+    const coreTools: ToolDefinition[] = [
       {
         name: "read_workbook_file",
         description:
@@ -129,25 +149,6 @@ export class LLMService {
         },
       },
       {
-        name: "rag_search_content",
-        description:
-          "Search document CONTENT (not just filenames) across all workbooks. This searches inside PDFs, Word docs, and text files. Use this when users ask about specific terms, concepts, or information that might be inside documents. Returns full content of matching files.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: {
-              type: "string",
-              description: "What to search for (e.g., 'BSEO', 'authentication', 'expiration dates', 'NDA terms')",
-            },
-            limit: {
-              type: "number",
-              description: "Maximum number of workbooks to search (default: 5)",
-            },
-          },
-          required: ["query"],
-        },
-      },
-      {
         name: "list_all_workbook_files",
         description:
           "List all files in all workbooks. Use this to see what documents are available.",
@@ -158,6 +159,20 @@ export class LLMService {
         },
       },
     ];
+    
+    // Register core tools with ToolRegistry (serverName="core")
+    this.toolRegistry.registerTools("core", coreTools);
+    console.log(`[LLM] Registered ${coreTools.length} core tools`);
+  }
+
+  /**
+   * Update available tools from ToolRegistry
+   */
+  private updateAvailableTools(): void {
+    this.availableTools = this.toolRegistry.getAllTools();
+    const coreCount = this.toolRegistry.getToolsByServer("core").length;
+    const mcpCount = this.availableTools.length - coreCount;
+    console.log(`[LLM] Updated available tools: ${coreCount} core + ${mcpCount} MCP = ${this.availableTools.length} total`);
   }
 
   async chat(messages: LLMMessage[]): Promise<string> {
@@ -273,7 +288,113 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     args: Record<string, any>,
   ): Promise<string> {
     try {
-      switch (toolName) {
+      const serverName = this.toolRegistry.getToolServer(toolName);
+
+      if (!serverName) {
+        return `Unknown tool: ${toolName}`;
+      }
+
+      // Core tools are executed internally
+      if (serverName === "core") {
+        return this.executeCoreTool(toolName, args);
+      }
+
+      // Use ToolProviderRegistry for tool execution (Phase 3 abstraction)
+      if (this.toolProviderRegistry) {
+        console.log(`[LLM] Executing tool via provider registry: ${toolName} from ${serverName}`);
+
+        const executionContext: ToolExecutionContext = {
+          toolName,
+          parameters: args,
+          timeout: 60000, // 60 second timeout for tool execution
+          metadata: {
+            requestId: `llm-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+          }
+        };
+
+        const result = await this.toolProviderRegistry.executeTool(executionContext);
+
+        if (result.success) {
+          // Handle rag_search_content specially for file tracking
+          if (toolName === "rag_search_content" && result.result?.content) {
+            const content = typeof result.result.content === 'string' ? result.result.content : JSON.stringify(result.result.content);
+            // Parse RAG response to track sources
+            this.trackFilesFromRAGResponse(content);
+            // Add explicit instructions for using read_workbook_file with RAG results
+            return content + 
+              `\n\n[IMPORTANT: When you need to read a file from the search results above, use read_workbook_file with the exact Workbook ID and Path shown. For example, if you see "Workbook ID: ac1000-main-project" and "Path: documents/spreadsheet-2025-12-12T19-46-01.is", call read_workbook_file(workbookId="ac1000-main-project", filePath="documents/spreadsheet-2025-12-12T19-46-01.is"). The workbook ID is the directory name, not a UUID.]`;
+          }
+          
+          // Handle different response formats
+          if (result?.result) {
+            return typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
+          }
+          if (result?.content) {
+            return typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+          }
+          if (typeof result === 'string') {
+            return result;
+          }
+          return JSON.stringify(result);
+        } else {
+          // Tool execution failed
+          const errorMsg = result.error?.message || 'Unknown execution error';
+          console.error(`[LLM] Error executing tool ${toolName}:`, errorMsg);
+          return `Error executing ${toolName}: ${errorMsg}`;
+        }
+      } else if (this.mcpService) {
+        // Legacy fallback for backward compatibility (should be removed in future)
+        console.log(`[LLM] Falling back to direct MCP execution: ${toolName} from ${serverName}`);
+        try {
+          const result = await this.mcpService.sendRequest(
+            serverName,
+            "tools/call",
+            { name: toolName, arguments: args },
+            60000 // 60 second timeout for tool execution
+          );
+
+          // Handle rag_search_content specially for file tracking
+          if (toolName === "rag_search_content" && result?.content) {
+            const content = typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+            // Parse RAG response to track sources
+            this.trackFilesFromRAGResponse(content);
+            // Add explicit instructions for using read_workbook_file with RAG results
+            return content +
+              `\n\n[IMPORTANT: When you need to read a file from the search results above, use read_workbook_file with the exact Workbook ID and Path shown. For example, if you see "Workbook ID: ac1000-main-project" and "Path: documents/spreadsheet-2025-12-12T19-46-01.is", call read_workbook_file(workbookId="ac1000-main-project", filePath="documents/spreadsheet-2025-12-12T19-46-01.is"). The workbook ID is the directory name, not a UUID.]`;
+          }
+
+          // Handle different response formats
+          if (result?.result) {
+            return typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
+          }
+          if (result?.content) {
+            return typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+          }
+          if (typeof result === 'string') {
+            return result;
+          }
+          return JSON.stringify(result);
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error(`[LLM] Error executing MCP tool ${toolName}:`, errorMsg);
+          return `Error executing ${toolName}: ${errorMsg}`;
+        }
+      }
+
+      return `Error: No tool execution mechanism available for ${toolName}`;
+    } catch (error) {
+      return `Error executing ${toolName}: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  /**
+   * Execute core tools (non-MCP tools)
+   */
+  private async executeCoreTool(
+    toolName: string,
+    args: Record<string, any>,
+  ): Promise<string> {
+    switch (toolName) {
         case "read_workbook_file":
           try {
             console.log(`[LLM] read_workbook_file called with:`);
@@ -402,57 +523,8 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
             ? `All files (${fileList.length} total):\n\n${fileList.join("\n\n")}\n\nTo read a file, use read_workbook_file with the workbook ID and file path.`
             : "No files found in workbooks";
 
-        case "rag_search_content":
-          if (!this.mcpService) {
-            return "Error: RAG search service is not available. Please ensure the workbook-rag MCP server is running.";
-          }
-
-          try {
-            const query = args.query || "";
-            const limit = args.limit || 5;
-
-            if (!query) {
-              return "Error: Query parameter is required for content search.";
-            }
-
-            // Call MCP server's rag/search_content method
-            const result = await this.mcpService.sendRequest(
-              "workbook-rag",
-              "rag/search_content",
-              { query, limit },
-              60000 // 60 second timeout for content search
-            );
-
-            console.log(`[LLM] RAG search result structure:`, JSON.stringify(result, null, 2).substring(0, 500));
-            
-            // Handle response structure: server returns {'result': {'content': '...'}}
-            // MCP service extracts result, so result is {'content': '...'}
-            const content = result?.content || result;
-            
-            if (content && typeof content === 'string' && content.length > 0) {
-              // Parse RAG response to track sources
-              this.trackFilesFromRAGResponse(content);
-              
-              // Add explicit instructions for using read_workbook_file with RAG results
-              const enhancedContent = content + 
-                `\n\n[IMPORTANT: When you need to read a file from the search results above, use read_workbook_file with the exact Workbook ID and Path shown. For example, if you see "Workbook ID: ac1000-main-project" and "Path: documents/spreadsheet-2025-12-12T19-46-01.is", call read_workbook_file(workbookId="ac1000-main-project", filePath="documents/spreadsheet-2025-12-12T19-46-01.is"). The workbook ID is the directory name, not a UUID.]`;
-              
-              return enhancedContent;
-            } else {
-              console.error(`[LLM] RAG search returned empty or invalid result:`, result);
-              return `No content found matching "${query}". Try a different search term or check if documents exist in workbooks.`;
-            }
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            console.error("[RAG] Content search failed:", errorMsg);
-            return `Error searching document content: ${errorMsg}`;
-          }
-
         default:
           return `Unknown tool: ${toolName}`;
-      }
-    } catch (error) {
-      return `Error executing ${toolName}: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
 

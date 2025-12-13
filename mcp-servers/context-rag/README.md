@@ -35,3 +35,6 @@ This server will provide vector + rerank RAG for InsightLM, with legacy `workboo
 5) Implement search (vector + rerank + filters) and response formatting with sources.
 6) Add optional policy hooks and logging; fallback logging to `workbook-rag`.
 7) Add tests with deterministic fixtures across doc types, chats, dashboards.
+
+
+

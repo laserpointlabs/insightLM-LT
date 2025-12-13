@@ -97,3 +97,6 @@ OR
 2. Verify FileService.readDocument() works with .is files in Electron context
 3. Test LLMService.executeTool('read_workbook_file') with .is file
 4. Verify LLM can answer questions about spreadsheet cells
+
+
+

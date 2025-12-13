@@ -19,7 +19,12 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:rag": "cd mcp-servers/workbook-rag && python tests/test_content_search_simple.py",
-    "test:integration": "node tests/test-rag-standalone.mjs"
+    "test:integration": "node tests/test-rag-standalone.mjs",
+    "test:decoupling": "node tests/test-decoupling-all.mjs",
+    "test:decoupling:phase1": "node tests/test-mcp-tool-discovery.mjs",
+    "test:decoupling:phase2": "node tests/test-phase2-decoupling.mjs",
+    "test:decoupling:phase3": "node tests/test-phase3-provider-abstraction.mjs",
+    "test:decoupling:phase4": "node tests/test-phase4-dashboard-decoupling.mjs"
   },
   "keywords": [
     "electron",

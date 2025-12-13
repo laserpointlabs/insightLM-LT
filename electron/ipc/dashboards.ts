@@ -1,10 +1,10 @@
 import { ipcMain } from "electron";
-import { DashboardService } from "../services/dashboardService";
+import { DashboardStorageService } from "../services/dashboardStorageService";
 
-let dashboardService: DashboardService;
+let dashboardService: DashboardStorageService;
 
 export function setupDashboardIPC(configService: any) {
-  dashboardService = new DashboardService();
+  dashboardService = new DashboardStorageService();
   const appConfig = configService.loadAppConfig();
   dashboardService.initialize(appConfig.dataDir);
 
@@ -64,6 +64,6 @@ export function setupDashboardIPC(configService: any) {
   });
 }
 
-export function getDashboardService(): DashboardService {
+export function getDashboardService(): DashboardStorageService {
   return dashboardService;
 }

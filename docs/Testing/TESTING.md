@@ -280,13 +280,67 @@ npm run dev:electron
 
 **Expected**: File operations work correctly
 
-## Automated Testing (Future)
+## Automated Testing
 
-Currently, testing is manual. Future additions:
+### MCP Decoupling Tests
 
-- Unit tests for services
-- Integration tests for IPC
-- E2E tests with Playwright or Spectron
+The application includes comprehensive automated tests for MCP server decoupling across three phases:
+
+#### Phase 1: MCP Tool Discovery
+Tests that MCP servers properly expose their tools via the MCP protocol.
+
+```bash
+npm run test:decoupling:phase1
+```
+
+**Tests:**
+- ✅ jupyter-server exposes execute_cell, create_notebook, list_kernels
+- ✅ workbook-dashboard exposes create_dashboard_query, format_llm_response
+- ✅ workbook-rag exposes rag_search_content, rag_list_files, rag_read_file
+
+#### Phase 2: Server Lifecycle & Abstraction
+Tests server lifecycle management and hardcoded reference removal.
+
+```bash
+npm run test:decoupling:phase2
+```
+
+**Tests:**
+- ✅ No hardcoded "workbook-rag" references in core code
+- ✅ No hardcoded "workbook-dashboard" references in core code
+- ✅ Dynamic server discovery used throughout
+- ✅ Dashboard abstraction with DashboardQueryService/DashboardStorageService
+- ✅ MCP servers properly standardized (init, tools/list, jsonrpc)
+- ✅ Server lifecycle management (start/stop/unregister)
+
+#### Phase 3: Provider Abstraction
+Tests the generic tool provider interface and registry system.
+
+```bash
+npm run test:decoupling:phase3
+```
+
+**Tests:**
+- ✅ ToolProvider interface compliance
+- ✅ ToolProviderRegistry functionality
+- ✅ MCP Provider implementation
+- ✅ LLM Service provider integration
+- ✅ Provider fallback and error handling
+- ✅ Provider extensibility
+
+#### Running All Decoupling Tests
+
+```bash
+npm run test:decoupling
+```
+
+This runs all three phases in sequence and provides a comprehensive summary.
+
+### Other Automated Tests
+
+- Unit tests: `npm test`
+- Integration tests: `npm run test:integration`
+- RAG tests: `npm run test:rag`
 
 ## Performance Testing
 

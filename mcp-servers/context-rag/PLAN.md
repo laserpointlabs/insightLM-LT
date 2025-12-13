@@ -67,3 +67,6 @@ This stays with MCP servers to avoid getting lost; it captures the plan for the 
 - [ ] Integrate in LLMService with primary/fallback server names and flags.
 - [ ] Add deterministic test fixtures (index + query) across doc types and chats/dashboards.
 - [ ] Design optional `content-policy` MCP (PII/CUI) and wire ingest/response filters with logging and toggles.
+
+
+

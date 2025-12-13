@@ -367,6 +367,25 @@ def handle_request(request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def main():
     """Main MCP server loop"""
+    # Send initialization message on startup
+    init_response = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {
+                "name": "jupyter-server",
+                "version": "0.1.0"
+            },
+            "capabilities": {
+                "tools": {
+                    "listChanged": True
+                }
+            }
+        }
+    }
+    print(json.dumps(init_response), flush=True)
+    
     try:
         # Read from stdin, write to stdout (MCP stdio protocol)
         for line in sys.stdin:

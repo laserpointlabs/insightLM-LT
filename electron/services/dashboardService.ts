@@ -1,112 +1,124 @@
-import * as fs from "fs";
-import * as path from "path";
-import { v4 as uuidv4 } from "uuid";
-import { Dashboard } from "../../src/types/dashboard";
+import { MCPService } from "./mcpService";
+import { ToolRegistry } from "./toolRegistry";
+import { LLMService } from "./llmService";
+import { DashboardPromptService } from "./dashboardPromptService";
 
-export class DashboardService {
-  private dashboardsDir: string = "";
-  private dashboardsFile: string = "";
+export interface DashboardQueryRequest {
+  question: string;
+  tileType?: string;
+}
 
-  initialize(dataDir: string) {
-    this.dashboardsDir = path.join(dataDir, "dashboards");
-    this.dashboardsFile = path.join(this.dashboardsDir, "dashboards.json");
-    this.ensureDirectoryExists(this.dashboardsDir);
-  }
+export interface DashboardQueryResponse {
+  success: boolean;
+  result?: any;
+  error?: string;
+}
 
-  private ensureDirectoryExists(dirPath: string) {
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-    }
-  }
+/**
+ * DashboardQueryService manages the dashboard query flow (Phase 4 - decoupled):
+ * 1. Use DashboardPromptService to create format-agnostic prompts
+ * 2. Call LLM with structured prompt (LLM uses RAG tools)
+ * 3. Format LLM response using dashboard MCP server (pure formatter)
+ */
+export class DashboardQueryService {
+  constructor(
+    private mcpService: MCPService,
+    private toolRegistry: ToolRegistry,
+    private llmService: LLMService,
+    private promptService: DashboardPromptService
+  ) {}
 
-  private loadDashboards(): Dashboard[] {
-    if (!fs.existsSync(this.dashboardsFile)) {
-      return [];
-    }
-
+  /**
+   * Execute a dashboard query using the decoupled 3-step flow (Phase 4)
+   */
+  async executeQuery(request: DashboardQueryRequest): Promise<DashboardQueryResponse> {
     try {
-      const content = fs.readFileSync(this.dashboardsFile, "utf-8");
-      return JSON.parse(content) as Dashboard[];
-    } catch (error) {
-      console.error("Failed to load dashboards:", error);
-      return [];
-    }
-  }
+      // Step 0: Find dashboard server for formatting (only needs format_llm_response tool)
+      const dashboardServer = this.toolRegistry.getToolServer("format_llm_response");
+      if (!dashboardServer) {
+        return {
+          success: false,
+          error: "No dashboard formatting server available. Please ensure a dashboard MCP server is running."
+        };
+      }
 
-  private saveDashboards(dashboards: Dashboard[]): void {
-    try {
-      fs.writeFileSync(
-        this.dashboardsFile,
-        JSON.stringify(dashboards, null, 2),
-        "utf-8"
+      if (!this.mcpService.isServerRunning(dashboardServer)) {
+        return {
+          success: false,
+          error: `Dashboard server ${dashboardServer} is not running`
+        };
+      }
+
+      // Step 1: Create prompt using DashboardPromptService (decoupled from MCP)
+      const promptResponse = this.promptService.createPrompt({
+        question: request.question,
+        tileType: request.tileType || "counter"
+      });
+
+      if (!promptResponse.success || !promptResponse.prompt) {
+        return {
+          success: false,
+          error: promptResponse.error || "Failed to create prompt"
+        };
+      }
+
+      // Step 2: Call LLM with structured prompt (LLM will use RAG tools)
+      const llmMessages = [
+        { role: "system" as const, content: promptResponse.prompt.systemPrompt },
+        { role: "user" as const, content: promptResponse.prompt.userQuestion }
+      ];
+
+      const llmResponse = await this.llmService.chat(llmMessages);
+
+      // Log for debugging
+      console.log("[DashboardService] Question:", request.question);
+      console.log("[DashboardService] Tile Type:", request.tileType || "counter");
+      console.log("[DashboardService] LLM Response:", llmResponse.substring(0, 200));
+
+      // Step 3: Format LLM response using dashboard MCP server (pure formatter)
+      const formatResponse = await this.mcpService.sendRequest(
+        dashboardServer,
+        "tools/call",
+        {
+          name: "format_llm_response",
+          arguments: {
+            llmResponse: llmResponse,
+            tileType: promptResponse.tileType
+          }
+        }
       );
+
+      // MCP service returns the result field from JSON-RPC response
+      const formattedResult = formatResponse?.result || formatResponse;
+
+      console.log("[DashboardService] Formatted Result:", JSON.stringify(formattedResult).substring(0, 200));
+
+      return {
+        success: true,
+        result: formattedResult
+      };
     } catch (error) {
-      console.error("Failed to save dashboards:", error);
-      throw error;
+      console.error("[DashboardService] Error in dashboard query:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
     }
   }
 
-  getAllDashboards(): Dashboard[] {
-    return this.loadDashboards();
+  /**
+   * Check if dashboard capabilities are available (Phase 4 - format-agnostic)
+   */
+  isAvailable(): boolean {
+    const dashboardServer = this.toolRegistry.getToolServer("format_llm_response");
+    return dashboardServer !== undefined &&
+           this.mcpService.isServerRunning(dashboardServer);
   }
 
-  saveAllDashboards(dashboards: Dashboard[]): void {
-    this.saveDashboards(dashboards);
-  }
-
-  createDashboard(name: string): Dashboard {
-    const dashboards = this.loadDashboards();
-    const dashboard: Dashboard = {
-      id: uuidv4(),
-      name,
-      queries: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    dashboards.push(dashboard);
-    this.saveDashboards(dashboards);
-    return dashboard;
-  }
-
-  updateDashboard(dashboardId: string, updates: Partial<Dashboard>): Dashboard | null {
-    const dashboards = this.loadDashboards();
-    const index = dashboards.findIndex((d) => d.id === dashboardId);
-
-    if (index === -1) {
-      return null;
-    }
-
-    dashboards[index] = {
-      ...dashboards[index],
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-
-    this.saveDashboards(dashboards);
-    return dashboards[index];
-  }
-
-  renameDashboard(dashboardId: string, newName: string): void {
-    const dashboards = this.loadDashboards();
-    const index = dashboards.findIndex((d) => d.id === dashboardId);
-
-    if (index === -1) {
-      throw new Error(`Dashboard not found: ${dashboardId}`);
-    }
-
-    dashboards[index] = {
-      ...dashboards[index],
-      name: newName,
-      updatedAt: new Date().toISOString(),
-    };
-
-    this.saveDashboards(dashboards);
-  }
-
-  deleteDashboard(dashboardId: string): void {
-    const dashboards = this.loadDashboards();
-    const filtered = dashboards.filter((d) => d.id !== dashboardId);
-    this.saveDashboards(filtered);
+  /**
+   * Get the name of the dashboard server currently in use
+   */
+  getDashboardServerName(): string | undefined {
+    return this.toolRegistry.getToolServer("format_llm_response");
   }
 }

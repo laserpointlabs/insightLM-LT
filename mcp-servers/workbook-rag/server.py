@@ -20,6 +20,7 @@ _cache_timestamp: Optional[float] = None
 def get_data_dir() -> str:
     """Get application data directory"""
     if DATA_DIR:
+        print(f"DEBUG: Using INSIGHTLM_DATA_DIR: {DATA_DIR}", file=sys.stderr, flush=True)
         return DATA_DIR
 
     if sys.platform == "win32":
@@ -350,7 +351,11 @@ def get_all_workbook_documents() -> List[Dict[str, Any]]:
     data_dir = Path(get_data_dir())
     workbooks_dir = data_dir / "workbooks"
 
+    print(f"DEBUG: Looking for workbooks in: {workbooks_dir}", file=sys.stderr, flush=True)
+    print(f"DEBUG: Workbooks dir exists: {workbooks_dir.exists()}", file=sys.stderr, flush=True)
+
     if not workbooks_dir.exists():
+        print(f"DEBUG: Workbooks directory not found: {workbooks_dir}", file=sys.stderr, flush=True)
         return []
 
     # Check if cache is still valid (re-scan if workbooks dir changed)
@@ -776,7 +781,126 @@ def handle_request(request: dict) -> dict:
     params = request.get('params', {})
 
     try:
-        if method == 'rag/search':
+        # MCP protocol initialization
+        if method == 'initialize':
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {
+                    'protocolVersion': '2024-11-05',
+                    'capabilities': {
+                        'tools': {
+                            'listChanged': True
+                        }
+                    },
+                    'serverInfo': {
+                        'name': 'workbook-rag',
+                        'version': '1.0.0'
+                    }
+                }
+            }
+        
+        # MCP tools/list - expose available tools
+        elif method == 'tools/list':
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {
+                    'tools': [
+                        {
+                            'name': 'rag_search_content',
+                            'description': 'Search document CONTENT (not just filenames) across all workbooks. This searches inside PDFs, Word docs, spreadsheets, and text files. Returns full content of matching files with context chunks.',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'query': {
+                                        'type': 'string',
+                                        'description': 'What to search for (e.g., "BSEO", "authentication", "expiration dates", "NDA terms", or filename patterns)'
+                                    },
+                                    'limit': {
+                                        'type': 'number',
+                                        'description': 'Maximum number of files to return (default: 5)'
+                                    }
+                                },
+                                'required': ['query']
+                            }
+                        },
+                        {
+                            'name': 'rag_list_files',
+                            'description': 'List all files in all workbooks with their metadata (workbook ID, workbook name, filename, path)',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {},
+                                'required': []
+                            }
+                        },
+                        {
+                            'name': 'rag_read_file',
+                            'description': 'Read the full contents of a specific file from a workbook',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'workbook_id': {
+                                        'type': 'string',
+                                        'description': 'The ID of the workbook (directory name, e.g., "ac1000-main-project")'
+                                    },
+                                    'file_path': {
+                                        'type': 'string',
+                                        'description': 'The relative path to the file within the workbook (e.g., "documents/file.txt")'
+                                    }
+                                },
+                                'required': ['workbook_id', 'file_path']
+                            }
+                        }
+                    ]
+                }
+            }
+        
+        # MCP tools/call - handle tool execution
+        elif method == 'tools/call':
+            tool_name = params.get('name', '')
+            tool_args = params.get('arguments', {})
+            
+            if tool_name == 'rag_search_content':
+                query = tool_args.get('query', '')
+                limit = tool_args.get('limit', 5)
+                results = search_workbooks_with_content(query, limit)
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'result': {'content': results}
+                }
+            
+            elif tool_name == 'rag_list_files':
+                files = list_all_files()
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'result': files
+                }
+            
+            elif tool_name == 'rag_read_file':
+                workbook_id = tool_args.get('workbook_id', '')
+                file_path = tool_args.get('file_path', '')
+                content = read_workbook_file(workbook_id, file_path)
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'result': {'content': content}
+                }
+            
+            else:
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'error': {
+                        'code': -32601,
+                        'message': f'Unknown tool: {tool_name}'
+                    }
+                }
+        
+        # Backward compatible: legacy rag/* methods
+        elif method == 'rag/search':
             # Backward compatible: returns file metadata only
             query = params.get('query', '')
             limit = params.get('limit', 20)
@@ -811,13 +935,41 @@ def handle_request(request: dict) -> dict:
 
 
 if __name__ == '__main__':
+    # Send initialization message on startup (like workbook-dashboard)
+    init_response = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {
+                "name": "workbook-rag",
+                "version": "1.0.0"
+            },
+            "capabilities": {
+                "tools": {
+                    "listChanged": True
+                }
+            }
+        }
+    }
+    print(json.dumps(init_response), flush=True)
+    
+    # Handle requests
     for line in sys.stdin:
         try:
             request = json.loads(line.strip())
             response = handle_request(request)
-            print(json.dumps(response))
-            sys.stdout.flush()
+            if response:
+                print(json.dumps(response))
+                sys.stdout.flush()
         except Exception as e:
-            error_response = {'error': str(e)}
+            error_response = {
+                'jsonrpc': '2.0',
+                'id': request.get('id') if 'request' in locals() else None,
+                'error': {
+                    'code': -32603,
+                    'message': str(e)
+                }
+            }
             print(json.dumps(error_response))
             sys.stdout.flush()
