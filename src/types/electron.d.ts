@@ -69,6 +69,11 @@ export interface ElectronAPI {
       }>,
     ) => Promise<string>;
   };
+  mcp: {
+    call: (serverName: string, method: string, params?: any) => Promise<any>;
+    dashboardQuery: (question: string, tileType?: string) => Promise<any>;
+    jupyterExecuteCell: (workbookId: string, notebookPath: string, cellIndex: number, code: string) => Promise<any>;
+  };
 }
 
 declare global {

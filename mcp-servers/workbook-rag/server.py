@@ -93,6 +93,231 @@ def extract_text_from_excel(file_path: Path) -> str:
         return f"Error extracting Excel: {e}"
 
 
+def extract_text_from_insight_sheet(file_path: Path) -> str:
+    """Extract text from Insight Sheet (.is) file with formulas visible"""
+    try:
+        content = file_path.read_text(encoding='utf-8')
+        data = json.loads(content)
+        
+        text_parts = []
+        text_parts.append(f"Spreadsheet: {file_path.name}")
+        
+        if 'metadata' in data:
+            metadata = data['metadata']
+            if 'name' in metadata:
+                text_parts.append(f"Name: {metadata['name']}")
+            if 'workbook_id' in metadata:
+                text_parts.append(f"Workbook ID: {metadata['workbook_id']}")
+        
+        text_parts.append("")  # Empty line
+        
+        # Process each sheet
+        sheets = data.get('sheets', [])
+        for sheet in sheets:
+            sheet_name = sheet.get('name', 'Sheet1')
+            sheet_id = sheet.get('id', 'sheet1')
+            cells = sheet.get('cells', {})
+            formats = sheet.get('formats', {})
+            
+            text_parts.append(f"=== Sheet: {sheet_name} ===")
+            
+            if not cells:
+                text_parts.append("(Empty sheet)")
+                text_parts.append("")
+                continue
+            
+            # Extract all cell data with formulas visible
+            cell_data = []
+            for cell_ref, cell_info in cells.items():
+                if isinstance(cell_info, dict):
+                    # Handle nested value structure from Luckysheet format
+                    # Format can be either:
+                    # 1. { "value": 123, "formula": "=A1*2" } (simple format)
+                    # 2. { "value": { "v": 123, "f": "=A1*2", "m": "123" } } (Luckysheet format)
+                    
+                    if 'value' in cell_info and isinstance(cell_info['value'], dict):
+                        # Luckysheet format: nested value object
+                        value_obj = cell_info['value']
+                        formula = value_obj.get('f', '')  # Formula in 'f' field
+                        value = value_obj.get('v', value_obj.get('m', ''))  # Value in 'v' or 'm' field
+                        
+                        if formula:
+                            # Formula cell - show formula AND calculated value
+                            cell_data.append(f"Cell {cell_ref}: {formula} (formula, calculated value: {value})")
+                        else:
+                            # Value cell
+                            cell_data.append(f"Cell {cell_ref}: {value}")
+                    else:
+                        # Simple format: { "value": 123, "formula": "=A1*2" }
+                        value = cell_info.get('value', '')
+                        formula = cell_info.get('formula', '')
+                        
+                        if formula:
+                            # Formula cell - show formula AND calculated value
+                            cell_data.append(f"Cell {cell_ref}: {formula} (formula, calculated value: {value})")
+                        else:
+                            # Value cell
+                            cell_data.append(f"Cell {cell_ref}: {value}")
+                else:
+                    # Simple value (direct value, not a dict)
+                    cell_data.append(f"Cell {cell_ref}: {cell_info}")
+            
+            # Sort cells by reference (A1, A2, B1, etc.)
+            def cell_sort_key(ref: str):
+                # Extract column (letters) and row (numbers)
+                match = re.match(r'([A-Z]+)(\d+)', ref)
+                if match:
+                    col = match.group(1)
+                    row = int(match.group(2))
+                    # Convert column to number (A=1, B=2, ..., Z=26, AA=27, etc.)
+                    col_num = sum((ord(c) - ord('A') + 1) * (26 ** i) for i, c in enumerate(reversed(col)))
+                    return (row, col_num)
+                return (0, 0)
+            
+            def get_cell_ref_from_line(line: str) -> str:
+                match = re.search(r'Cell ([A-Z]+\d+)', line)
+                return match.group(1) if match else 'A1'
+            
+            cell_data.sort(key=lambda x: cell_sort_key(get_cell_ref_from_line(x)))
+            
+            text_parts.extend(cell_data)
+            text_parts.append("")  # Empty line between sheets
+        
+        # Add formula dependencies summary
+        formula_cells = []
+        for sheet in sheets:
+            cells = sheet.get('cells', {})
+            for cell_ref, cell_info in cells.items():
+                if isinstance(cell_info, dict):
+                    # Extract formula from either format
+                    formula = None
+                    if 'value' in cell_info and isinstance(cell_info['value'], dict):
+                        # Luckysheet format: formula in value.f
+                        formula = cell_info['value'].get('f', '')
+                    else:
+                        # Simple format: formula in cell_info.formula
+                        formula = cell_info.get('formula', '')
+                    
+                    if formula:
+                        dependencies = extract_cell_references(formula)
+                        formula_cells.append(f"{cell_ref}: {formula} (depends on: {', '.join(dependencies)})")
+        
+        if formula_cells:
+            text_parts.append("=== Formulas ===")
+            text_parts.extend(formula_cells)
+        
+        # Extract conditional formatting rules
+        conditional_format_rules = []
+        conditional_formats = sheet.get('conditionalFormats', {})
+        if conditional_formats:
+            for rule_key, rule in conditional_formats.items():
+                if not isinstance(rule, dict):
+                    continue
+                    
+                # Rule structure varies, but common fields:
+                # - type: 'cellValue', 'formula', 'textContains', etc.
+                # - cellrange: cell range like "A1:A10" or [{r:0, c:0}, {r:0, c:0}]
+                # - condition: operator like '>', '<', '=', 'between', etc.
+                # - value: threshold value(s)
+                # - format: formatting object with bg (background), fc (font color), etc.
+                
+                rule_type = rule.get('type', rule.get('conditionType', 'unknown'))
+                cell_range = rule.get('cellrange', rule.get('range', rule_key))
+                
+                # Handle cell range format (could be string "A1:A10" or array)
+                if isinstance(cell_range, list) and len(cell_range) >= 2:
+                    # Convert array format to string
+                    start = cell_range[0]
+                    end = cell_range[1] if len(cell_range) > 1 else start
+                    if isinstance(start, dict) and 'r' in start and 'c' in start:
+                        # Convert row/col to cell reference
+                        start_col = chr(65 + start['c']) if start['c'] < 26 else 'A'  # Simple conversion
+                        start_row = start['r'] + 1
+                        end_col = chr(65 + end['c']) if end['c'] < 26 else 'A'
+                        end_row = end['r'] + 1
+                        cell_range = f"{start_col}{start_row}:{end_col}{end_row}"
+                
+                condition = rule.get('condition', rule.get('operator', ''))
+                value = rule.get('value', rule.get('threshold', ''))
+                format_info = rule.get('format', rule.get('style', {}))
+                
+                # Format the rule description based on type
+                if rule_type == 'cellValue' or rule_type == 'number':
+                    # Example: "Cell value > 100" -> red background
+                    if condition and value:
+                        condition_desc = f"value {condition} {value}"
+                    elif condition:
+                        condition_desc = f"value {condition}"
+                    else:
+                        condition_desc = f"value check"
+                elif rule_type == 'formula':
+                    # Formula-based condition
+                    formula = rule.get('formula', condition)
+                    condition_desc = f"formula: {formula}"
+                elif rule_type == 'textContains':
+                    condition_desc = f"text contains '{value}'" if value else "text contains"
+                elif rule_type == 'duplicate':
+                    condition_desc = "duplicate values"
+                elif rule_type == 'unique':
+                    condition_desc = "unique values"
+                else:
+                    condition_desc = condition if condition else f"{rule_type} condition"
+                
+                # Extract formatting details (color, style, etc.)
+                format_desc = []
+                if isinstance(format_info, dict):
+                    # Background color
+                    bg_color = format_info.get('bg', format_info.get('backgroundColor', format_info.get('backColor')))
+                    if bg_color:
+                        # Handle hex colors (#FF0000) or color names
+                        if isinstance(bg_color, str):
+                            format_desc.append(f"background: {bg_color}")
+                        elif isinstance(bg_color, dict) and 'rgb' in bg_color:
+                            format_desc.append(f"background: rgb({bg_color['rgb']})")
+                    
+                    # Font color
+                    font_color = format_info.get('fc', format_info.get('fontColor', format_info.get('foreColor')))
+                    if font_color:
+                        if isinstance(font_color, str):
+                            format_desc.append(f"font color: {font_color}")
+                        elif isinstance(font_color, dict) and 'rgb' in font_color:
+                            format_desc.append(f"font color: rgb({font_color['rgb']})")
+                    
+                    # Text style
+                    if format_info.get('bl', format_info.get('bold', False)):
+                        format_desc.append("bold")
+                    if format_info.get('it', format_info.get('italic', False)):
+                        format_desc.append("italic")
+                    if format_info.get('un', format_info.get('underline', False)):
+                        format_desc.append("underline")
+                
+                format_str = ", ".join(format_desc) if format_desc else "formatting applied"
+                conditional_format_rules.append(
+                    f"Conditional format on {cell_range}: when {condition_desc} -> {format_str}"
+                )
+        
+        if conditional_format_rules:
+            text_parts.append("=== Conditional Formatting ===")
+            text_parts.extend(conditional_format_rules)
+        
+        return '\n'.join(text_parts)
+    except json.JSONDecodeError as e:
+        return f"Error parsing Insight Sheet JSON: {e}"
+    except Exception as e:
+        return f"Error extracting Insight Sheet: {e}"
+
+
+def extract_cell_references(formula: str) -> List[str]:
+    """Extract cell references from a formula (e.g., A1, B2, etc.)"""
+    if not formula.startswith("="):
+        return []
+    
+    # Pattern to match cell references like A1, B2, AA10, etc.
+    pattern = r'\b([A-Z]+)(\d+)\b'
+    matches = re.findall(pattern, formula)
+    return [f"{col}{row}" for col, row in matches]
+
+
 def read_file(file_path: Path) -> str:
     """Read any file type"""
     ext = file_path.suffix.lower()
@@ -103,6 +328,9 @@ def read_file(file_path: Path) -> str:
         return extract_text_from_docx(file_path)
     elif ext in ['.xlsx', '.xls']:
         return extract_text_from_excel(file_path)
+    elif ext == '.is':
+        # Insight Sheet format - extract with formulas visible
+        return extract_text_from_insight_sheet(file_path)
     else:
         # Text file (includes .csv, .txt, .md, etc.)
         encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
@@ -371,11 +599,24 @@ def search_workbooks_with_content(query: str, limit: int = 5) -> str:
         filename_lower = doc["filename"].lower()
 
         # Check if document contains at least one key term (required for inclusion)
+        # Also check for partial filename matches (e.g., "spreadsheet-2025-12-12" matches "spreadsheet-2025-12-12T19-46-01.is")
         has_key_term = False
         for term in key_terms:
             if term in content_lower or term in filename_lower:
                 has_key_term = True
                 break
+        
+        # Special handling: if query contains a filename pattern (e.g., "spreadsheet-2025-12-12T19-41-01"),
+        # also match similar filenames (same date prefix)
+        if not has_key_term:
+            # Extract date prefix from query (e.g., "spreadsheet-2025-12-12" from "spreadsheet-2025-12-12T19-41-01")
+            date_prefix_match = re.search(r'([a-z0-9_-]+-\d{4}-\d{2}-\d{2})', query_lower)
+            if date_prefix_match:
+                date_prefix = date_prefix_match.group(1)
+                # Check if filename starts with this prefix
+                if filename_lower.startswith(date_prefix):
+                    has_key_term = True
+                    score += 10  # Boost score for filename prefix match
 
         # Skip documents that don't contain any key terms
         if not has_key_term:

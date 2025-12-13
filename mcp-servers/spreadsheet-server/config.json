@@ -1,0 +1,10 @@
+{
+  "name": "spreadsheet-server",
+  "description": "Excel-like spreadsheet formula calculation server with Python backend",
+  "command": "python",
+  "args": ["server.py"],
+  "enabled": true,
+  "env": {
+    "INSIGHTLM_DATA_DIR": ""
+  }
+}

@@ -11,6 +11,7 @@ import { useLayoutStore } from "./store/layoutStore";
 import { useWorkbenchStore } from "./store/workbenchStore";
 import { extensionRegistry } from "./services/extensionRegistry";
 import { jupyterExtensionManifest } from "./extensions/jupyter";
+import { spreadsheetExtensionManifest } from "./extensions/spreadsheet";
 import { ExtensionToggle } from "./components/Extensions/ExtensionToggle";
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
   // Register extensions on app startup
   useEffect(() => {
     extensionRegistry.register(jupyterExtensionManifest);
+    extensionRegistry.register(spreadsheetExtensionManifest);
   }, []);
 
   const renderWorkbenchContent = () => {

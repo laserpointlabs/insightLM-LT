@@ -53,3 +53,4 @@ flowchart LR
 - Add GitHub Actions workflow to build/sign/publish on tag.
 - Wire `autoUpdater` in `electron/main.ts` for prod builds with minimal status UI.
 - Add a landing page (or README section) linking to latest Release.
+

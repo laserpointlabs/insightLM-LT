@@ -59,7 +59,31 @@ export class FileService {
     );
     const filePath = path.join(workbookPath, relativePath);
 
+    // Debug logging for troubleshooting
+    console.log(`[FileService] readDocument called:`);
+    console.log(`  workbookId: ${workbookId}`);
+    console.log(`  relativePath: ${relativePath}`);
+    console.log(`  workbooksDir: ${this.workbookService["workbooksDir"]}`);
+    console.log(`  workbookPath: ${workbookPath}`);
+    console.log(`  filePath: ${filePath}`);
+    console.log(`  filePath exists: ${fs.existsSync(filePath)}`);
+
     if (!fs.existsSync(filePath)) {
+      // Check if workbook directory exists
+      const workbookExists = fs.existsSync(workbookPath);
+      const workbooksDirExists = fs.existsSync(this.workbookService["workbooksDir"]);
+      console.error(`[FileService] File not found. Debug info:`);
+      console.error(`  workbooksDir exists: ${workbooksDirExists}`);
+      console.error(`  workbookPath exists: ${workbookExists}`);
+      if (workbookExists) {
+        const documentsPath = path.join(workbookPath, "documents");
+        const documentsExists = fs.existsSync(documentsPath);
+        console.error(`  documents directory exists: ${documentsExists}`);
+        if (documentsExists) {
+          const files = fs.readdirSync(documentsPath);
+          console.error(`  Files in documents directory: ${files.join(", ")}`);
+        }
+      }
       throw new Error(`File not found: ${relativePath}`);
     }
 

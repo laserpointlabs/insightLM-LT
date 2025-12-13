@@ -71,7 +71,7 @@ export class LLMService {
           properties: {
             workbookId: {
               type: "string",
-              description: "The ID of the workbook",
+              description: "The ID of the workbook (this is the directory name, e.g., 'ac1000-main-project', NOT a UUID). Get this from the 'Workbook ID:' field in RAG search results.",
             },
             filePath: {
               type: "string",
@@ -239,17 +239,20 @@ export class LLMService {
     return `You are an AI assistant helping users manage and analyze their workbooks and documents.
 
 CRITICAL: When users ask questions about document content, you MUST:
-1. If you don't know which files contain the answer, use rag_search_content to search document CONTENT (searches inside PDFs, Word docs, etc.)
-2. If you know the filename, use search_workbooks or list_all_workbook_files
-3. Use read_workbook_file to READ the actual file content if needed
+1. ALWAYS use rag_search_content FIRST when users mention filenames or ask about document content (e.g., "what is in spreadsheet-2025-12-12T19-46-01.is", "what is cell C1 in test-spreadsheet")
+2. rag_search_content searches INSIDE files (PDFs, Word docs, spreadsheets, text files) and will find files by filename or content
+3. After rag_search_content returns results, use read_workbook_file with the exact Workbook ID and Path from the search results to read the full file
 4. Answer based on what you READ from the files
 
 IMPORTANT: Use rag_search_content when users ask about:
+- Filenames (e.g., "spreadsheet-2025-12-12T19-46-01.is", "test-spreadsheet.is")
 - Specific terms or concepts (e.g., "What is BSEO?", "authentication methods")
 - Information that might be inside documents (not just filenames)
 - Questions where you need to search document content, not just metadata
+- Cell values or formulas in spreadsheets (e.g., "what is cell C1")
 
 DO NOT try to answer questions about document content without searching or reading the files first.
+DO NOT use list_all_workbook_files or read_workbook_file directly without first using rag_search_content to find the file.
 
 IMPORTANT: Do NOT include a "Sources:" section in your response. The system will automatically add source references at the end.
 
@@ -273,6 +276,10 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
       switch (toolName) {
         case "read_workbook_file":
           try {
+            console.log(`[LLM] read_workbook_file called with:`);
+            console.log(`  workbookId: "${args.workbookId}"`);
+            console.log(`  filePath: "${args.filePath}"`);
+            
             const content = await this.fileService.readDocument(
               args.workbookId,
               args.filePath,
@@ -294,7 +301,15 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
             console.error(`[LLM] Error reading file:`, errorMsg);
-            return `Error reading file: ${errorMsg}. Make sure you're using the workbook ID (UUID), not the workbook name.`;
+            console.error(`[LLM] Parameters used: workbookId="${args.workbookId}", filePath="${args.filePath}"`);
+            
+            // Provide more helpful error message
+            let helpfulMsg = `Error reading file: ${errorMsg}. `;
+            if (!args.workbookId || !args.filePath) {
+              helpfulMsg += `Missing required parameters. `;
+            }
+            helpfulMsg += `Make sure you're using the exact Workbook ID and Path from the RAG search results (e.g., workbookId="ac1000-main-project", filePath="documents/spreadsheet-2025-12-12T19-46-01.is").`;
+            return helpfulMsg;
           }
 
         case "list_workbooks":
@@ -408,11 +423,23 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
               60000 // 60 second timeout for content search
             );
 
-            if (result && result.content) {
+            console.log(`[LLM] RAG search result structure:`, JSON.stringify(result, null, 2).substring(0, 500));
+            
+            // Handle response structure: server returns {'result': {'content': '...'}}
+            // MCP service extracts result, so result is {'content': '...'}
+            const content = result?.content || result;
+            
+            if (content && typeof content === 'string' && content.length > 0) {
               // Parse RAG response to track sources
-              this.trackFilesFromRAGResponse(result.content);
-              return result.content;
+              this.trackFilesFromRAGResponse(content);
+              
+              // Add explicit instructions for using read_workbook_file with RAG results
+              const enhancedContent = content + 
+                `\n\n[IMPORTANT: When you need to read a file from the search results above, use read_workbook_file with the exact Workbook ID and Path shown. For example, if you see "Workbook ID: ac1000-main-project" and "Path: documents/spreadsheet-2025-12-12T19-46-01.is", call read_workbook_file(workbookId="ac1000-main-project", filePath="documents/spreadsheet-2025-12-12T19-46-01.is"). The workbook ID is the directory name, not a UUID.]`;
+              
+              return enhancedContent;
             } else {
+              console.error(`[LLM] RAG search returned empty or invalid result:`, result);
               return `No content found matching "${query}". Try a different search term or check if documents exist in workbooks.`;
             }
           } catch (error) {

@@ -28,6 +28,10 @@ export class DocumentExtractor {
           } catch (error) {
             throw new Error("Legacy .doc format not fully supported. Please convert to .docx");
           }
+        case ".is":
+          // Insight Sheet files are JSON - for display, return raw JSON (not extracted text)
+          // The extracted text format is only for RAG indexing, not for editing/display
+          return fs.readFileSync(filePath, "utf-8");
         default:
           // For text files (markdown, txt, etc.), read as UTF-8
           return this.readTextFile(filePath);
@@ -82,6 +86,138 @@ export class DocumentExtractor {
         throw new Error("DOCX extraction requires 'mammoth' package. Please install it.");
       }
       throw new Error(`DOCX extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Extract text from Insight Sheet (.is) file
+   * Uses the same logic as the Python RAG server for consistency
+   */
+  private static extractFromInsightSheet(filePath: string): string {
+    try {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const data = JSON.parse(content);
+      
+      const textParts: string[] = [];
+      textParts.push(`Spreadsheet: ${path.basename(filePath)}`);
+      
+      if (data.metadata) {
+        if (data.metadata.name) {
+          textParts.push(`Name: ${data.metadata.name}`);
+        }
+        if (data.metadata.workbook_id) {
+          textParts.push(`Workbook ID: ${data.metadata.workbook_id}`);
+        }
+      }
+      
+      textParts.push(""); // Empty line
+      
+      // Process each sheet
+      const sheets = data.sheets || [];
+      for (const sheet of sheets) {
+        const sheetName = sheet.name || "Sheet1";
+        const cells = sheet.cells || {};
+        
+        textParts.push(`=== Sheet: ${sheetName} ===`);
+        
+        if (Object.keys(cells).length === 0) {
+          textParts.push("(Empty sheet)");
+          textParts.push("");
+          continue;
+        }
+        
+        // Extract all cell data with formulas visible
+        const cellData: string[] = [];
+        for (const [cellRef, cellInfo] of Object.entries(cells)) {
+          if (typeof cellInfo === "object" && cellInfo !== null) {
+            const cell = cellInfo as any;
+            let value: any = null;
+            let formula: string | null = null;
+            
+            // Handle nested value structure from Luckysheet format
+            if (cell.value && typeof cell.value === "object" && cell.value !== null) {
+              const valueObj = cell.value;
+              value = valueObj.v !== undefined ? valueObj.v : (valueObj.m !== undefined ? valueObj.m : null);
+              formula = valueObj.f || null;
+            } else {
+              value = cell.value;
+              formula = cell.formula || null;
+            }
+            
+            if (formula) {
+              cellData.push(`Cell ${cellRef}: ${formula} (formula, calculated value: ${value})`);
+            } else {
+              cellData.push(`Cell ${cellRef}: ${value}`);
+            }
+          } else {
+            cellData.push(`Cell ${cellRef}: ${cellInfo}`);
+          }
+        }
+        
+        // Sort cells by reference (A1, A2, B1, etc.)
+        cellData.sort((a, b) => {
+          const matchA = a.match(/Cell ([A-Z]+)(\d+)/);
+          const matchB = b.match(/Cell ([A-Z]+)(\d+)/);
+          if (!matchA || !matchB) return 0;
+          
+          const colA = matchA[1];
+          const rowA = parseInt(matchA[2]);
+          const colB = matchB[1];
+          const rowB = parseInt(matchB[2]);
+          
+          // Convert column to number (A=1, B=2, etc.)
+          const colNumA = colA.split("").reduce((acc, c) => acc * 26 + (c.charCodeAt(0) - 64), 0);
+          const colNumB = colB.split("").reduce((acc, c) => acc * 26 + (c.charCodeAt(0) - 64), 0);
+          
+          if (rowA !== rowB) return rowA - rowB;
+          return colNumA - colNumB;
+        });
+        
+        textParts.push(...cellData);
+        textParts.push(""); // Empty line between sheets
+      }
+      
+      // Add formula dependencies summary
+      const formulaCells: string[] = [];
+      for (const sheet of sheets) {
+        const cells = sheet.cells || {};
+        for (const [cellRef, cellInfo] of Object.entries(cells)) {
+          if (typeof cellInfo === "object" && cellInfo !== null) {
+            const cell = cellInfo as any;
+            let formula: string | null = null;
+            
+            if (cell.value && typeof cell.value === "object" && cell.value !== null) {
+              formula = cell.value.f || "";
+            } else {
+              formula = cell.formula || "";
+            }
+            
+            if (formula) {
+              // Extract cell references from formula
+              const cellRefPattern = /\b([A-Z]+)(\d+)\b/g;
+              const dependencies: string[] = [];
+              let match;
+              while ((match = cellRefPattern.exec(formula)) !== null) {
+                dependencies.push(match[0]);
+              }
+              
+              if (dependencies.length > 0) {
+                formulaCells.push(`${cellRef}: ${formula} (depends on: ${dependencies.join(", ")})`);
+              }
+            }
+          }
+        }
+      }
+      
+      if (formulaCells.length > 0) {
+        textParts.push("=== Formulas ===");
+        textParts.push(...formulaCells);
+      }
+      
+      return textParts.join("\n");
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to extract text from Insight Sheet: ${errorMsg}`);
     }
   }
 
