@@ -578,6 +578,12 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     // Default: no scope (operate across all workbooks)
     const empty = { contextId: null, workbookIds: null as Set<string> | null };
 
+    // UI override: allow "All workbooks" mode (ignore active context scoping)
+    if ((global as any).__insightlmDisableContextScoping === true) {
+      this.cachedContextScope = empty;
+      return this.cachedContextScope;
+    }
+
     try {
       if (!this.mcpService) {
         this.cachedContextScope = empty;

@@ -295,6 +295,7 @@ export class FileService {
     relativePath: string,
     targetWorkbookId: string,
     targetFolder?: string,
+    options?: { overwrite?: boolean; destFilename?: string },
   ): void {
     const canonicalRel = this.toPosixPath(relativePath).replace(/^\.\//, "");
     const sourcePath = path.join(
@@ -308,7 +309,8 @@ export class FileService {
 
     const filename = path.posix.basename(canonicalRel);
     const folder = (targetFolder || "").trim();
-    const destRel = folder ? `documents/${folder}/${filename}` : `documents/${filename}`;
+    const destFilename = (options?.destFilename || "").trim() || filename;
+    const destRel = folder ? `documents/${folder}/${destFilename}` : `documents/${destFilename}`;
 
     const targetDocsDir = path.join(
       this.workbookService["workbooksDir"],
@@ -324,7 +326,19 @@ export class FileService {
       ...destRel.split("/"),
     );
     if (fs.existsSync(targetPath)) {
-      throw new Error(`Target file already exists: ${destRel}`);
+      if (options?.overwrite) {
+        const st = fs.statSync(targetPath);
+        if (st.isDirectory()) fs.rmSync(targetPath, { recursive: true, force: true });
+        else fs.unlinkSync(targetPath);
+        // Remove any existing metadata entry at destRel to avoid dupes
+        this.updateWorkbookMetadata(targetWorkbookId, (metadata) => {
+          const canonicalDest = this.toPosixPath(destRel).replace(/^\.\//, "");
+          metadata.documents = (metadata.documents || []).filter((d: any) => d?.path !== canonicalDest);
+          return metadata;
+        });
+      } else {
+        throw new Error(`Target file already exists: ${destRel}`);
+      }
     }
 
     fs.renameSync(sourcePath, targetPath);
@@ -343,7 +357,7 @@ export class FileService {
 
     this.updateWorkbookMetadata(targetWorkbookId, (metadata) => {
       const stats = this.getFileStats(targetPath);
-      const fileType = path.extname(filename).toLowerCase().replace(/^\./, "");
+      const fileType = path.extname(destFilename).toLowerCase().replace(/^\./, "");
 
       // Preserve stable identity if available; otherwise assign.
       const docId = movedDoc?.docId || uuidv4();
@@ -351,7 +365,7 @@ export class FileService {
       this.ensureDocumentEntry(metadata, {
         ...(movedDoc || {}),
         docId,
-        filename,
+        filename: destFilename,
         path: destRel,
         folder: folder || undefined,
         fileType,

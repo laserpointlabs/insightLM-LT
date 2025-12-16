@@ -11,13 +11,13 @@ This file is the single source of truth for roadmap planning.
 ## 1.0 (MVP) — “Core workflow works every time”
 
 ### Workbooks (core file/folder management)
-- [ ] Collision-resolution UX for moves/imports (Rename / Overwrite / Skip) when target exists
+- [x] Collision-resolution UX for moves/imports (Rename / Overwrite / Skip) when target exists
 - [ ] Folder context menu: **Rename/Delete** (already implemented) + add **Move…** (implemented) + polish
 - [ ] Document row actions: **Rename/Move/Delete** (implemented) + polish icons + tooltips
 - [ ] Drag & drop: doc → folder, doc → workbook root (implemented) + improve visual drop indicators
 - [ ] Drag & drop: folder → workbook (implemented) + improve conflict messaging
 - [ ] Prevent destructive folder delete when non-empty unless confirmed (implemented) + add “show contents count” in confirm text
-- [ ] Ensure open tabs update when a file is moved/renamed (tab title/path stays consistent)
+- [x] Ensure open tabs update when a file is moved/renamed (tab title/path stays consistent)
 
 ### Deterministic UX (no browser popups)
 - [ ] Replace remaining `alert/prompt/confirm` usages (audit + eliminate)
@@ -30,7 +30,7 @@ This file is the single source of truth for roadmap planning.
 - [ ] Docs: keep `docs/Automation/ELECTRON_MCP_UI_AUTOMATION.md` current
 
 ### Contexts (scoping / safety)
-- [ ] Add explicit “No context / All workbooks” mode in UI (toggle off scoping)
+- [x] Add explicit “No context / All workbooks” mode in UI (toggle off scoping)
 - [ ] Make active context indicator clickable (quick jump to Contexts)
 
 ### Chat (core)

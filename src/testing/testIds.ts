@@ -2,6 +2,8 @@ export const testIds = {
   contexts: {
     create: "contexts-create",
     refresh: "contexts-refresh",
+    scopeToggle: "contexts-scope-toggle",
+    scopeMode: "contexts-scope-mode",
     modal: {
       name: "contexts-modal-name",
       workbookCheckbox: "contexts-modal-workbook-checkbox",
@@ -23,6 +25,14 @@ export const testIds = {
     dismiss: "toast-dismiss",
   },
   workbooks: {
+    collision: {
+      dialog: "collision-dialog",
+      renameInput: "collision-dialog-rename-input",
+      rename: "collision-dialog-rename",
+      overwrite: "collision-dialog-overwrite",
+      skip: "collision-dialog-skip",
+      applyAll: "collision-dialog-apply-all",
+    },
     moveFolder: {
       dialog: "move-folder-dialog",
       workbookSelect: "move-folder-workbook-select",

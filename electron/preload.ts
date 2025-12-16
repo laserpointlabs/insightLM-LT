@@ -63,6 +63,7 @@ try {
       relativePath: string,
       targetWorkbookId: string,
       targetFolder?: string,
+      options?: { overwrite?: boolean; destFilename?: string },
     ) =>
       ipcRenderer.invoke(
         "file:moveToFolder",
@@ -70,6 +71,7 @@ try {
         relativePath,
         targetWorkbookId,
         targetFolder,
+        options,
       ),
     getPath: (workbookId: string, relativePath: string) =>
       ipcRenderer.invoke("file:getPath", workbookId, relativePath),
@@ -106,6 +108,12 @@ try {
       ipcRenderer.invoke("mcp:jupyter:executeCell", workbookId, notebookPath, cellIndex, code),
     call: (serverName: string, method: string, params?: any) =>
       ipcRenderer.invoke("mcp:call", serverName, method, params),
+  },
+
+  // Context scoping (renderer UI toggle)
+  contextScope: {
+    getMode: () => ipcRenderer.invoke("context:scoping:getMode"),
+    setMode: (mode: "all" | "context") => ipcRenderer.invoke("context:scoping:setMode", mode),
   },
 
   // Extension lifecycle controls

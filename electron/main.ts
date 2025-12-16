@@ -272,6 +272,11 @@ app.whenReady().then(async () => {
     toolProviderRegistry, // Pass tool provider registry for generic execution
   );
 
+  // Context scoping override (renderer-controlled)
+  // - false: scope tools/LLM to active context workbooks
+  // - true: ignore context scoping (all workbooks)
+  (global as any).__insightlmDisableContextScoping = false;
+
   // Initialize Dashboard Query Service (after LLM service is created)
   const { DashboardQueryService } = require("./services/dashboardService");
   const { DashboardPromptService } = require("./services/dashboardPromptService");
@@ -292,6 +297,16 @@ app.whenReady().then(async () => {
       console.error("Error in LLM chat:", error);
       throw error;
     }
+  });
+
+  // Context scoping IPC (UI toggle)
+  ipcMain.handle("context:scoping:getMode", () => {
+    const disabled = (global as any).__insightlmDisableContextScoping === true;
+    return { mode: disabled ? "all" : "context" };
+  });
+  ipcMain.handle("context:scoping:setMode", async (_, mode: "all" | "context") => {
+    (global as any).__insightlmDisableContextScoping = mode === "all";
+    return { mode: (global as any).__insightlmDisableContextScoping ? "all" : "context" };
   });
 
   // MCP Dashboard IPC handlers - Uses DashboardQueryService

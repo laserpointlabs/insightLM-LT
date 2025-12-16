@@ -56,6 +56,7 @@ export interface ElectronAPI {
       relativePath: string,
       targetWorkbookId: string,
       targetFolder?: string,
+      options?: { overwrite?: boolean; destFilename?: string },
     ) => Promise<void>;
     getPath: (workbookId: string, relativePath: string) => Promise<string>;
     readBinary: (workbookId: string, relativePath: string) => Promise<string>;
@@ -82,6 +83,10 @@ export interface ElectronAPI {
     call: (serverName: string, method: string, params?: any) => Promise<any>;
     dashboardQuery: (question: string, tileType?: string) => Promise<any>;
     jupyterExecuteCell: (workbookId: string, notebookPath: string, cellIndex: number, code: string) => Promise<any>;
+  };
+  contextScope?: {
+    getMode: () => Promise<{ mode: "all" | "context" }>;
+    setMode: (mode: "all" | "context") => Promise<{ mode: "all" | "context" }>;
   };
 }
 

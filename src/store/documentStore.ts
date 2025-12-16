@@ -16,6 +16,18 @@ interface DocumentStore {
   clearUnsavedContent: (id: string) => void;
   hasUnsavedChanges: (id: string) => boolean;
   isEditing: (id: string) => boolean;
+  updateOpenDocumentLocation: (args: {
+    sourceWorkbookId: string;
+    sourcePath: string;
+    targetWorkbookId: string;
+    targetPath: string;
+    targetFilename?: string;
+  }) => void;
+  updateOpenDocumentsPathPrefix: (args: {
+    workbookId: string;
+    fromPrefix: string;
+    toPrefix: string;
+  }) => void;
 }
 
 let nextDocId = 1;
@@ -198,4 +210,60 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   isEditing: (id) => {
     return get().editingDocuments.has(id);
   },
+
+  updateOpenDocumentLocation: ({ sourceWorkbookId, sourcePath, targetWorkbookId, targetPath, targetFilename }) =>
+    set((state) => {
+      const fromKey = `${sourceWorkbookId}:${sourcePath}`;
+      const toKey = `${targetWorkbookId}:${targetPath}`;
+
+      const nextLoading = new Set(state.loadingDocuments);
+      if (nextLoading.has(fromKey)) {
+        nextLoading.delete(fromKey);
+        nextLoading.add(toKey);
+      }
+
+      return {
+        loadingDocuments: nextLoading,
+        openDocuments: state.openDocuments.map((d) => {
+          if (d.type === "dashboard") return d;
+          if (d.workbookId === sourceWorkbookId && d.path === sourcePath) {
+            return {
+              ...d,
+              workbookId: targetWorkbookId,
+              path: targetPath,
+              filename: targetFilename ?? d.filename,
+            };
+          }
+          return d;
+        }),
+      };
+    }),
+
+  updateOpenDocumentsPathPrefix: ({ workbookId, fromPrefix, toPrefix }) =>
+    set((state) => {
+      const from = String(fromPrefix || "").replace(/\\/g, "/");
+      const to = String(toPrefix || "").replace(/\\/g, "/");
+      if (!from || from === to) return {};
+
+      const nextLoading = new Set(state.loadingDocuments);
+      const nextOpenDocs = state.openDocuments.map((d) => {
+        if (d.type === "dashboard") return d;
+        if (d.workbookId !== workbookId || !d.path) return d;
+        const p = String(d.path).replace(/\\/g, "/");
+        if (!p.startsWith(from)) return d;
+        const newPath = to + p.slice(from.length);
+        const newFilename = newPath.split("/").pop() || d.filename;
+
+        const oldKey = `${workbookId}:${d.path}`;
+        const newKey = `${workbookId}:${newPath}`;
+        if (nextLoading.has(oldKey)) {
+          nextLoading.delete(oldKey);
+          nextLoading.add(newKey);
+        }
+
+        return { ...d, path: newPath, filename: newFilename };
+      });
+
+      return { openDocuments: nextOpenDocs, loadingDocuments: nextLoading };
+    }),
 }));

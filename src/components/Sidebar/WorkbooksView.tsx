@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useDocumentStore } from "../../store/documentStore";
 import { useWorkbookStore } from "../../store/workbookStore";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -9,6 +9,7 @@ import { WorkbookActionContribution } from "../../types";
 import { notifyError, notifyInfo, notifySuccess } from "../../utils/notify";
 import { MoveFolderDialog } from "../MoveFolderDialog";
 import { MoveDocumentDialog } from "../MoveDocumentDialog";
+import { ConflictResolutionDialog, type CollisionResolution } from "../ConflictResolutionDialog";
 import { testIds } from "../../testing/testIds";
 
 interface WorkbooksViewProps {
@@ -61,6 +62,14 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     sourceRelativePath: string;
     sourceFilename: string;
   }>({ isOpen: false, sourceWorkbookId: "", sourceRelativePath: "", sourceFilename: "" });
+  const collisionResolverRef = useRef<((res: CollisionResolution) => void) | null>(null);
+  const [collisionDialog, setCollisionDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    defaultName: string;
+    allowApplyToAll: boolean;
+  }>({ isOpen: false, title: "", message: "", defaultName: "", allowApplyToAll: false });
   const [expandedWorkbooks, setExpandedWorkbooks] = useState<Set<string>>(
     new Set(),
   );
@@ -149,6 +158,37 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     | { kind: "folder"; workbookId: string; folderName: string }
   >(null);
 
+  const isCollisionError = (err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err || "");
+    return msg.includes("Target file already exists:") || msg.includes("File already exists:");
+  };
+
+  const suggestRename = (filename: string) => {
+    const base = String(filename || "").trim();
+    if (!base) return "new-name";
+    const lastDot = base.lastIndexOf(".");
+    if (lastDot <= 0) return `${base} (1)`;
+    const name = base.slice(0, lastDot);
+    const ext = base.slice(lastDot);
+    return `${name} (1)${ext}`;
+  };
+
+  const promptCollision = useCallback(
+    async (params: { title: string; message: string; defaultName: string; allowApplyToAll?: boolean }) => {
+      return await new Promise<CollisionResolution>((resolve) => {
+        collisionResolverRef.current = resolve;
+        setCollisionDialog({
+          isOpen: true,
+          title: params.title,
+          message: params.message,
+          defaultName: params.defaultName,
+          allowApplyToAll: !!params.allowApplyToAll,
+        });
+      });
+    },
+    [],
+  );
+
   const loadWorkbooks = useCallback(async () => {
     if (!window.electronAPI?.workbook) {
       setError("Electron API not available");
@@ -218,17 +258,106 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
 
         let moved = 0;
         let failed = 0;
+        let policy: null | { action: "skip" | "overwrite" | "autoRename" } = null;
         for (const doc of inFolder) {
           try {
             const rel = getDocRelativePath(doc);
             if (!rel) continue;
-            await window.electronAPI.file.moveToFolder(
-              sourceWorkbookId,
-              rel,
-              targetWorkbookId,
-              toFolder,
-            );
-            moved++;
+            const baseName = String(doc?.filename || "").trim() || String(rel).split("/").pop() || "file";
+
+            const attempt = async (opts?: { overwrite?: boolean; destFilename?: string }) => {
+              await window.electronAPI.file.moveToFolder(
+                sourceWorkbookId,
+                rel,
+                targetWorkbookId,
+                toFolder,
+                opts,
+              );
+            };
+
+            try {
+              await attempt();
+              updateOpenDocumentLocation({
+                sourceWorkbookId,
+                sourcePath: rel,
+                targetWorkbookId,
+                targetPath: `documents/${toFolder}/${baseName}`,
+                targetFilename: baseName,
+              });
+              moved++;
+            } catch (err) {
+              if (!isCollisionError(err)) throw err;
+
+              // Decide resolution (ask once if user checks apply-to-all)
+              let resolution: CollisionResolution;
+              if (policy?.action === "skip") {
+                resolution = { action: "skip", applyToAll: true };
+              } else if (policy?.action === "overwrite") {
+                resolution = { action: "overwrite", applyToAll: true };
+              } else if (policy?.action === "autoRename") {
+                resolution = { action: "rename", newName: suggestRename(baseName), applyToAll: true };
+              } else {
+                resolution = await promptCollision({
+                  title: "File already exists",
+                  message: `A file named "${baseName}" already exists in the destination folder "${toFolder}".`,
+                  defaultName: suggestRename(baseName),
+                  allowApplyToAll: true,
+                });
+
+                if (resolution.applyToAll) {
+                  if (resolution.action === "skip") policy = { action: "skip" };
+                  else if (resolution.action === "overwrite") policy = { action: "overwrite" };
+                  else policy = { action: "autoRename" };
+                }
+              }
+
+              if (resolution.action === "skip") {
+                failed++;
+                continue;
+              }
+
+              if (resolution.action === "overwrite") {
+                await attempt({ overwrite: true });
+                updateOpenDocumentLocation({
+                  sourceWorkbookId,
+                  sourcePath: rel,
+                  targetWorkbookId,
+                  targetPath: `documents/${toFolder}/${baseName}`,
+                  targetFilename: baseName,
+                });
+                moved++;
+                continue;
+              }
+
+              // Rename: try chosen name; if it still collides, auto-increment.
+              const desired = (resolution.newName || "").trim() || suggestRename(baseName);
+              const lastDot = desired.lastIndexOf(".");
+              const nameOnly = lastDot > 0 ? desired.slice(0, lastDot) : desired;
+              const ext = lastDot > 0 ? desired.slice(lastDot) : "";
+
+              let n = 0;
+              while (n < 50) {
+                const candidate = n === 0 ? desired : `${nameOnly} (${n + 1})${ext}`;
+                try {
+                  await attempt({ destFilename: candidate });
+                  updateOpenDocumentLocation({
+                    sourceWorkbookId,
+                    sourcePath: rel,
+                    targetWorkbookId,
+                    targetPath: `documents/${toFolder}/${candidate}`,
+                    targetFilename: candidate,
+                  });
+                  moved++;
+                  break;
+                } catch (e2) {
+                  if (!isCollisionError(e2)) throw e2;
+                  n++;
+                }
+              }
+              if (n >= 50) {
+                failed++;
+              }
+            }
           } catch (err) {
             failed++;
             console.error("Failed to move doc during folder move:", err);
@@ -458,7 +587,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     setContextMenu(null);
   };
 
-  const { openDocument } = useDocumentStore();
+  const { openDocument, updateOpenDocumentLocation, updateOpenDocumentsPathPrefix } = useDocumentStore();
 
   const toggleWorkbook = (workbookId: string) => {
     setExpandedWorkbooks((prev) => {
@@ -573,9 +702,71 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
         if (!name || name === documentName) return;
         try {
           await window.electronAPI.file.rename(workbookId, documentPath, name);
+          const parent = String(documentPath || "").replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+          const newPath = parent ? `${parent}/${name}` : `documents/${name}`;
+          updateOpenDocumentLocation({
+            sourceWorkbookId: workbookId,
+            sourcePath: documentPath,
+            targetWorkbookId: workbookId,
+            targetPath: newPath,
+            targetFilename: name,
+          });
           await loadWorkbooks();
           notifySuccess(`Renamed to "${name}"`, "Workbooks");
         } catch (err) {
+          if (isCollisionError(err)) {
+            const resolution = await promptCollision({
+              title: "Name already exists",
+              message: `A file named "${name}" already exists in this folder.`,
+              defaultName: suggestRename(name),
+            });
+
+            if (resolution.action === "skip") return;
+
+            if (resolution.action === "rename") {
+              const tryName = (resolution.newName || "").trim();
+              if (!tryName) return;
+              try {
+                await window.electronAPI.file.rename(workbookId, documentPath, tryName);
+                const parent = String(documentPath || "").replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+                const newPath = parent ? `${parent}/${tryName}` : `documents/${tryName}`;
+                updateOpenDocumentLocation({
+                  sourceWorkbookId: workbookId,
+                  sourcePath: documentPath,
+                  targetWorkbookId: workbookId,
+                  targetPath: newPath,
+                  targetFilename: tryName,
+                });
+                await loadWorkbooks();
+                notifySuccess(`Renamed to "${tryName}"`, "Workbooks");
+              } catch (e2) {
+                notifyError(e2 instanceof Error ? e2.message : "Failed to rename document", "Workbooks");
+              }
+              return;
+            }
+
+            if (resolution.action === "overwrite") {
+              try {
+                const parent = String(documentPath || "").replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+                const destRel = parent ? `${parent}/${name}` : `documents/${name}`;
+                await window.electronAPI.file.delete(workbookId, destRel);
+                await window.electronAPI.file.rename(workbookId, documentPath, name);
+                updateOpenDocumentLocation({
+                  sourceWorkbookId: workbookId,
+                  sourcePath: documentPath,
+                  targetWorkbookId: workbookId,
+                  targetPath: destRel,
+                  targetFilename: name,
+                });
+                await loadWorkbooks();
+                notifySuccess(`Renamed to "${name}"`, "Workbooks");
+              } catch (e3) {
+                notifyError(e3 instanceof Error ? e3.message : "Failed to rename document", "Workbooks");
+              }
+              return;
+            }
+          }
+
           notifyError(err instanceof Error ? err.message : "Failed to rename document", "Workbooks");
         }
       },
@@ -608,6 +799,11 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
         if (!name || name === folderName) return;
         try {
           await window.electronAPI.workbook.renameFolder(workbookId, folderName, name);
+          updateOpenDocumentsPathPrefix({
+            workbookId,
+            fromPrefix: `documents/${folderName}/`,
+            toPrefix: `documents/${name}/`,
+          });
           await loadWorkbooks();
           // Preserve expanded state if the folder was open
           setExpandedFolders((prev) => {
@@ -690,6 +886,37 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
 
     for (const filePath of filePaths) {
       try {
+        const base = String(filePath).split(/[/\\]/).pop() || "";
+        const rel = `documents/${base}`;
+        const wb = workbooks.find((w: any) => w.id === workbookId);
+        const exists = !!wb?.documents?.some((d: any) => String(d?.path || "").replace(/\\/g, "/") === rel);
+
+        if (exists) {
+          const resolution = await promptCollision({
+            title: "File already exists",
+            message: `A file named "${base}" already exists in this workbook.`,
+            defaultName: suggestRename(base),
+            allowApplyToAll: filePaths.length > 1,
+          });
+
+          if (resolution.action === "skip") {
+            continue;
+          }
+
+          if (resolution.action === "rename") {
+            const newName = (resolution.newName || "").trim();
+            if (!newName) continue;
+            await window.electronAPI.file.add(workbookId, filePath, newName);
+            successCount++;
+            continue;
+          }
+
+          // overwrite
+          await window.electronAPI.file.add(workbookId, filePath);
+          successCount++;
+          continue;
+        }
+
         await window.electronAPI.file.add(workbookId, filePath);
         successCount++;
       } catch (err) {
@@ -778,17 +1005,55 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
 
     for (const filePath of filePaths) {
       try {
-        await window.electronAPI.file.add(workbookId, filePath);
-        const base = String(filePath).split(/[/\\]/).pop();
-        if (base) {
+        const base = String(filePath).split(/[/\\]/).pop() || "";
+        if (!base) continue;
+
+        // Import via a temp filename to avoid clobbering root docs.
+        const tempName = `__import-${Date.now()}-${Math.random().toString(36).slice(2)}-${base}`;
+        await window.electronAPI.file.add(workbookId, filePath, tempName);
+
+        const attemptMove = async (opts?: { overwrite?: boolean; destFilename?: string }) => {
           await window.electronAPI.file.moveToFolder(
             workbookId,
-            `documents/${base}`,
+            `documents/${tempName}`,
             workbookId,
             folderName,
+            opts,
           );
+        };
+
+        try {
+          await attemptMove({ destFilename: base });
+          moved++;
+        } catch (err) {
+          if (isCollisionError(err)) {
+            const resolution = await promptCollision({
+              title: "File already exists in folder",
+              message: `A file named "${base}" already exists in "${folderName}".`,
+              defaultName: suggestRename(base),
+              allowApplyToAll: filePaths.length > 1,
+            });
+            if (resolution.action === "skip") {
+              // Cleanup temp
+              await window.electronAPI.file.delete(workbookId, `documents/${tempName}`);
+              continue;
+            }
+            if (resolution.action === "overwrite") {
+              await attemptMove({ overwrite: true, destFilename: base });
+              moved++;
+            } else {
+              const newName = (resolution.newName || "").trim();
+              if (!newName) {
+                await window.electronAPI.file.delete(workbookId, `documents/${tempName}`);
+                continue;
+              }
+              await attemptMove({ destFilename: newName });
+              moved++;
+            }
+          } else {
+            throw err;
+          }
         }
-        moved++;
       } catch (err) {
         failed++;
         const msg = err instanceof Error ? err.message : "Unknown error";
@@ -898,6 +1163,13 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
           workbookId,
           undefined,
         );
+        updateOpenDocumentLocation({
+          sourceWorkbookId: docPayload.workbookId,
+          sourcePath: docPayload.relativePath,
+          targetWorkbookId: workbookId,
+          targetPath: `documents/${docPayload.filename}`,
+          targetFilename: docPayload.filename,
+        });
         await loadWorkbooks();
         setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
         notifySuccess(`Moved "${docPayload.filename}"`, "Workbooks");
@@ -922,6 +1194,34 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
           console.warn("File path not available for:", file.name);
           continue;
         }
+
+        const base = String(filePath).split(/[/\\]/).pop() || file.name || "";
+        const rel = `documents/${base}`;
+        const wb = workbooks.find((w: any) => w.id === workbookId);
+        const exists = !!wb?.documents?.some((d: any) => String(d?.path || "").replace(/\\/g, "/") === rel);
+
+        if (exists) {
+          const resolution = await promptCollision({
+            title: "File already exists",
+            message: `A file named "${base}" already exists in this workbook.`,
+            defaultName: suggestRename(base),
+            allowApplyToAll: files.length > 1,
+          });
+
+          if (resolution.action === "skip") continue;
+          if (resolution.action === "rename") {
+            const newName = (resolution.newName || "").trim();
+            if (!newName) continue;
+            await window.electronAPI.file.add(workbookId, filePath, newName);
+            added++;
+            continue;
+          }
+          // overwrite
+          await window.electronAPI.file.add(workbookId, filePath);
+          added++;
+          continue;
+        }
+
         await window.electronAPI.file.add(workbookId, filePath);
         added++;
       } catch (err) {
@@ -973,6 +1273,13 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
           workbookId,
           folderName,
         );
+        updateOpenDocumentLocation({
+          sourceWorkbookId: docPayload.workbookId,
+          sourcePath: docPayload.relativePath,
+          targetWorkbookId: workbookId,
+          targetPath: `documents/${folderName}/${docPayload.filename}`,
+          targetFilename: docPayload.filename,
+        });
         await loadWorkbooks();
         setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
         setExpandedFolders((prev) => new Set(prev).add(`${workbookId}::${folderName}`));
@@ -997,12 +1304,53 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
       try {
         const filePath = (file as any).path;
         if (!filePath) continue;
-        await window.electronAPI.file.add(workbookId, filePath);
-        const base = String(filePath).split(/[/\\]/).pop();
-        if (base) {
-          await window.electronAPI.file.moveToFolder(workbookId, `documents/${base}`, workbookId, folderName);
+        const base = String(filePath).split(/[/\\]/).pop() || file.name || "";
+        if (!base) continue;
+
+        const tempName = `__import-${Date.now()}-${Math.random().toString(36).slice(2)}-${base}`;
+        await window.electronAPI.file.add(workbookId, filePath, tempName);
+
+        const attemptMove = async (opts?: { overwrite?: boolean; destFilename?: string }) => {
+          await window.electronAPI.file.moveToFolder(
+            workbookId,
+            `documents/${tempName}`,
+            workbookId,
+            folderName,
+            opts,
+          );
+        };
+
+        try {
+          await attemptMove({ destFilename: base });
+          moved++;
+        } catch (err) {
+          if (isCollisionError(err)) {
+            const resolution = await promptCollision({
+              title: "File already exists in folder",
+              message: `A file named "${base}" already exists in "${folderName}".`,
+              defaultName: suggestRename(base),
+              allowApplyToAll: files.length > 1,
+            });
+            if (resolution.action === "skip") {
+              await window.electronAPI.file.delete(workbookId, `documents/${tempName}`);
+              continue;
+            }
+            if (resolution.action === "overwrite") {
+              await attemptMove({ overwrite: true, destFilename: base });
+              moved++;
+            } else {
+              const newName = (resolution.newName || "").trim();
+              if (!newName) {
+                await window.electronAPI.file.delete(workbookId, `documents/${tempName}`);
+                continue;
+              }
+              await attemptMove({ destFilename: newName });
+              moved++;
+            }
+          } else {
+            throw err;
+          }
         }
-        moved++;
       } catch (err) {
         failed++;
         console.error("Failed to add/move dropped file:", err);
@@ -1566,17 +1914,26 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
           }
 
           try {
-            // Move (possibly cross-workbook)
-            await window.electronAPI.file.moveToFolder(sourceWb, sourcePath, targetWorkbookId, targetFolder);
+            const destFilename =
+              targetFilename && targetFilename !== sourceName ? targetFilename : undefined;
+            await window.electronAPI.file.moveToFolder(
+              sourceWb,
+              sourcePath,
+              targetWorkbookId,
+              targetFolder,
+              { destFilename },
+            );
 
-            // Optional rename after move (same folder in destination)
-            if (targetFilename && targetFilename !== sourceName) {
-              const folder = (targetFolder || "").trim();
-              const movedPath = folder
-                ? `documents/${folder}/${sourceName}`
-                : `documents/${sourceName}`;
-              await window.electronAPI.file.rename(targetWorkbookId, movedPath, targetFilename);
-            }
+            const finalFilename = destFilename || sourceName;
+            const folder = (targetFolder || "").trim();
+            const destRel = folder ? `documents/${folder}/${finalFilename}` : `documents/${finalFilename}`;
+            updateOpenDocumentLocation({
+              sourceWorkbookId: sourceWb,
+              sourcePath,
+              targetWorkbookId,
+              targetPath: destRel,
+              targetFilename: finalFilename,
+            });
 
             await loadWorkbooks();
             setExpandedWorkbooks((prev) => new Set(prev).add(targetWorkbookId));
@@ -1585,8 +1942,89 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
             }
             notifySuccess(`Moved "${sourceName}"`, "Workbooks");
           } catch (err) {
+            if (isCollisionError(err)) {
+              const resolution = await promptCollision({
+                title: "File already exists",
+                message: `A file named "${targetFilename}" already exists at the destination.`,
+                defaultName: suggestRename(targetFilename),
+              });
+
+              if (resolution.action === "skip") return;
+              if (resolution.action === "rename") {
+                const newName = (resolution.newName || "").trim();
+                if (!newName) return;
+                try {
+                  await window.electronAPI.file.moveToFolder(
+                    sourceWb,
+                    sourcePath,
+                    targetWorkbookId,
+                    targetFolder,
+                    { destFilename: newName },
+                  );
+                  const folder = (targetFolder || "").trim();
+                  const destRel = folder ? `documents/${folder}/${newName}` : `documents/${newName}`;
+                  updateOpenDocumentLocation({
+                    sourceWorkbookId: sourceWb,
+                    sourcePath,
+                    targetWorkbookId,
+                    targetPath: destRel,
+                    targetFilename: newName,
+                  });
+                  await loadWorkbooks();
+                  notifySuccess(`Moved "${sourceName}"`, "Workbooks");
+                } catch (e2) {
+                  notifyError(e2 instanceof Error ? e2.message : "Failed to move document", "Workbooks");
+                }
+                return;
+              }
+              if (resolution.action === "overwrite") {
+                try {
+                  await window.electronAPI.file.moveToFolder(
+                    sourceWb,
+                    sourcePath,
+                    targetWorkbookId,
+                    targetFolder,
+                    { overwrite: true, destFilename: targetFilename },
+                  );
+                  const folder = (targetFolder || "").trim();
+                  const destRel = folder ? `documents/${folder}/${targetFilename}` : `documents/${targetFilename}`;
+                  updateOpenDocumentLocation({
+                    sourceWorkbookId: sourceWb,
+                    sourcePath,
+                    targetWorkbookId,
+                    targetPath: destRel,
+                    targetFilename: targetFilename,
+                  });
+                  await loadWorkbooks();
+                  notifySuccess(`Moved "${sourceName}"`, "Workbooks");
+                } catch (e3) {
+                  notifyError(e3 instanceof Error ? e3.message : "Failed to move document", "Workbooks");
+                }
+                return;
+              }
+            }
             notifyError(err instanceof Error ? err.message : "Failed to move document", "Workbooks");
           }
+        }}
+      />
+
+      <ConflictResolutionDialog
+        isOpen={collisionDialog.isOpen}
+        title={collisionDialog.title}
+        message={collisionDialog.message}
+        defaultName={collisionDialog.defaultName}
+        allowApplyToAll={collisionDialog.allowApplyToAll}
+        onCancel={() => {
+          setCollisionDialog((prev) => ({ ...prev, isOpen: false }));
+          const resolve = collisionResolverRef.current;
+          collisionResolverRef.current = null;
+          resolve?.({ action: "skip" });
+        }}
+        onResolve={(resolution) => {
+          setCollisionDialog((prev) => ({ ...prev, isOpen: false }));
+          const resolve = collisionResolverRef.current;
+          collisionResolverRef.current = null;
+          resolve?.(resolution);
         }}
       />
     </div>

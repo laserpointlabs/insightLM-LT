@@ -42,3 +42,5 @@ catch {
   Write-Host "`nX Failed to install gh: $($_.Exception.Message)" -ForegroundColor Red
   exit 1
 }
+
+

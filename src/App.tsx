@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { WorkbooksView } from "./components/Sidebar/WorkbooksView";
 import { ContextsView } from "./components/Sidebar/ContextsView";
 import { Chat } from "./components/Sidebar/Chat";
@@ -35,6 +35,11 @@ function App() {
   const { activeWorkbenchId, workbenches } = useWorkbenchStore();
 
   const activeWorkbench = workbenches.find((w) => w.id === activeWorkbenchId);
+
+  // Stable callback identity to avoid ContextsView action button effect loops.
+  const handleActiveContextChanged = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("context:changed"));
+  }, []);
 
   // Register extensions on app startup
   useEffect(() => {
@@ -147,7 +152,7 @@ function App() {
               >
                 <ContextsView
                   onActionButton={setContextsActionButton}
-                  onActiveContextChanged={() => window.dispatchEvent(new CustomEvent("context:changed"))}
+                  onActiveContextChanged={handleActiveContextChanged}
                 />
               </CollapsibleView>
             </div>

@@ -26,6 +26,7 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
   const [activeContextId, setActiveContextId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scopeMode, setScopeMode] = useState<"context" | "all">("context");
 
   const [workbooks, setWorkbooks] = useState<WorkbookSummary[]>([]);
 
@@ -115,9 +116,52 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
   }, [loadWorkbooks, loadContexts]);
 
   useEffect(() => {
+    const loadScopeMode = async () => {
+      try {
+        const modeRes = await window.electronAPI?.contextScope?.getMode?.();
+        if (modeRes?.mode === "all" || modeRes?.mode === "context") {
+          setScopeMode(modeRes.mode);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    loadScopeMode();
+  }, []);
+
+  useEffect(() => {
     if (!onActionButton) return;
     onActionButton(
       <div className="flex items-center gap-0.5">
+        <button
+          onClick={async () => {
+            const next = scopeMode === "context" ? "all" : "context";
+            try {
+              await window.electronAPI?.contextScope?.setMode?.(next);
+              setScopeMode(next);
+              window.dispatchEvent(new CustomEvent("context:scoping", { detail: { mode: next } }));
+              notifySuccess(
+                next === "all"
+                  ? "Context scoping disabled (All workbooks)"
+                  : "Context scoping enabled",
+                "Contexts",
+              );
+              onActiveContextChanged?.();
+            } catch (e) {
+              notifyError(e instanceof Error ? e.message : "Failed to change scoping mode", "Contexts");
+            }
+          }}
+          className="flex items-center justify-center rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+          title={
+            scopeMode === "all"
+              ? "Scoping: All workbooks (click to enable context scoping)"
+              : "Scoping: Active context (click to disable)"
+          }
+          aria-label="Toggle context scoping"
+          data-testid={testIds.contexts.scopeToggle}
+        >
+          {scopeMode === "all" ? "All" : "Scoped"}
+        </button>
         <button
           onClick={() => {
             const selected = new Set<string>();
@@ -146,7 +190,7 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
         </button>
       </div>,
     );
-  }, [onActionButton, loadContexts]);
+  }, [onActionButton, loadContexts, scopeMode, onActiveContextChanged]);
 
   const workbookNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -245,6 +289,9 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto p-2">
+        <div className="mb-2 text-[11px] text-gray-500" data-testid={testIds.contexts.scopeMode}>
+          Scoping: {scopeMode === "all" ? "All workbooks" : "Active context only"}
+        </div>
         {loading && <div className="text-sm text-gray-500">Loading...</div>}
         {error && <div className="text-sm text-red-500">{error}</div>}
 

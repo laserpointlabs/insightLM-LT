@@ -100,6 +100,7 @@ export function setupFileIPC(ragService?: RAGIndexService) {
       relativePath: string,
       targetWorkbookId: string,
       targetFolder?: string,
+      options?: { overwrite?: boolean; destFilename?: string },
     ) => {
       try {
         await fileService.moveDocumentToFolder(
@@ -107,6 +108,7 @@ export function setupFileIPC(ragService?: RAGIndexService) {
           relativePath,
           targetWorkbookId,
           targetFolder,
+          options,
         );
       } catch (error) {
         console.error("Error moving file to folder:", error);

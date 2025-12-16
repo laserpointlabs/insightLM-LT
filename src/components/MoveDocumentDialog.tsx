@@ -69,7 +69,11 @@ export function MoveDocumentDialog({
     : `documents/${filenameTrim}`;
 
   const existingDocs = Array.isArray(selected?.documents) ? selected!.documents! : [];
-  const conflict = existingDocs.some((d) => toPosix(String(d?.path || "")) === toPosix(destRel));
+  // Ignore "conflict" with the source document itself (noop move).
+  const destNorm = toPosix(destRel);
+  const sourceNorm = toPosix(sourceRelativePath);
+  const isSameExactPath = sameWorkbook && destNorm === sourceNorm;
+  const conflict = !isSameExactPath && existingDocs.some((d) => toPosix(String(d?.path || "")) === destNorm);
 
   const canSubmit = !!workbookTrim && !!filenameTrim && !isNoop && !conflict;
 
@@ -151,7 +155,7 @@ export function MoveDocumentDialog({
               <div className="mt-1 text-xs text-gray-500">
                 Destination: <span className="font-mono">{destRel}</span>
               </div>
-              {conflict && (
+              {conflict && !isNoop && (
                 <div className="mt-1 text-xs text-red-600" data-testid="move-doc-error">
                   A file already exists at that destination. Choose a different folder or filename.
                 </div>
