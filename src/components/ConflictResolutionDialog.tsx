@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { testIds } from "../testing/testIds";
 
 export type CollisionResolution = {
@@ -28,16 +28,37 @@ export function ConflictResolutionDialog({
 }: ConflictResolutionDialogProps) {
   const [name, setName] = useState(defaultName);
   const [applyToAll, setApplyToAll] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setName(defaultName);
     setApplyToAll(false);
+    setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 0);
   }, [isOpen, defaultName]);
 
   if (!isOpen) return null;
 
   const trimmed = (name || "").trim();
+  const canRename = !!trimmed;
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onCancel();
+      return;
+    }
+    if (e.key === "Enter") {
+      if (!canRename) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onResolve({ action: "rename", newName: trimmed, applyToAll });
+    }
+  };
 
   return (
     <>
@@ -49,6 +70,10 @@ export function ConflictResolutionDialog({
       <div
         className="fixed left-1/2 top-1/2 z-50 w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white p-4 shadow-xl"
         data-testid={testIds.workbooks.collision.dialog}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
       >
         <h3 className="mb-2 text-lg font-semibold" data-testid={testIds.workbooks.collision.title}>
           {title}
@@ -60,6 +85,7 @@ export function ConflictResolutionDialog({
         <div className="mb-3">
           <div className="mb-1 text-sm font-medium text-gray-700">Rename to</div>
           <input
+            ref={inputRef}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}

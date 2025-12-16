@@ -12,16 +12,17 @@ This file is the single source of truth for roadmap planning.
 
 ### Workbooks (core file/folder management)
 - [x] Collision-resolution UX for moves/imports (Rename / Overwrite / Skip) when target exists
-- [ ] Folder context menu: **Rename/Delete** (already implemented) + add **Move…** (implemented) + polish
-- [ ] Document row actions: **Rename/Move/Delete** (implemented) + polish icons + tooltips
-- [ ] Drag & drop: doc → folder, doc → workbook root (implemented) + improve visual drop indicators
-- [ ] Drag & drop: folder → workbook (implemented) + improve conflict messaging
-- [ ] Prevent destructive folder delete when non-empty unless confirmed (implemented) + add “show contents count” in confirm text
+- [x] Folder context menu: **Move… / Rename / Delete** — polished spacing + icons + stable selectors
+- [x] Document row actions: **Rename/Move/Delete** — polished icons + kept tooltips + stable selectors
+- [x] Drag & drop: doc → folder, doc → workbook root — improved visual drop indicators (clear “Drop here”/target banner)
+- [x] Drag & drop: folder → workbook — improved conflict messaging + clearer drop target feedback
+- [x] Prevent destructive folder delete when non-empty unless confirmed + include “contents count” in confirm text
+- [x] Tighten folder row layout: action strip never overlaps long folder names (truncate + reserve space)
 - [x] Ensure open tabs update when a file is moved/renamed (tab title/path stays consistent)
 
 ### Deterministic UX (no browser popups)
-- [ ] Replace remaining `alert/prompt/confirm` usages (audit + eliminate)
-- [ ] Standardize modal patterns: InputDialog / ConfirmDialog / Toast (consistent testids + keyboard handling)
+- [x] Replace remaining `alert/prompt/confirm` usages (audit + eliminate)
+- [x] Standardize modal patterns: InputDialog / ConfirmDialog / Toast (consistent testids + keyboard handling)
 
 ### Automation / Testability (MCP-safe)
 - [x] Centralize all `data-testid` strings (expanded `src/testing/testIds.ts` + updated Workbooks/Chat/Dialogs/Toast/ActivityBar)
@@ -34,15 +35,20 @@ This file is the single source of truth for roadmap planning.
 
 ### Contexts (scoping / safety)
 - [x] Add explicit “No context / All workbooks” mode in UI (toggle off scoping)
-- [ ] Make active context indicator clickable (quick jump to Contexts)
+- [x] Make active context indicator clickable (quick jump to Contexts)
 
 ### Chat (core)
 - [ ] Add small UX hint when no workbooks are scoped (link to Contexts to fix)
 - [ ] Add deterministic chat history scaffolding (even if minimal in 1.0)
+- [ ] Tabbed and stored chats where chat context is first class (we can discuss need and complexity)
+- [ ] config.yaml for llm source (ollama, openai, asksage) [Critical for genernal testing]
+- [ ] @commands for specific context calls to worbooks, folders, and docs [Nice have and carries over to the dash boards]
 
 ### Dashboards (MVP)
 - [ ] Ensure tile formatting always returns valid JSON (even for “no data found”)
 - [ ] Add “Explain / View Sources” affordance per tile
+- [ ] Allow user to edit question
+- [ ] General tile clean up per best practice
 
 ### CI / Packaging / Updates
 - [ ] CI build artifacts (NSIS installer + portable)
@@ -61,8 +67,20 @@ This file is the single source of truth for roadmap planning.
 - [ ] Folder stats (item count + last modified) and lazy rendering for large trees
 
 ### RAG / Indexing
+- [ ] Decide “when vector DB is required” vs on-demand (single-user installs may not need it)
+  - Current state: **workbook-rag is on-demand content search** (no vector store) and is already quite good for MVP
+  - Add vector DB when: large corpus, latency becomes an issue, semantic search needed beyond keyword/context excerpts
+- [x] No-legacy results after delete: remove stale metadata entries + harden workbook-rag cache + regression test (`npm run test:rag:delete`)
 - [ ] Fix / restore missing `mcp-servers/workbook-rag/index.py` workflow (or remove stale path)
 - [ ] Background indexing status UI (queue, progress, last index time)
+- [ ] Full local RAG (vector store) implementation (Chroma or LanceDB)
+  - [ ] Choose store: **Chroma** (simple local) vs **LanceDB** (fast, file-based, good for desktop)
+  - [ ] Define canonical document identity + tombstones (workbookId + docId/path + version)
+  - [ ] Incremental indexing pipeline (add/update/move/rename/delete) with **hard delete from index**
+  - [ ] Index schema: chunking strategy, metadata fields, embeddings model choice, dedupe
+  - [ ] Hybrid retrieval: BM25/keyword + vector + reranker (optional)
+  - [ ] “Reindex all” + “reindex workbook” tools + safety/locking
+  - [ ] Regression tests: no-legacy results after delete/move/overwrite (vector store + metadata)
 
 ### Extensions
 - [ ] Jupyter integration polish (kernel selection, error surfacing)
@@ -96,8 +114,14 @@ This file is the single source of truth for roadmap planning.
 
 ### Containerization / portability
 - [ ] Multi-build with containers → portable distribution
-
+ 
+ 
 ---
 
 ## Backlog (nice-to-haves / not scheduled)
 - [ ] Right-click in document: “Ask chat to add text/diagram here” (inline authoring helpers)
+
+### Chat becomes iDA (Integrated Digital Assisant)
+- [ ] Update Chat area
+- [ ] Add @(Focused Context), /(Commands), Rules
+- [ ] Add Teams, Agents, Ask, and Plan capabilities

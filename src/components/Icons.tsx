@@ -56,6 +56,43 @@ export function DeleteIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+export function PencilIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 13l3.2-.7L13 5.5 10.5 3 3.7 9.8 3 13z" />
+      <path d="M9.9 3.6l2.5 2.5" />
+    </svg>
+  );
+}
+
+export function MoveIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5.5 4.5L3.5 6.5l2 2" />
+      <path d="M3.8 6.5H10a2.5 2.5 0 0 1 0 5H8.5" />
+      <path d="M10.5 11.5l2-2-2-2" />
+    </svg>
+  );
+}
+
 export function ChevronRightIcon({ className = "h-3 w-3" }: { className?: string }) {
   return (
     <svg

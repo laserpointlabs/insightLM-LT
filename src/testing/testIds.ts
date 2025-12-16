@@ -13,6 +13,7 @@ export const testIds = {
       workbooks: "sidebar-workbooks-header",
       chat: "sidebar-chat-header",
     },
+    activeContextJump: "sidebar-active-context-jump",
   },
   contexts: {
     create: "contexts-create",
@@ -49,6 +50,14 @@ export const testIds = {
     input: "input-dialog-input",
     cancel: "input-dialog-cancel",
     ok: "input-dialog-ok",
+  },
+  confirmDialog: {
+    backdrop: "confirm-dialog-backdrop",
+    dialog: "confirm-dialog",
+    title: "confirm-dialog-title",
+    message: "confirm-dialog-message",
+    cancel: "confirm-dialog-cancel",
+    confirm: "confirm-dialog-confirm",
   },
   workbooks: {
     header: {

@@ -33,7 +33,7 @@ function App() {
     setViewHeight,
     toggleViewCollapse,
   } = useLayoutStore();
-  const { activeWorkbenchId, workbenches } = useWorkbenchStore();
+  const { activeWorkbenchId, workbenches, setActiveWorkbench } = useWorkbenchStore();
 
   const activeWorkbench = workbenches.find((w) => w.id === activeWorkbenchId);
 
@@ -78,6 +78,28 @@ function App() {
       window.removeEventListener("context:changed", onChanged as any);
     };
   }, []);
+
+  const jumpToContexts = useCallback(() => {
+    // Ensure we're in the Insight (file) workbench where Contexts exist.
+    if (activeWorkbenchId !== "file") {
+      setActiveWorkbench("file");
+    }
+
+    // Expand Contexts if collapsed.
+    if (collapsedViews.has("contexts")) {
+      toggleViewCollapse("contexts");
+    }
+
+    // Scroll the Contexts header into view (best-effort).
+    setTimeout(() => {
+      const el = document.querySelector(
+        `[data-testid="${testIds.sidebar.headers.contexts}"]`,
+      ) as HTMLElement | null;
+      el?.scrollIntoView({ block: "nearest" });
+      // Focus the header button for keyboard users.
+      el?.focus?.();
+    }, 0);
+  }, [activeWorkbenchId, collapsedViews, setActiveWorkbench, toggleViewCollapse]);
 
   const renderWorkbenchContent = () => {
     // For Insight Workbench (file), show all views stacked vertically with resizing
@@ -276,9 +298,16 @@ function App() {
           <div className="min-w-0">
             <h1 className="text-sm font-semibold text-gray-700">insightLM-LT</h1>
             {activeContextName && (
-              <div className="mt-0.5 truncate text-[10px] text-gray-500">
-                Active context: <span className="font-medium text-gray-700">{activeContextName}</span>
-              </div>
+              <button
+                type="button"
+                className="mt-0.5 w-full truncate text-left text-[10px] text-gray-500 hover:text-gray-700"
+                onClick={jumpToContexts}
+                title="Jump to Contexts"
+                data-testid={testIds.sidebar.activeContextJump}
+              >
+                Active context:{" "}
+                <span className="font-medium text-gray-700">{activeContextName}</span>
+              </button>
             )}
           </div>
           <ExtensionToggle />

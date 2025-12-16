@@ -3,7 +3,7 @@ import { useDocumentStore } from "../../store/documentStore";
 import { useWorkbookStore } from "../../store/workbookStore";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { InputDialog } from "../InputDialog";
-import { AddIcon, RefreshIcon, CollapseAllIcon, FileIcon, FolderIcon, DeleteIcon } from "../Icons";
+import { AddIcon, RefreshIcon, CollapseAllIcon, FileIcon, FolderIcon, DeleteIcon, PencilIcon, MoveIcon } from "../Icons";
 import { extensionRegistry } from "../../services/extensionRegistry";
 import { WorkbookActionContribution } from "../../types";
 import { notifyError, notifyInfo, notifySuccess } from "../../utils/notify";
@@ -398,9 +398,10 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
       // Collision handling: prompt for new folder name
       if (folderNames.includes(fromFolder)) {
         const suggested = `${fromFolder}-moved`;
+        const targetName = String(targetWb?.name || targetWorkbookId);
         setInputDialog({
           isOpen: true,
-          title: `Folder exists in target workbook — choose a new name`,
+          title: `Folder "${fromFolder}" already exists in "${targetName}" — choose a new name`,
           defaultValue: suggested,
           onConfirm: async (newName: string) => {
             setInputDialog((prev) => ({ ...prev, isOpen: false }));
@@ -833,10 +834,26 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
       return;
     }
     setFolderContextMenu(null);
+
+    const wb = workbooks.find((w: any) => w.id === workbookId);
+    const docs = Array.isArray((wb as any)?.documents) ? (wb as any).documents : [];
+    const folder = String(folderName || "").trim();
+    const countInFolder = folder
+      ? docs.filter((d: any) => {
+          if (String(d?.folder || "").trim() === folder) return true;
+          const p = typeof d?.path === "string" ? d.path.replace(/\\/g, "/") : "";
+          return p.startsWith(`documents/${folder}/`);
+        }).length
+      : 0;
+    const countLabel = countInFolder === 1 ? "1 item" : `${countInFolder} items`;
+
     setConfirmDialog({
       isOpen: true,
       title: "Delete Folder",
-      message: `Delete folder "${folderName}" and all its contents? This cannot be undone.`,
+      message:
+        countInFolder > 0
+          ? `Delete folder "${folderName}" and its contents (${countLabel})? This cannot be undone.`
+          : `Delete empty folder "${folderName}"? This cannot be undone.`,
       confirmText: "Delete",
       cancelText: "Cancel",
       onConfirm: async () => {
@@ -1160,22 +1177,64 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     const docPayload = readDocDragPayload(e.dataTransfer);
     if (docPayload) {
       try {
-        await window.electronAPI.file.moveToFolder(
-          docPayload.workbookId,
-          docPayload.relativePath,
-          workbookId,
-          undefined,
-        );
-        updateOpenDocumentLocation({
-          sourceWorkbookId: docPayload.workbookId,
-          sourcePath: docPayload.relativePath,
-          targetWorkbookId: workbookId,
-          targetPath: `documents/${docPayload.filename}`,
-          targetFilename: docPayload.filename,
-        });
-        await loadWorkbooks();
-        setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
-        notifySuccess(`Moved "${docPayload.filename}"`, "Workbooks");
+        const attempt = async (opts?: { overwrite?: boolean; destFilename?: string }) => {
+          await window.electronAPI.file.moveToFolder(
+            docPayload.workbookId,
+            docPayload.relativePath,
+            workbookId,
+            undefined,
+            opts,
+          );
+        };
+        try {
+          await attempt();
+          updateOpenDocumentLocation({
+            sourceWorkbookId: docPayload.workbookId,
+            sourcePath: docPayload.relativePath,
+            targetWorkbookId: workbookId,
+            targetPath: `documents/${docPayload.filename}`,
+            targetFilename: docPayload.filename,
+          });
+          await loadWorkbooks();
+          setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
+          notifySuccess(`Moved "${docPayload.filename}"`, "Workbooks");
+        } catch (err) {
+          if (!isCollisionError(err)) throw err;
+          const resolution = await promptCollision({
+            title: "File already exists",
+            message: `A file named "${docPayload.filename}" already exists in the destination workbook.`,
+            defaultName: suggestRename(docPayload.filename),
+          });
+          if (resolution.action === "skip") return;
+          if (resolution.action === "overwrite") {
+            await attempt({ overwrite: true });
+            updateOpenDocumentLocation({
+              sourceWorkbookId: docPayload.workbookId,
+              sourcePath: docPayload.relativePath,
+              targetWorkbookId: workbookId,
+              targetPath: `documents/${docPayload.filename}`,
+              targetFilename: docPayload.filename,
+            });
+            await loadWorkbooks();
+            setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
+            notifySuccess(`Moved "${docPayload.filename}"`, "Workbooks");
+            return;
+          }
+          // rename
+          const newName = (resolution.newName || "").trim();
+          if (!newName) return;
+          await attempt({ destFilename: newName });
+          updateOpenDocumentLocation({
+            sourceWorkbookId: docPayload.workbookId,
+            sourcePath: docPayload.relativePath,
+            targetWorkbookId: workbookId,
+            targetPath: `documents/${newName}`,
+            targetFilename: newName,
+          });
+          await loadWorkbooks();
+          setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
+          notifySuccess(`Moved "${docPayload.filename}" as "${newName}"`, "Workbooks");
+        }
       } catch (err) {
         notifyError(err instanceof Error ? err.message : "Failed to move document", "Workbooks");
       } finally {
@@ -1270,23 +1329,66 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     const docPayload = readDocDragPayload(e.dataTransfer);
     if (docPayload) {
       try {
-        await window.electronAPI.file.moveToFolder(
-          docPayload.workbookId,
-          docPayload.relativePath,
-          workbookId,
-          folderName,
-        );
-        updateOpenDocumentLocation({
-          sourceWorkbookId: docPayload.workbookId,
-          sourcePath: docPayload.relativePath,
-          targetWorkbookId: workbookId,
-          targetPath: `documents/${folderName}/${docPayload.filename}`,
-          targetFilename: docPayload.filename,
-        });
-        await loadWorkbooks();
-        setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
-        setExpandedFolders((prev) => new Set(prev).add(`${workbookId}::${folderName}`));
-        notifySuccess(`Moved "${docPayload.filename}" to "${folderName}"`, "Workbooks");
+        const attempt = async (opts?: { overwrite?: boolean; destFilename?: string }) => {
+          await window.electronAPI.file.moveToFolder(
+            docPayload.workbookId,
+            docPayload.relativePath,
+            workbookId,
+            folderName,
+            opts,
+          );
+        };
+        try {
+          await attempt();
+          updateOpenDocumentLocation({
+            sourceWorkbookId: docPayload.workbookId,
+            sourcePath: docPayload.relativePath,
+            targetWorkbookId: workbookId,
+            targetPath: `documents/${folderName}/${docPayload.filename}`,
+            targetFilename: docPayload.filename,
+          });
+          await loadWorkbooks();
+          setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
+          setExpandedFolders((prev) => new Set(prev).add(`${workbookId}::${folderName}`));
+          notifySuccess(`Moved "${docPayload.filename}" to "${folderName}"`, "Workbooks");
+        } catch (err) {
+          if (!isCollisionError(err)) throw err;
+          const resolution = await promptCollision({
+            title: "File already exists",
+            message: `A file named "${docPayload.filename}" already exists in folder "${folderName}".`,
+            defaultName: suggestRename(docPayload.filename),
+          });
+          if (resolution.action === "skip") return;
+          if (resolution.action === "overwrite") {
+            await attempt({ overwrite: true });
+            updateOpenDocumentLocation({
+              sourceWorkbookId: docPayload.workbookId,
+              sourcePath: docPayload.relativePath,
+              targetWorkbookId: workbookId,
+              targetPath: `documents/${folderName}/${docPayload.filename}`,
+              targetFilename: docPayload.filename,
+            });
+            await loadWorkbooks();
+            setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
+            setExpandedFolders((prev) => new Set(prev).add(`${workbookId}::${folderName}`));
+            notifySuccess(`Moved "${docPayload.filename}" to "${folderName}"`, "Workbooks");
+            return;
+          }
+          const newName = (resolution.newName || "").trim();
+          if (!newName) return;
+          await attempt({ destFilename: newName });
+          updateOpenDocumentLocation({
+            sourceWorkbookId: docPayload.workbookId,
+            sourcePath: docPayload.relativePath,
+            targetWorkbookId: workbookId,
+            targetPath: `documents/${folderName}/${newName}`,
+            targetFilename: newName,
+          });
+          await loadWorkbooks();
+          setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
+          setExpandedFolders((prev) => new Set(prev).add(`${workbookId}::${folderName}`));
+          notifySuccess(`Moved "${docPayload.filename}" as "${newName}"`, "Workbooks");
+        }
       } catch (err) {
         notifyError(err instanceof Error ? err.message : "Failed to move document", "Workbooks");
       } finally {
@@ -1396,11 +1498,16 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
         {activeWorkbooks.map((workbook) => (
           <div
             key={workbook.id}
-            className={`mb-1 rounded ${dragOverTarget?.kind === "workbook" && dragOverTarget.workbookId === workbook.id ? "bg-blue-50 ring-1 ring-blue-300" : ""}`}
+            className={`mb-1 rounded relative ${dragOverTarget?.kind === "workbook" && dragOverTarget.workbookId === workbook.id ? "bg-blue-50 ring-1 ring-blue-300" : ""}`}
             onDrop={(e) => handleDropOnWorkbook(e, workbook.id)}
             onDragOver={(e) => handleDragOverWorkbook(e, workbook.id)}
             data-testid={testIds.workbooks.item(workbook.id)}
           >
+            {dragOverTarget?.kind === "workbook" && dragOverTarget.workbookId === workbook.id && (
+              <div className="pointer-events-none absolute inset-x-1 top-0.5 rounded bg-blue-600/80 px-2 py-0.5 text-[10px] font-semibold text-white">
+                Drop to move into “{workbook.name}”
+              </div>
+            )}
             <div
               className="group flex cursor-pointer items-center justify-between rounded p-1 hover:bg-gray-100"
               onContextMenu={(e) => handleContextMenu(e, workbook.id)}
@@ -1494,13 +1601,14 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                         return (
                           <div key={folderName}>
                             <div
-                              className={`group flex cursor-pointer items-center justify-between rounded px-1 py-0.5 text-xs text-gray-700 hover:bg-gray-100 ${
+                              className={`group flex min-w-0 cursor-pointer items-center justify-between gap-1 rounded px-1 py-0.5 text-xs text-gray-700 hover:bg-gray-100 ${
                                 dragOverTarget?.kind === "folder" &&
                                 dragOverTarget.workbookId === workbook.id &&
                                 dragOverTarget.folderName === folderName
                                   ? "bg-blue-50 ring-1 ring-blue-300"
                                   : ""
                               }`}
+                              style={{ position: "relative" }}
                               onClick={() => toggleFolder(workbook.id, folderName)}
                               onContextMenu={(e) => handleFolderContextMenu(e, workbook.id, folderName)}
                               onDrop={(e) => handleDropOnFolder(e, workbook.id, folderName)}
@@ -1524,10 +1632,19 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                               data-testid={testIds.workbooks.folder(workbook.id, folderName)}
                               data-folder-name={folderName}
                             >
-                              <span className="flex items-center gap-1">
-                                {expandedFolders.has(folderKey) ? "▼" : "▶"} 📁 {folderName}
+                              {dragOverTarget?.kind === "folder" &&
+                                dragOverTarget.workbookId === workbook.id &&
+                                dragOverTarget.folderName === folderName && (
+                                  <div className="pointer-events-none absolute right-1 top-0.5 z-10 max-w-[45%] truncate rounded bg-blue-600/80 px-2 py-0.5 text-[10px] font-semibold text-white">
+                                    Drop here
+                                  </div>
+                                )}
+                              <span className="flex min-w-0 flex-1 items-center gap-1">
+                                <span className="shrink-0">{expandedFolders.has(folderKey) ? "▼" : "▶"}</span>
+                                <span className="shrink-0">📁</span>
+                                <span className="min-w-0 flex-1 truncate">{folderName}</span>
                               </span>
-                              <div className={`flex items-center gap-0.5 ${forceVisibleControls ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                              <div className={`shrink-0 flex items-center gap-0.5 ${forceVisibleControls ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1611,7 +1728,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                           aria-label="Rename"
                                           data-testid={testIds.workbooks.docRename(workbook.id, getDocRelativePath(doc))}
                                         >
-                                          <span className="text-[11px]">✎</span>
+                                          <PencilIcon className="h-4 w-4" />
                                         </button>
                                         <button
                                           onClick={(e) => {
@@ -1623,7 +1740,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                           aria-label="Move"
                                           data-testid={testIds.workbooks.docMove(workbook.id, getDocRelativePath(doc))}
                                         >
-                                          <span className="text-[11px]">⇄</span>
+                                          <MoveIcon className="h-4 w-4" />
                                         </button>
                                         <button
                                           onClick={(e) => {
@@ -1685,7 +1802,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                               aria-label="Rename"
                               data-testid={testIds.workbooks.docRename(workbook.id, getDocRelativePath(doc))}
                             >
-                              <span className="text-[11px]">✎</span>
+                              <PencilIcon className="h-4 w-4" />
                             </button>
                             <button
                               onClick={(e) => {
@@ -1697,7 +1814,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                               aria-label="Move"
                               data-testid={testIds.workbooks.docMove(workbook.id, getDocRelativePath(doc))}
                             >
-                              <span className="text-[11px]">⇄</span>
+                              <MoveIcon className="h-4 w-4" />
                             </button>
                             <button
                               onClick={(e) => {
@@ -1747,21 +1864,27 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             <button
-              className="block w-full px-3 py-1 text-left text-sm hover:bg-gray-100"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-100"
               onClick={() => handleRenameWorkbook(contextMenu.workbookId)}
+              title="Rename workbook"
             >
+              <PencilIcon className="h-4 w-4 text-gray-600" />
               Rename
             </button>
             <button
-              className="block w-full px-3 py-1 text-left text-sm hover:bg-gray-100"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-100"
               onClick={() => handleArchiveWorkbook(contextMenu.workbookId)}
+              title="Archive workbook"
             >
+              <CollapseAllIcon className="h-4 w-4 text-gray-600" />
               Archive
             </button>
             <button
-              className="block w-full px-3 py-1 text-left text-sm text-red-600 hover:bg-gray-100"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-700 hover:bg-gray-100"
               onClick={() => handleDeleteWorkbook(contextMenu.workbookId)}
+              title="Delete workbook"
             >
+              <DeleteIcon className="h-4 w-4 text-red-700" />
               Delete
             </button>
           </div>
@@ -1782,7 +1905,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
             }}
           >
             <button
-              className="block w-full px-3 py-1 text-left text-sm hover:bg-gray-100"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-100"
               onClick={() =>
                 handleRenameDocument(
                   documentContextMenu.workbookId,
@@ -1791,11 +1914,13 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                 )
               }
               data-testid={testIds.workbooks.contextMenu.docRename}
+              title="Rename document"
             >
+              <PencilIcon className="h-4 w-4 text-gray-600" />
               Rename
             </button>
             <button
-              className="block w-full px-3 py-1 text-left text-sm hover:bg-gray-100"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-100"
               onClick={() =>
                 handleMoveDocument(
                   documentContextMenu.workbookId,
@@ -1804,11 +1929,13 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                 )
               }
               data-testid={testIds.workbooks.contextMenu.docMove}
+              title="Move document"
             >
+              <MoveIcon className="h-4 w-4 text-gray-600" />
               Move
             </button>
             <button
-              className="block w-full px-3 py-1 text-left text-sm text-red-600 hover:bg-gray-100"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-700 hover:bg-gray-100"
               onClick={() =>
                 handleDeleteDocument(
                   documentContextMenu.workbookId,
@@ -1817,7 +1944,9 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                 )
               }
               data-testid={testIds.workbooks.contextMenu.docDelete}
+              title="Delete document"
             >
+              <DeleteIcon className="h-4 w-4 text-red-700" />
               Delete
             </button>
           </div>
@@ -1832,7 +1961,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
             style={{ left: folderContextMenu.x, top: folderContextMenu.y }}
           >
             <button
-              className="block w-full px-3 py-1 text-left text-sm hover:bg-gray-100"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-100"
               onClick={() => {
                 const fromWb = folderContextMenu.workbookId;
                 const fromFolder = folderContextMenu.folderName;
@@ -1840,21 +1969,27 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                 setMoveFolderDialog({ isOpen: true, sourceWorkbookId: fromWb, sourceFolderName: fromFolder });
               }}
               data-testid={testIds.workbooks.contextMenu.folderMove}
+              title="Move folder"
             >
+              <MoveIcon className="h-4 w-4 text-gray-600" />
               Move…
             </button>
             <button
-              className="block w-full px-3 py-1 text-left text-sm hover:bg-gray-100"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-100"
               onClick={() => handleRenameFolder(folderContextMenu.workbookId, folderContextMenu.folderName)}
               data-testid={testIds.workbooks.contextMenu.folderRename}
+              title="Rename folder"
             >
+              <PencilIcon className="h-4 w-4 text-gray-600" />
               Rename
             </button>
             <button
-              className="block w-full px-3 py-1 text-left text-sm text-red-600 hover:bg-gray-100"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-700 hover:bg-gray-100"
               onClick={() => handleDeleteFolder(folderContextMenu.workbookId, folderContextMenu.folderName)}
               data-testid={testIds.workbooks.contextMenu.folderDelete}
+              title="Delete folder"
             >
+              <DeleteIcon className="h-4 w-4 text-red-700" />
               Delete
             </button>
           </div>

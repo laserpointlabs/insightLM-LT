@@ -17,6 +17,80 @@ DATA_DIR = os.environ.get("INSIGHTLM_DATA_DIR", "")
 _document_cache: Dict[str, tuple[str, float]] = {}
 _cache_timestamp: Optional[float] = None
 
+def _prune_document_cache() -> None:
+    """Remove cache entries for files that no longer exist."""
+    global _document_cache
+    try:
+        dead_keys = []
+        for k in list(_document_cache.keys()):
+            try:
+                if not Path(k).exists():
+                    dead_keys.append(k)
+            except Exception:
+                dead_keys.append(k)
+        for k in dead_keys:
+            _document_cache.pop(k, None)
+    except Exception:
+        # Cache is best-effort only
+        pass
+
+def _compute_cache_stamp(workbooks_dir: Path) -> float:
+    """Compute a stamp that changes when workbook metadata changes.
+
+    We cannot rely on the parent directory mtime alone on all platforms/filesystems.
+    """
+    stamp = 0.0
+    try:
+        stamp = max(stamp, workbooks_dir.stat().st_mtime)
+    except Exception:
+        pass
+    try:
+        for meta in workbooks_dir.glob("*/workbook.json"):
+            try:
+                stamp = max(stamp, meta.stat().st_mtime)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return stamp
+
+def clear_cache(workbook_id: Optional[str] = None, file_path: Optional[str] = None) -> Dict[str, Any]:
+    """Clear cache entries.
+
+    Args:
+        workbook_id: If set, clears entries under this workbook folder only.
+        file_path: If set, clears a specific absolute file path (best-effort).
+    """
+    global _document_cache, _cache_timestamp
+    removed = 0
+
+    if file_path:
+        k = str(Path(file_path))
+        if k in _document_cache:
+            _document_cache.pop(k, None)
+            removed += 1
+        return {"cleared": removed, "scope": "file"}
+
+    if workbook_id:
+        try:
+            data_dir = Path(get_data_dir())
+            wb_dir = data_dir / "workbooks" / workbook_id
+            prefix = str(wb_dir)
+            for k in list(_document_cache.keys()):
+                if str(k).startswith(prefix):
+                    _document_cache.pop(k, None)
+                    removed += 1
+        except Exception:
+            # fallback: clear all
+            removed = len(_document_cache)
+            _document_cache.clear()
+        return {"cleared": removed, "scope": "workbook"}
+
+    removed = len(_document_cache)
+    _document_cache.clear()
+    _cache_timestamp = None
+    return {"cleared": removed, "scope": "all"}
+
 def get_data_dir() -> str:
     """Get application data directory"""
     if DATA_DIR:
@@ -362,16 +436,19 @@ def get_all_workbook_documents(workbook_ids: List[str] = None) -> List[Dict[str,
         print(f"DEBUG: Workbooks directory not found: {workbooks_dir}", file=sys.stderr, flush=True)
         return []
 
-    # Check if cache is still valid (re-scan if workbooks dir changed)
+    # Prune deleted files from cache so we never return "legacy" content.
+    _prune_document_cache()
+
+    # Check if cache is still valid (re-scan if workbook metadata changed).
     try:
-        current_mtime = workbooks_dir.stat().st_mtime
-        if _cache_timestamp is not None and current_mtime <= _cache_timestamp:
+        current_stamp = _compute_cache_stamp(workbooks_dir)
+        if _cache_timestamp is not None and current_stamp <= _cache_timestamp:
             # Cache is valid, but we still need to rebuild the documents list from cache
             pass
         else:
             # Invalidate cache if directory changed
             _document_cache.clear()
-            _cache_timestamp = current_mtime
+            _cache_timestamp = current_stamp
     except:
         _document_cache.clear()
         _cache_timestamp = None
@@ -876,6 +953,25 @@ def handle_request(request: dict) -> dict:
                                 'required': ['workbook_id', 'file_path']
                             }
                         }
+                        ,
+                        {
+                            'name': 'rag_clear_cache',
+                            'description': 'Clear the server-side document content cache (useful after deletes/moves to ensure no stale results)',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'workbook_id': {
+                                        'type': 'string',
+                                        'description': 'Optional: clear cache entries only for this workbook id'
+                                    },
+                                    'file_path': {
+                                        'type': 'string',
+                                        'description': 'Optional: clear cache entry for this absolute file path'
+                                    }
+                                },
+                                'required': []
+                            }
+                        }
                     ]
                 }
             }
@@ -913,6 +1009,16 @@ def handle_request(request: dict) -> dict:
                     'jsonrpc': '2.0',
                     'id': request.get('id'),
                     'result': {'content': content}
+                }
+
+            elif tool_name == 'rag_clear_cache':
+                workbook_id = tool_args.get('workbook_id', None)
+                file_path = tool_args.get('file_path', None)
+                result = clear_cache(workbook_id=workbook_id, file_path=file_path)
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'result': result
                 }
             
             else:

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { testIds } from "../testing/testIds";
 
 type WorkbookInfo = {
@@ -56,6 +56,32 @@ export function MoveFolderDialog({
   const canSubmit =
     !!workbookTrim && !!folderTrim && !isNoop && !folderConflict;
 
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    // Focus folder name for quick keyboard-only flow
+    setTimeout(() => {
+      folderInputRef.current?.focus();
+      folderInputRef.current?.select();
+    }, 0);
+  }, [isOpen]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onCancel();
+      return;
+    }
+    if (e.key === "Enter") {
+      if (!canSubmit) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onConfirm(workbookTrim, folderTrim);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -68,6 +94,10 @@ export function MoveFolderDialog({
       <div
         className="fixed left-1/2 top-1/2 z-50 w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white p-4 shadow-xl"
         data-testid={testIds.workbooks.moveFolder.dialog}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
       >
         <div className="mb-3">
           <h3 className="text-lg font-semibold" data-testid={testIds.workbooks.moveFolder.title}>
@@ -98,6 +128,7 @@ export function MoveFolderDialog({
           <div>
             <div className="mb-1 text-sm font-medium text-gray-700">Folder name (in target)</div>
             <input
+              ref={folderInputRef}
               type="text"
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               value={targetFolderName}

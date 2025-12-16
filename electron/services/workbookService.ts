@@ -91,6 +91,10 @@ export class WorkbookService {
 
     const toPosix = (p: string) => p.replace(/\\/g, "/");
 
+    // Drop any document entries whose backing file is missing to prevent stale ("legacy") data
+    // from showing up in the UI or downstream systems.
+    const existingDocs: any[] = [];
+
     for (const doc of metadata.documents) {
       if (!doc || typeof doc !== "object") continue;
 
@@ -161,11 +165,20 @@ export class WorkbookService {
                 changed = true;
               }
             }
+            // Keep this document entry (file exists)
+            existingDocs.push(doc);
+          } else {
+            changed = true;
           }
         }
       } catch {
         // ignore stat failures; don't block load
       }
+    }
+
+    if (existingDocs.length !== metadata.documents.length) {
+      metadata.documents = existingDocs;
+      changed = true;
     }
 
     if (changed) {
@@ -228,6 +241,13 @@ export class WorkbookService {
 
     // Update metadata
     workbook.folders = workbook.folders.filter((f) => f !== folderName);
+    // Remove any document entries that lived under that folder so there is no stale/legacy metadata.
+    const prefix = `documents/${folderName}/`;
+    workbook.documents = (workbook.documents || []).filter((d) => {
+      const p = typeof d?.path === "string" ? d.path.replace(/\\/g, "/") : "";
+      const inFolder = p.startsWith(prefix) || String(d?.folder || "").trim() === folderName;
+      return !inFolder;
+    });
     workbook.updated = new Date().toISOString();
 
     const metadataPath = path.join(workbookPath, "workbook.json");

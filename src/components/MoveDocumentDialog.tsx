@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { testIds } from "../testing/testIds";
 
 type WorkbookInfo = {
@@ -78,6 +78,44 @@ export function MoveDocumentDialog({
 
   const canSubmit = !!workbookTrim && !!filenameTrim && !isNoop && !conflict;
 
+  const filenameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    // Focus filename for quick keyboard-only flow.
+    setTimeout(() => {
+      filenameRef.current?.focus();
+      filenameRef.current?.select();
+    }, 0);
+  }, [isOpen]);
+
+  const handleDialogKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onCancel();
+    }
+  };
+
+  const handleFilenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onCancel();
+      return;
+    }
+    if (e.key === "Enter") {
+      if (!canSubmit) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onConfirm({
+        targetWorkbookId: workbookTrim,
+        targetFolder: folderTrim || undefined,
+        targetFilename: filenameTrim,
+      });
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -90,6 +128,10 @@ export function MoveDocumentDialog({
       <div
         className="fixed left-1/2 top-1/2 z-50 w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white p-4 shadow-xl"
         data-testid={testIds.workbooks.moveDoc.dialog}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        onKeyDown={handleDialogKeyDown}
       >
         <div className="mb-3">
           <h3 className="text-lg font-semibold" data-testid={testIds.workbooks.moveDoc.title}>
@@ -152,6 +194,8 @@ export function MoveDocumentDialog({
                 onChange={(e) => setTargetFilename(e.target.value)}
                 placeholder="filename.ext"
                 data-testid={testIds.workbooks.moveDoc.filenameInput}
+                ref={filenameRef}
+                onKeyDown={handleFilenameKeyDown}
               />
               <div className="mt-1 text-xs text-gray-500">
                 Destination: <span className="font-mono">{destRel}</span>

@@ -27,7 +27,8 @@
     "test:decoupling:phase3": "node tests/test-phase3-provider-abstraction.mjs",
     "test:decoupling:phase4": "node tests/test-phase4-dashboard-decoupling.mjs",
     "test:automation:smoke": "node tests/automation-smoke-ui.mjs",
-    "test:automation:prod": "node tests/run-prod-renderer-smoke.mjs"
+    "test:automation:prod": "node tests/run-prod-renderer-smoke.mjs",
+    "test:rag:delete": "node tests/test-rag-delete-no-legacy.mjs"
   },
   "keywords": [
     "electron",
