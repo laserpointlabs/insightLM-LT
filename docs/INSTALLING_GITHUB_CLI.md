@@ -8,6 +8,28 @@ GitHub CLI (`gh`) is the official command-line tool for GitHub. It allows you to
 
 ## Recommended Installation Methods
 
+## Non-Admin Windows Quickstart (Recommended for locked-down machines)
+
+If you **do not have administrator** privileges on Windows, do this:
+
+1. **Install Chocolatey (non-admin, portable location)**
+
+```powershell
+.\scripts\ChocolateyInstallNonAdmin.ps1
+```
+
+2. **Install GitHub CLI (gh) per-user (no admin required)**
+
+```powershell
+.\scripts\InstallGitHubCliNonAdmin.ps1
+```
+
+3. **Verify**
+
+```powershell
+gh --version
+```
+
 ### Method 1: Webinstall.dev (Easiest - Recommended)
 
 [Webinstall.dev](https://webinstall.dev/gh/) provides a cross-platform installer that works seamlessly on Windows, macOS, and Linux.
@@ -59,6 +81,14 @@ If you have Chocolatey installed:
 
 ```powershell
 choco install gh
+```
+
+**Important (Non-Admin setups):** The Chocolatey `gh` package installs via an MSI that defaults to a machine-wide install (typically `C:\Program Files\GitHub CLI\...`). On machines where you are **not** an administrator, this commonly fails with MSI **Error 1925** (“insufficient privileges”) and bubbles up as MSI **1603**.
+
+If you're in a non-admin environment, use **Method 1** (webinstall.dev) or run:
+
+```powershell
+.\scripts\InstallGitHubCliNonAdmin.ps1
 ```
 
 ### Method 4: Direct Download
@@ -137,6 +167,12 @@ Then install the official GitHub CLI using one of the methods above.
 chmod +x ~/.local/bin/gh
 ```
 
+### Issue: Chocolatey install fails with MSI 1603 / Error 1925 (Windows)
+
+**Cause:** The `gh` MSI is trying to perform an **all-users** install (e.g. `C:\Program Files\...`) which requires admin privileges.
+
+**Solution:** Use webinstall.dev (Method 1), run `.\scripts\InstallGitHubCliNonAdmin.ps1`, or use a user-scoped install method.
+
 ## What NOT to Do
 
 ### ❌ Don't Install via npm
@@ -202,4 +238,3 @@ gh issue list
 ## Summary
 
 The easiest way to install GitHub CLI is using **webinstall.dev**, which provides a simple one-command installation that works across all platforms. Avoid npm installation methods, as they install a deprecated third-party package that is not the official GitHub CLI.
-

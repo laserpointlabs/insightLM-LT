@@ -350,6 +350,13 @@ function convertFromLuckysheetFormat(luckysheetData: any[], metadata: Spreadshee
   };
 }
 
+// Global script loading state to prevent duplicate loads across all instances
+const globalScriptsState = {
+  loading: false,
+  loaded: false,
+  scripts: new Set<string>(),
+};
+
 export function SpreadsheetViewer({ 
   content, 
   filename, 
@@ -370,9 +377,45 @@ export function SpreadsheetViewer({
 
   // Load Luckysheet CSS and JS
   useEffect(() => {
-    // Check if scripts are already loaded globally
+    // Early exit if already loaded and processed
+    if (globalScriptsState.loaded && (window as any).luckysheet) {
+      setScriptsLoaded(true);
+      return;
+    }
+
+    // Early exit if scripts are already loaded globally (even if not marked in state)
     if ((window as any).jQuery && (window as any).luckysheet) {
-      console.log('Luckysheet scripts already loaded, skipping reload');
+      console.log('Luckysheet scripts already loaded globally, marking as loaded');
+      globalScriptsState.loaded = true;
+      globalScriptsState.loading = false;
+      // Mark all scripts as loaded
+      globalScriptsState.scripts.add('https://code.jquery.com/jquery-3.6.0.min.js');
+      globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/jquery-mousewheel@3.1.13/jquery.mousewheel.min.js');
+      globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/plugins/js/plugin.js');
+      globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/luckysheet.umd.js');
+      setScriptsLoaded(true);
+      return;
+    }
+
+    // Prevent multiple simultaneous loads
+    if (globalScriptsState.loading) {
+      // Wait for existing load to complete
+      const checkLoaded = setInterval(() => {
+        if (globalScriptsState.loaded && (window as any).luckysheet) {
+          clearInterval(checkLoaded);
+          setScriptsLoaded(true);
+        }
+      }, 100);
+      // Cleanup after 10 seconds max
+      setTimeout(() => clearInterval(checkLoaded), 10000);
+      return () => clearInterval(checkLoaded);
+    }
+
+    // Only start loading if not already loaded
+    if (!globalScriptsState.loaded) {
+      globalScriptsState.loading = true;
+    } else {
+      // Already loaded, just mark as ready
       setScriptsLoaded(true);
       return;
     }
@@ -390,11 +433,20 @@ export function SpreadsheetViewer({
       );
     };
 
-    // Helper to check if script is already loaded
+    // Helper to check if script is already loaded AND processed
     const isScriptLoaded = (src: string): boolean => {
-      return Array.from(document.querySelectorAll('script')).some(
-        (script: any) => script.src === src
+      // Check global state first (most reliable)
+      if (globalScriptsState.scripts.has(src)) {
+        return true;
+      }
+      // Check if script tag exists in DOM
+      const scriptExists = Array.from(document.querySelectorAll('script')).some(
+        (script: any) => {
+          const scriptSrc = script.src || script.getAttribute('src');
+          return scriptSrc === src || scriptSrc?.endsWith(src.split('/').pop() || '');
+        }
       );
+      return scriptExists;
     };
 
     // Load CSS only if not already loaded
@@ -452,44 +504,152 @@ export function SpreadsheetViewer({
       console.log('jQuery script tag found, waiting for it to load...');
       ensureJQueryReady(() => loadLuckysheetScripts());
     } else {
-      const jqueryScript = document.createElement('script');
-      jqueryScript.src = jqueryUrl;
-      jqueryScript.setAttribute('data-luckysheet-script', 'jquery');
+      // Only add script if it doesn't already exist
+      if (!isScriptLoaded(jqueryUrl)) {
+        const jqueryScript = document.createElement('script');
+        jqueryScript.src = jqueryUrl;
+        jqueryScript.setAttribute('data-luckysheet-script', 'jquery');
         jqueryScript.onload = () => {
+          globalScriptsState.scripts.add(jqueryUrl);
           console.log('jQuery script loaded, ensuring it\'s ready...');
           ensureJQueryReady(() => loadLuckysheetScripts());
         };
-      jqueryScript.onerror = () => {
-        console.error('Failed to load jQuery');
-        setError('Failed to load required scripts');
-      };
-      document.body.appendChild(jqueryScript);
-      loadedScripts.add(jqueryUrl);
+        jqueryScript.onerror = () => {
+          globalScriptsState.loading = false;
+          console.error('Failed to load jQuery');
+          setError('Failed to load required scripts');
+        };
+        document.body.appendChild(jqueryScript);
+        loadedScripts.add(jqueryUrl);
+      } else {
+        // Script already exists, just wait for it
+        ensureJQueryReady(() => loadLuckysheetScripts());
+      }
     }
 
     // Define loadPluginScript and loadMainScript BEFORE loadLuckysheetScripts so they're in scope
     function loadMainScript() {
       const mainUrl = 'https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/luckysheet.umd.js';
-      if ((window as any).luckysheet || isScriptLoaded(mainUrl)) {
-        console.log('Luckysheet main script already loaded');
+      
+      // CRITICAL: Check if luckysheet global object exists FIRST
+      if ((window as any).luckysheet) {
+        console.log('Luckysheet already loaded globally, marking as ready');
+        globalScriptsState.loaded = true;
+        globalScriptsState.loading = false;
+        if (!globalScriptsState.scripts.has(mainUrl)) {
+          globalScriptsState.scripts.add(mainUrl);
+        }
+        setScriptsLoaded(true);
+        console.log('Chart support: Disabled for now. ChartMix requires Vue/Vuex/Element-UI/ECharts setup.');
+        console.log('Charts will be available in a future update with proper dependency management.');
+        setChartPluginLoaded(false);
+        return;
+      }
+      
+      // Check if already processed in global state
+      if (globalScriptsState.scripts.has(mainUrl)) {
+        console.log('Main script already processed, waiting for luckysheet object...');
+        const checkLuckysheet = setInterval(() => {
+          if ((window as any).luckysheet) {
+            clearInterval(checkLuckysheet);
+            globalScriptsState.loaded = true;
+            globalScriptsState.loading = false;
+            setScriptsLoaded(true);
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(checkLuckysheet);
+          // Even if luckysheet object doesn't exist, mark as loaded to prevent retries
+          globalScriptsState.loaded = true;
+          globalScriptsState.loading = false;
+          setScriptsLoaded(true);
+        }, 3000);
+        return;
+      }
+      
+      // Check if script tag exists in DOM using robust matching (check data attribute first)
+      const existingScript = Array.from(document.querySelectorAll('script[data-luckysheet-script="main"]')).find(
+        (script: any) => {
+          const scriptSrc = script.src || script.getAttribute('src') || '';
+          return scriptSrc.includes('luckysheet.umd.js');
+        }
+      ) || Array.from(document.querySelectorAll('script')).find(
+        (script: any) => {
+          const scriptSrc = script.src || script.getAttribute('src') || '';
+          const filename = mainUrl.split('/').pop() || '';
+          return scriptSrc === mainUrl || 
+                 scriptSrc.endsWith(filename) ||
+                 scriptSrc.includes('luckysheet.umd.js');
+        }
+      );
+      
+      if (existingScript) {
+        // Script tag exists - wait for it to be processed, but NEVER create a new one
+        console.log('Main script tag already exists in DOM, waiting for processing...');
+        const checkLoaded = setInterval(() => {
+          if ((window as any).luckysheet || globalScriptsState.scripts.has(mainUrl)) {
+            clearInterval(checkLoaded);
+            globalScriptsState.loaded = true;
+            globalScriptsState.loading = false;
+            if (!globalScriptsState.scripts.has(mainUrl)) {
+              globalScriptsState.scripts.add(mainUrl);
+            }
+            setScriptsLoaded(true);
+            console.log('Chart support: Disabled for now. ChartMix requires Vue/Vuex/Element-UI/ECharts setup.');
+            console.log('Charts will be available in a future update with proper dependency management.');
+            setChartPluginLoaded(false);
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(checkLoaded);
+          // Mark as loaded even if luckysheet object doesn't exist yet
+          globalScriptsState.loaded = true;
+          globalScriptsState.loading = false;
+          if (!globalScriptsState.scripts.has(mainUrl)) {
+            globalScriptsState.scripts.add(mainUrl);
+          }
+          setScriptsLoaded(true);
+        }, 3000);
+        return;
+      }
+
+      // Final check - if script exists in DOM or global state, don't create
+      if (isScriptLoaded(mainUrl, 'main') || globalScriptsState.scripts.has(mainUrl) || existingScript) {
+        console.log('Main script already exists, skipping creation');
+        globalScriptsState.loaded = true;
+        globalScriptsState.loading = false;
+        if (!globalScriptsState.scripts.has(mainUrl)) {
+          globalScriptsState.scripts.add(mainUrl);
+        }
         setScriptsLoaded(true);
         return;
       }
 
+      // Only create new script tag if it truly doesn't exist anywhere
+      console.log('Creating new main script tag');
       const mainScript = document.createElement('script');
       mainScript.src = mainUrl;
       mainScript.setAttribute('data-luckysheet-script', 'main');
+      // Mark in global state BEFORE appending to prevent race conditions
+      globalScriptsState.scripts.add(mainUrl);
       mainScript.onload = () => {
-        setScriptsLoaded(true);
-        
-        // Chart support temporarily disabled - ChartMix requires complex Vue/Vuex setup
-        // and causes errors if not perfectly configured. Will be added in Phase 2.
-        // For now, skip loading ChartMix dependencies to avoid errors
-        console.log('Chart support: Disabled for now. ChartMix requires Vue/Vuex/Element-UI/ECharts setup.');
-        console.log('Charts will be available in a future update with proper dependency management.');
-        setChartPluginLoaded(false);
+        // Small delay to ensure AMD loader has processed it
+        setTimeout(() => {
+          globalScriptsState.loaded = true;
+          globalScriptsState.loading = false;
+          setScriptsLoaded(true);
+          
+          // Chart support temporarily disabled - ChartMix requires complex Vue/Vuex setup
+          // and causes errors if not perfectly configured. Will be added in Phase 2.
+          // For now, skip loading ChartMix dependencies to avoid errors
+          console.log('Chart support: Disabled for now. ChartMix requires Vue/Vuex/Element-UI/ECharts setup.');
+          console.log('Charts will be available in a future update with proper dependency management.');
+          setChartPluginLoaded(false);
+        }, 100);
       };
       mainScript.onerror = () => {
+        globalScriptsState.loading = false;
+        globalScriptsState.scripts.delete(mainUrl); // Remove on error
         console.error('Failed to load Luckysheet main script');
         setError('Failed to load Luckysheet');
       };
@@ -499,23 +659,80 @@ export function SpreadsheetViewer({
 
     function loadPluginScript() {
       const pluginUrl = 'https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/plugins/js/plugin.js';
-      if (isScriptLoaded(pluginUrl)) {
-        console.log('Luckysheet plugins already loaded, loading main script');
+      
+      // CRITICAL: Check if already processed in global state FIRST
+      if (globalScriptsState.scripts.has(pluginUrl)) {
+        console.log('Luckysheet plugins already processed, loading main script');
         loadMainScript();
-      } else {
-        const pluginScript = document.createElement('script');
-        pluginScript.src = pluginUrl;
-        pluginScript.setAttribute('data-luckysheet-script', 'plugin');
-        pluginScript.onload = () => {
-          loadMainScript();
-        };
-        pluginScript.onerror = () => {
-          console.error('Failed to load Luckysheet plugins');
-          setError('Failed to load Luckysheet plugins');
-        };
-        document.body.appendChild(pluginScript);
-        loadedScripts.add(pluginUrl);
+        return;
       }
+      
+      // Check if script tag exists in DOM using robust matching (check data attribute first)
+      const existingScript = Array.from(document.querySelectorAll('script[data-luckysheet-script="plugin"]')).find(
+        (script: any) => {
+          const scriptSrc = script.src || script.getAttribute('src') || '';
+          return scriptSrc.includes('plugin.js');
+        }
+      ) || Array.from(document.querySelectorAll('script')).find(
+        (script: any) => {
+          const scriptSrc = script.src || script.getAttribute('src') || '';
+          const filename = pluginUrl.split('/').pop() || '';
+          return scriptSrc === pluginUrl || 
+                 scriptSrc.endsWith(filename) ||
+                 scriptSrc.includes('plugin.js');
+        }
+      );
+      
+      if (existingScript) {
+        // Script tag exists - wait for it to be processed, but NEVER create a new one
+        console.log('Plugin script tag already exists in DOM, waiting for processing...');
+        const checkLoaded = setInterval(() => {
+          if (globalScriptsState.scripts.has(pluginUrl) || (window as any).luckysheet) {
+            clearInterval(checkLoaded);
+            if (!globalScriptsState.scripts.has(pluginUrl)) {
+              globalScriptsState.scripts.add(pluginUrl);
+            }
+            loadMainScript();
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(checkLoaded);
+          // If still not processed after timeout, assume it's loaded and continue
+          if (!globalScriptsState.scripts.has(pluginUrl)) {
+            globalScriptsState.scripts.add(pluginUrl);
+          }
+          loadMainScript();
+        }, 3000);
+        return;
+      }
+      
+      // Final check - if script exists in DOM or global state, don't create
+      if (isScriptLoaded(pluginUrl, 'plugin') || globalScriptsState.scripts.has(pluginUrl) || existingScript) {
+        console.log('Plugin script already exists, skipping creation');
+        if (!globalScriptsState.scripts.has(pluginUrl)) {
+          globalScriptsState.scripts.add(pluginUrl);
+        }
+        loadMainScript();
+        return;
+      }
+      
+      console.log('Creating new plugin script tag');
+      // CRITICAL: Mark in global state BEFORE creating script tag to prevent race conditions
+      globalScriptsState.scripts.add(pluginUrl);
+      const pluginScript = document.createElement('script');
+      pluginScript.src = pluginUrl;
+      pluginScript.setAttribute('data-luckysheet-script', 'plugin');
+      pluginScript.onload = () => {
+        loadMainScript();
+      };
+      pluginScript.onerror = () => {
+        globalScriptsState.loading = false;
+        globalScriptsState.scripts.delete(pluginUrl); // Remove on error
+        console.error('Failed to load Luckysheet plugins');
+        setError('Failed to load Luckysheet plugins');
+      };
+      document.body.appendChild(pluginScript);
+      loadedScripts.add(pluginUrl);
     }
 
     function loadLuckysheetScripts() {
@@ -562,20 +779,28 @@ export function SpreadsheetViewer({
           return;
         }
         
-        const mousewheelScript = document.createElement('script');
-        mousewheelScript.src = mousewheelUrl;
-        mousewheelScript.setAttribute('data-luckysheet-script', 'mousewheel');
-        mousewheelScript.onload = () => {
-          console.log('Mousewheel script loaded successfully');
+        // Only add script if it doesn't already exist
+        if (!isScriptLoaded(mousewheelUrl)) {
+          const mousewheelScript = document.createElement('script');
+          mousewheelScript.src = mousewheelUrl;
+          mousewheelScript.setAttribute('data-luckysheet-script', 'mousewheel');
+          mousewheelScript.onload = () => {
+            globalScriptsState.scripts.add(mousewheelUrl);
+            console.log('Mousewheel script loaded successfully');
+            loadPluginScript();
+          };
+          mousewheelScript.onerror = () => {
+            globalScriptsState.loading = false;
+            console.warn('Failed to load jQuery mousewheel plugin, continuing anyway');
+            // Continue even if mousewheel fails - some features may not work
+            loadPluginScript();
+          };
+          document.body.appendChild(mousewheelScript);
+          loadedScripts.add(mousewheelUrl);
+        } else {
+          // Script already exists, proceed
           loadPluginScript();
-        };
-        mousewheelScript.onerror = () => {
-          console.warn('Failed to load jQuery mousewheel plugin, continuing anyway');
-          // Continue even if mousewheel fails - some features may not work
-          loadPluginScript();
-        };
-        document.body.appendChild(mousewheelScript);
-        loadedScripts.add(mousewheelUrl);
+        }
       }
     }
 

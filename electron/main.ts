@@ -52,7 +52,7 @@ async function findVitePort(): Promise<number> {
 }
 
 async function createWindow() {
-  // Determine preload path - in dev, __dirname is dist-electron, in prod it's the app.asar
+  // Determine preload path - in dev, __dirname is dist-electron, preload.js is in same directory
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
   const preloadPath = path.join(__dirname, "preload.js");
 
@@ -194,6 +194,19 @@ app.whenReady().then(async () => {
         continue;
       }
 
+      // Ensure INSIGHTLM_DATA_DIR is set for auto-started servers too
+      if (!serverConfig.env) serverConfig.env = {};
+      if (!serverConfig.env.INSIGHTLM_DATA_DIR) {
+        try {
+          const appConfig = configService.loadAppConfig();
+          if (appConfig.dataDir) {
+            serverConfig.env.INSIGHTLM_DATA_DIR = appConfig.dataDir;
+          }
+        } catch (e) {
+          console.warn("[MCP] Could not load app config to set INSIGHTLM_DATA_DIR:", e);
+        }
+      }
+
       const serverPath = path.join(mcpService["serversDir"], serverConfig.name);
       if (fs.existsSync(serverPath)) {
         console.log(`[MCP] Auto-starting server: ${serverConfig.name}`);
@@ -210,25 +223,6 @@ app.whenReady().then(async () => {
       sendRequest: async () => { throw new Error("MCP service not available"); },
       stopAll: () => {},
     } as any;
-  }
-
-  // Initialize Tool Provider Registry (only if MCP service is available)
-  if (mcpService && typeof mcpService.discoverServers === 'function') {
-    try {
-      await toolProviderRegistry.initialize();
-
-      // Register MCP Tool Provider
-      const mcpProvider = new MCPToolProvider(
-        "mcp-provider",
-        mcpService,
-        toolRegistry,
-        [], // Empty array since we don't have mcpServers in catch block
-        100 // Priority
-      );
-      await toolProviderRegistry.registerProvider({ provider: mcpProvider });
-    } catch (error) {
-      console.warn("Tool provider registry initialization failed:", error);
-    }
   }
 
   // Generic health check for servers that support rag/health endpoint

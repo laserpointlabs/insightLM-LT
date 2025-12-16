@@ -94,3 +94,13 @@ The application now has a fully decoupled MCP architecture where:
 - Server lifecycle is properly managed
 - Dashboard formatting is separated from prompting
 - All components are independently testable
+
+
+
+
+
+
+
+
+
+

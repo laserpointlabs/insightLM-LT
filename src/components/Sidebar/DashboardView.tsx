@@ -4,6 +4,7 @@ import { useDocumentStore } from "../../store/documentStore";
 import { InputDialog } from "../InputDialog";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { AddIcon } from "../Icons";
+import { notifyError, notifySuccess } from "../../utils/notify";
 
 interface DashboardViewProps {
   onActionButton?: (button: React.ReactNode) => void;
@@ -84,9 +85,13 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
             const dashboard = await createDashboard(name.trim());
             // Open the newly created dashboard directly without looking it up
             openDashboard(dashboard);
+            notifySuccess(`Dashboard "${name.trim()}" created`, "Dashboards");
           } catch (error) {
             console.error("Failed to create dashboard:", error);
-            alert(`Failed to create dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+            notifyError(
+              error instanceof Error ? error.message : "Failed to create dashboard",
+              "Dashboards",
+            );
           }
         }
       },
@@ -129,9 +134,13 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
 
         try {
           await renameDashboard(dashboardId, newName.trim());
+          notifySuccess("Dashboard renamed", "Dashboards");
         } catch (error) {
           console.error("Failed to rename dashboard:", error);
-          alert(`Failed to rename dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+          notifyError(
+            error instanceof Error ? error.message : "Failed to rename dashboard",
+            "Dashboards",
+          );
         }
       },
     });
@@ -152,9 +161,13 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
           await deleteDashboard(dashboardId);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
           setContextMenu(null);
+          notifySuccess("Dashboard deleted", "Dashboards");
         } catch (error) {
           console.error("Failed to delete dashboard:", error);
-          alert(`Failed to delete dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+          notifyError(
+            error instanceof Error ? error.message : "Failed to delete dashboard",
+            "Dashboards",
+          );
         }
       },
     });

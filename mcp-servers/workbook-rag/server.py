@@ -343,10 +343,14 @@ def read_file(file_path: Path) -> str:
         return f"Could not decode file: {file_path}"
 
 
-def get_all_workbook_documents() -> List[Dict[str, Any]]:
-    """Scan all workbooks and return document metadata with content (cached)"""
+def get_all_workbook_documents(workbook_ids: List[str] = None) -> List[Dict[str, Any]]:
+    """Scan workbooks and return document metadata with content (cached).
+
+    If workbook_ids is provided, only those workbook directory names are scanned.
+    """
     global _document_cache, _cache_timestamp
 
+    workbook_id_allowlist = set(workbook_ids) if workbook_ids else None
     documents = []
     data_dir = Path(get_data_dir())
     workbooks_dir = data_dir / "workbooks"
@@ -374,6 +378,8 @@ def get_all_workbook_documents() -> List[Dict[str, Any]]:
 
     for workbook_dir in workbooks_dir.iterdir():
         if not workbook_dir.is_dir():
+            continue
+        if workbook_id_allowlist is not None and workbook_dir.name not in workbook_id_allowlist:
             continue
 
         metadata_path = workbook_dir / "workbook.json"
@@ -567,12 +573,12 @@ def extract_context_chunks(content: str, key_terms: List[str], chunk_size: int =
     return chunks
 
 
-def search_workbooks_with_content(query: str, limit: int = 5) -> str:
+def search_workbooks_with_content(query: str, limit: int = 5, workbook_ids: List[str] = None) -> str:
     """Search workbook documents using text matching and return FULL content.
     Returns only files that match the query (score >= 3) plus up to 2 relevant sibling files per workbook.
     Limits to 5 files per workbook to avoid overwhelming results.
     """
-    documents = get_all_workbook_documents()
+    documents = get_all_workbook_documents(workbook_ids)
 
     if not documents:
         return "No workbook documents found."
@@ -738,8 +744,11 @@ def read_workbook_file(workbook_id: str, file_path: str) -> str:
     return read_file(full_path)
 
 
-def list_all_files() -> List[Dict[str, Any]]:
-    """List all files in all workbooks"""
+def list_all_files(workbook_ids: List[str] = None) -> List[Dict[str, Any]]:
+    """List all files in workbooks.
+
+    If workbook_ids is provided, only those workbook directory names are included.
+    """
     files = []
     data_dir = Path(get_data_dir())
     workbooks_dir = data_dir / "workbooks"
@@ -747,8 +756,12 @@ def list_all_files() -> List[Dict[str, Any]]:
     if not workbooks_dir.exists():
         return []
 
+    workbook_id_allowlist = set(workbook_ids) if workbook_ids else None
+
     for workbook_dir in workbooks_dir.iterdir():
         if not workbook_dir.is_dir():
+            continue
+        if workbook_id_allowlist is not None and workbook_dir.name not in workbook_id_allowlist:
             continue
 
         metadata_path = workbook_dir / "workbook.json"
@@ -820,6 +833,11 @@ def handle_request(request: dict) -> dict:
                                     'limit': {
                                         'type': 'number',
                                         'description': 'Maximum number of files to return (default: 5)'
+                                    },
+                                    'workbook_ids': {
+                                        'type': 'array',
+                                        'items': { 'type': 'string' },
+                                        'description': 'Optional: limit search to these workbook IDs (directory names)'
                                     }
                                 },
                                 'required': ['query']
@@ -830,7 +848,13 @@ def handle_request(request: dict) -> dict:
                             'description': 'List all files in all workbooks with their metadata (workbook ID, workbook name, filename, path)',
                             'inputSchema': {
                                 'type': 'object',
-                                'properties': {},
+                                'properties': {
+                                    'workbook_ids': {
+                                        'type': 'array',
+                                        'items': { 'type': 'string' },
+                                        'description': 'Optional: limit listing to these workbook IDs (directory names)'
+                                    }
+                                },
                                 'required': []
                             }
                         },
@@ -864,7 +888,8 @@ def handle_request(request: dict) -> dict:
             if tool_name == 'rag_search_content':
                 query = tool_args.get('query', '')
                 limit = tool_args.get('limit', 5)
-                results = search_workbooks_with_content(query, limit)
+                workbook_ids = tool_args.get('workbook_ids', None)
+                results = search_workbooks_with_content(query, limit, workbook_ids)
                 return {
                     'jsonrpc': '2.0',
                     'id': request.get('id'),
@@ -872,7 +897,8 @@ def handle_request(request: dict) -> dict:
                 }
             
             elif tool_name == 'rag_list_files':
-                files = list_all_files()
+                workbook_ids = tool_args.get('workbook_ids', None)
+                files = list_all_files(workbook_ids)
                 return {
                     'jsonrpc': '2.0',
                     'id': request.get('id'),
@@ -905,33 +931,63 @@ def handle_request(request: dict) -> dict:
             query = params.get('query', '')
             limit = params.get('limit', 20)
             results = search_workbooks(query, limit)
-            return {'result': results}
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': results
+            }
 
         elif method == 'rag/search_content':
             # New: returns full content of matching files
             query = params.get('query', '')
             limit = params.get('limit', 5)
-            results = search_workbooks_with_content(query, limit)
-            return {'result': {'content': results}}
+            workbook_ids = params.get('workbook_ids', None)
+            results = search_workbooks_with_content(query, limit, workbook_ids)
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {'content': results}
+            }
 
         elif method == 'rag/read_file':
             workbook_id = params.get('workbook_id', '')
             file_path = params.get('file_path', '')
             content = read_workbook_file(workbook_id, file_path)
-            return {'result': {'content': content}}
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {'content': content}
+            }
 
         elif method == 'rag/list_files':
-            files = list_all_files()
-            return {'result': files}
+            workbook_ids = params.get('workbook_ids', None)
+            files = list_all_files(workbook_ids)
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': files
+            }
 
         elif method == 'rag/health':
-            return {'result': {'status': 'healthy', 'mode': 'on-demand-with-content-search'}}
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {'status': 'healthy', 'mode': 'on-demand-with-content-search'}
+            }
 
         else:
-            return {'error': f'Unknown method: {method}'}
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'error': {'code': -32601, 'message': f'Unknown method: {method}'}
+            }
 
     except Exception as e:
-        return {'error': str(e)}
+        return {
+            'jsonrpc': '2.0',
+            'id': request.get('id'),
+            'error': {'code': -32603, 'message': str(e)}
+        }
 
 
 if __name__ == '__main__':

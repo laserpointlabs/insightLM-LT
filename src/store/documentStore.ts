@@ -95,11 +95,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }));
 
     // Create document immediately (without content) for instant UI feedback
+    // Use undefined to distinguish "not loaded" from "empty string"
     const tempDoc: OpenDocument = {
       ...doc,
       id: `doc-${nextDocId++}`,
       type: doc.type || "document",
-      content: doc.content || "",
+      content: doc.content !== undefined ? doc.content : undefined,
     };
 
     set((state) => ({
@@ -107,8 +108,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       lastOpenedDocId: tempDoc.id,
     }));
 
-    // Load content asynchronously if not provided
-    if (!doc.content) {
+    // Load content asynchronously if not provided (undefined means not provided, "" means empty)
+    if (doc.content === undefined) {
       // Use requestIdleCallback or setTimeout to yield to browser, preventing blocking
       // This allows the UI to update immediately before loading file content
         const loadContent = async () => {

@@ -2,6 +2,7 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useDocumentStore } from "../../store/documentStore";
+import { notifyError } from "../../utils/notify";
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -147,8 +148,9 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                   })
                   .catch((error) => {
                     console.error("[ChatMessage] openDocument FAILED:", error);
-                    alert(
-                      `Failed to open document: ${error instanceof Error ? error.message : "Unknown error"}`,
+                    notifyError(
+                      error instanceof Error ? error.message : "Failed to open document",
+                      "Chat",
                     );
                   });
                 };
@@ -233,8 +235,9 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                   })
                   .catch((error) => {
                     console.error("[ChatMessage] openDocument FAILED:", error);
-                    alert(
-                      `Failed to open document: ${error instanceof Error ? error.message : "Unknown error"}`,
+                    notifyError(
+                      error instanceof Error ? error.message : "Failed to open document",
+                      "Chat",
                     );
                   });
                 };

@@ -7,6 +7,9 @@ try {
   // Workbook operations
   workbook: {
     create: (name: string) => ipcRenderer.invoke("workbook:create", name),
+    createFolder: (workbookId: string, folderName: string) => ipcRenderer.invoke("workbook:createFolder", workbookId, folderName),
+    deleteFolder: (workbookId: string, folderName: string) => ipcRenderer.invoke("workbook:deleteFolder", workbookId, folderName),
+    renameFolder: (workbookId: string, oldName: string, newName: string) => ipcRenderer.invoke("workbook:renameFolder", workbookId, oldName, newName),
     getAll: () => ipcRenderer.invoke("workbook:getAll"),
     get: (id: string) => ipcRenderer.invoke("workbook:get", id),
     rename: (id: string, newName: string) =>
@@ -54,6 +57,19 @@ try {
         sourceWorkbookId,
         relativePath,
         targetWorkbookId,
+      ),
+    moveToFolder: (
+      sourceWorkbookId: string,
+      relativePath: string,
+      targetWorkbookId: string,
+      targetFolder?: string,
+    ) =>
+      ipcRenderer.invoke(
+        "file:moveToFolder",
+        sourceWorkbookId,
+        relativePath,
+        targetWorkbookId,
+        targetFolder,
       ),
     getPath: (workbookId: string, relativePath: string) =>
       ipcRenderer.invoke("file:getPath", workbookId, relativePath),

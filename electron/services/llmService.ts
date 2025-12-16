@@ -50,6 +50,14 @@ export class LLMService {
   private availableTools: ToolDefinition[] = [];
   private filesReadInCurrentChat: Array<{ workbookId: string; workbookName: string; filePath: string; filename: string }> = [];
 
+  /**
+   * Cached active context scope for the current request / tool execution burst.
+   * - null: not yet loaded
+   * - { contextId: null }: no active context
+   * - { contextId: string, workbookIds: Set<string> }: scope active
+   */
+  private cachedContextScope: null | { contextId: string | null; workbookIds: Set<string> | null } = null;
+
   constructor(
     config: LLMConfig,
     workbookService: WorkbookService,
@@ -178,6 +186,8 @@ export class LLMService {
   async chat(messages: LLMMessage[]): Promise<string> {
     // Reset files read tracker for new chat request
     this.filesReadInCurrentChat = [];
+    // Reset cached context scope per chat request (so active context changes apply immediately)
+    this.cachedContextScope = null;
 
     // Add system message with tool definitions if not present
     const systemMessage: LLMMessage = {
@@ -271,6 +281,10 @@ DO NOT use list_all_workbook_files or read_workbook_file directly without first 
 
 IMPORTANT: Do NOT include a "Sources:" section in your response. The system will automatically add source references at the end.
 
+CONTEXT SCOPING:
+- If there is an active Context, tools that list/search files and workbooks are automatically scoped to that Context's workbooks.
+- If there is no active Context, tools operate across all workbooks.
+
 Available tools:
 ${this.availableTools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
 
@@ -292,6 +306,20 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
 
       if (!serverName) {
         return `Unknown tool: ${toolName}`;
+      }
+
+      // Load active context scope once per tool execution burst.
+      // This is used to scope core list/search tools and (when supported) to scope RAG search/list tools.
+      const scope = await this.getActiveContextScope();
+
+      // If the workbook-rag server supports scoping, inject workbook_ids for active context.
+      // This keeps rag_search_content within the active context and prevents cross-context leakage.
+      if (
+        scope.workbookIds &&
+        (toolName === "rag_search_content" || toolName === "rag_list_files") &&
+        !Array.isArray(args.workbook_ids)
+      ) {
+        args = { ...args, workbook_ids: Array.from(scope.workbookIds) };
       }
 
       // Core tools are executed internally
@@ -394,6 +422,10 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     toolName: string,
     args: Record<string, any>,
   ): Promise<string> {
+    const scope = await this.getActiveContextScope();
+    const isInScope = (workbookId: string) =>
+      !scope.workbookIds || scope.workbookIds.has(workbookId);
+
     switch (toolName) {
         case "read_workbook_file":
           try {
@@ -435,7 +467,9 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
 
         case "list_workbooks":
           const workbooks = await this.workbookService.getWorkbooks();
-          const activeWorkbooks = workbooks.filter((w) => !w.archived);
+          const activeWorkbooks = workbooks
+            .filter((w) => !w.archived)
+            .filter((w) => isInScope(w.id));
           if (activeWorkbooks.length === 0) {
             return "No workbooks found.";
           }
@@ -497,7 +531,9 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           const results: string[] = [];
           const query = args.query.toLowerCase();
 
-          for (const wb of allWorkbooks.filter((w) => !w.archived)) {
+          for (const wb of allWorkbooks
+            .filter((w) => !w.archived)
+            .filter((w) => isInScope(w.id))) {
             for (const doc of wb.documents.filter((d: any) => !d.archived)) {
               if (doc.filename.toLowerCase().includes(query)) {
                 results.push(`${wb.name}/${doc.filename}`);
@@ -513,7 +549,9 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           const allWb = await this.workbookService.getWorkbooks();
           const fileList: string[] = [];
 
-          for (const wb of allWb.filter((w) => !w.archived)) {
+          for (const wb of allWb
+            .filter((w) => !w.archived)
+            .filter((w) => isInScope(w.id))) {
             for (const doc of wb.documents.filter((d: any) => !d.archived)) {
               fileList.push(`Workbook: ${wb.name} (ID: ${wb.id})\n  File: ${doc.filename}\n  Path: ${doc.path}`);
             }
@@ -525,6 +563,55 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
 
         default:
           return `Unknown tool: ${toolName}`;
+    }
+  }
+
+  /**
+   * Fetch the active context scope (workbook IDs) from the context-manager MCP server.
+   * Returns an empty scope if MCP service is unavailable or if no active context is set.
+   */
+  private async getActiveContextScope(): Promise<{ contextId: string | null; workbookIds: Set<string> | null }> {
+    if (this.cachedContextScope) {
+      return this.cachedContextScope;
+    }
+
+    // Default: no scope (operate across all workbooks)
+    const empty = { contextId: null, workbookIds: null as Set<string> | null };
+
+    try {
+      if (!this.mcpService) {
+        this.cachedContextScope = empty;
+        return empty;
+      }
+
+      // Only scope if the context-manager server is running
+      if (!this.mcpService.isServerRunning("context-manager")) {
+        this.cachedContextScope = empty;
+        return empty;
+      }
+
+      const res = await this.mcpService.sendRequest(
+        "context-manager",
+        "tools/call",
+        { name: "get_context_workbooks", arguments: {} },
+        2000,
+      );
+
+      const contextId = (res && (res.context_id ?? res.contextId)) || null;
+      const workbookIdsRaw = (res && (res.workbook_ids ?? res.workbookIds)) || [];
+
+      if (!contextId || !Array.isArray(workbookIdsRaw) || workbookIdsRaw.length === 0) {
+        this.cachedContextScope = empty;
+        return empty;
+      }
+
+      const workbookIds = new Set<string>(workbookIdsRaw.filter((x: any) => typeof x === "string"));
+      this.cachedContextScope = { contextId, workbookIds };
+      return this.cachedContextScope;
+    } catch (e) {
+      // If context-manager is down or errors, fall back to unscoped behavior
+      this.cachedContextScope = empty;
+      return empty;
     }
   }
 

@@ -1,11 +1,17 @@
-export async function createNotebook(workbookId: string): Promise<string> {
+export async function createNotebook(workbookId: string, name?: string): Promise<string> {
   if (!window.electronAPI?.file) {
     throw new Error("Electron API not available");
   }
 
-  // Generate a unique notebook name
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
-  const notebookName = `notebook-${timestamp}.ipynb`;
+  // Use provided name or generate a unique notebook name
+  let notebookName: string;
+  if (name) {
+    // Ensure the name has the .ipynb extension
+    notebookName = name.endsWith('.ipynb') ? name : `${name}.ipynb`;
+  } else {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+    notebookName = `notebook-${timestamp}.ipynb`;
+  }
 
   // Create the notebook file path
   const notebookPath = `documents/${notebookName}`;
@@ -41,4 +47,3 @@ export async function createNotebook(workbookId: string): Promise<string> {
 
   return notebookName;
 }
-

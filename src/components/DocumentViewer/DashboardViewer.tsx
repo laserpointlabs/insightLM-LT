@@ -4,6 +4,7 @@ import { useWorkbookStore } from "../../store/workbookStore";
 import { dashboardService } from "../../services/dashboardService";
 import { DashboardGrid } from "../Dashboard/DashboardGrid";
 import { InputDialog } from "../InputDialog";
+import { notifyError } from "../../utils/notify";
 
 interface DashboardViewerProps {
   dashboardId: string;
@@ -89,9 +90,7 @@ export function DashboardViewer({ dashboardId }: DashboardViewerProps) {
 
       setQuestion("");
     } catch (error) {
-      alert(
-        `Failed to create query: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+      notifyError(error instanceof Error ? error.message : "Failed to create query", "Dashboards");
     } finally {
       setIsCreating(false);
     }

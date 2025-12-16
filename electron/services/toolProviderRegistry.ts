@@ -289,10 +289,38 @@ export class ToolProviderRegistry {
     this.toolToProvider.clear();
 
     // Rebuild mappings from tool registry
+    // NOTE:
+    // - ToolRegistry stores tools by "server" (e.g. "workbook-rag", "context-manager").
+    // - Tool providers may NOT be named the same as the server (e.g. "mcp-provider" can execute tools
+    //   for many MCP servers). So we map each tool to the first provider that reports it can execute it.
+    const providersByPriority = Array.from(this.providers.values()).sort((a, b) => {
+      const pa = (a as any).priority ?? 0;
+      const pb = (b as any).priority ?? 0;
+      return pb - pa;
+    });
+
     for (const tool of tools) {
-      const serverName = this.toolRegistry.getToolServer(tool.name);
+      const toolName = tool?.name;
+      if (!toolName) continue;
+
+      // Fast path: provider name matches tool's server name
+      const serverName = this.toolRegistry.getToolServer(toolName);
       if (serverName && this.providers.has(serverName)) {
-        this.toolToProvider.set(tool.name, serverName);
+        this.toolToProvider.set(toolName, serverName);
+        continue;
+      }
+
+      // Generic path: find a provider that can execute this tool
+      const provider = providersByPriority.find((p) => {
+        try {
+          return p.canExecute(toolName);
+        } catch {
+          return false;
+        }
+      });
+
+      if (provider) {
+        this.toolToProvider.set(toolName, provider.name);
       }
     }
 

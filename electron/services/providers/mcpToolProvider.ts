@@ -59,19 +59,10 @@ export class MCPToolProvider implements IToolProvider {
 
     console.log(`[MCPToolProvider] Initializing provider: ${this.name}`);
 
-    // MCP service is already initialized by main.ts
-    // We just need to ensure our server configs are registered
-    for (const [serverName, config] of this.serverConfigs) {
-      if (!this.mcpService.isServerRunning(serverName)) {
-        try {
-          console.log(`[MCPToolProvider] Starting MCP server: ${serverName}`);
-          // MCP provider doesn't control server paths - let MCPService handle it
-          this.mcpService.startServer(config, "");
-        } catch (error) {
-          console.error(`[MCPToolProvider] Failed to start server ${serverName}:`, error);
-        }
-      }
-    }
+    // IMPORTANT:
+    // Server lifecycle is owned by `electron/main.ts` (auto-start) and by extensions (extension-managed).
+    // This provider should NOT start servers itself — doing so without a correct serverPath can crash servers
+    // and slow app startup (e.g., spawning python with a wrong CWD, looking for server.py in the repo root).
 
     this.initialized = true;
     console.log(`[MCPToolProvider] Provider ${this.name} initialized`);

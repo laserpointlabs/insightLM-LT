@@ -6,6 +6,7 @@ import { TextViewer } from "./TextViewer";
 import { DashboardViewer } from "./DashboardViewer";
 import { useDocumentStore } from "../../store/documentStore";
 import { extensionRegistry } from "../../services/extensionRegistry";
+import { notifyError, notifySuccess } from "../../utils/notify";
 
 // Component to handle async component loading
 function AsyncComponentLoader({ componentPromise, props }: { componentPromise: Promise<any>, props: any }) {
@@ -108,9 +109,10 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
       );
       updateDocumentContent(activeDocId, contentToSave);
       clearUnsavedContent(activeDocId);
+      notifySuccess("Saved", activeDoc.filename);
     } catch (error) {
       console.error("Failed to save file:", error);
-      alert(`Failed to save file: ${error instanceof Error ? error.message : "Unknown error"}`);
+      notifyError(error instanceof Error ? error.message : "Failed to save file", activeDoc.filename);
     }
   }, [activeDocId, activeDoc, unsavedChanges, updateDocumentContent, clearUnsavedContent]);
 
@@ -168,8 +170,8 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
       return <DashboardViewer dashboardId={activeDoc.dashboardId} />;
     }
 
-    // Show loading state if content is empty and document was just opened
-    if (!activeDoc.content && activeDoc.path && !activeDoc.content?.includes('Error loading')) {
+    // Show loading state if content is undefined (not loaded yet) vs empty string (loaded but empty)
+    if (activeDoc.content === undefined && activeDoc.path) {
       return (
         <div className="flex h-full items-center justify-center">
           <div className="text-center">
@@ -183,8 +185,8 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
     const ext = getFileExtension(activeDoc.filename);
     const editable = isEditableFileType(ext);
     const currentContent = hasUnsaved
-      ? (unsavedChanges.get(activeDocId) || activeDoc.content || "")
-      : (activeDoc.content || "");
+      ? (unsavedChanges.get(activeDocId) ?? activeDoc.content ?? "")
+      : (activeDoc.content ?? "");
 
     // Check for extension file handlers first
     const fileHandlers = extensionRegistry.getFileHandlers(ext);

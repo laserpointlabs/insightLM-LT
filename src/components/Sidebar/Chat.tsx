@@ -64,6 +64,96 @@ export function Chat({ onActionButton }: ChatProps = {}) {
     const userMessage = input.trim();
     setInput("");
 
+    // Lightweight command handler (no LLM call)
+    if (userMessage.startsWith("/context")) {
+      const parts = userMessage.split(/\s+/).filter(Boolean);
+      const sub = parts[1] || "help";
+      const rest = parts.slice(2).join(" ");
+
+      setMessages((prev) => [...prev, { role: "user" as const, content: userMessage }]);
+      setLoading(true);
+
+      try {
+        if (!window.electronAPI?.mcp?.call) {
+          throw new Error("MCP API not available");
+        }
+
+        if (sub === "list") {
+          const res = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "list_contexts",
+            arguments: {},
+          });
+          const contexts = res?.contexts || [];
+          const lines = contexts.map((c: any) => `- ${c.name} (${c.id})`).join("\n");
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant" as const, content: contexts.length ? `Contexts:\n${lines}` : "No contexts found." },
+          ]);
+        } else if (sub === "active") {
+          const res = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "get_active_context",
+            arguments: {},
+          });
+          const active = res?.active;
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant" as const, content: active ? `Active context: ${active.name} (${active.id})` : "No active context." },
+          ]);
+        } else if (sub === "activate") {
+          if (!rest.trim()) {
+            throw new Error('Usage: /context activate "<nameOrId>"');
+          }
+          const list = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "list_contexts",
+            arguments: {},
+          });
+          const contexts = list?.contexts || [];
+          const needle = rest.trim().replace(/^"(.*)"$/, "$1");
+          const match =
+            contexts.find((c: any) => c.id === needle) ||
+            contexts.find((c: any) => (c.name || "").toLowerCase() === needle.toLowerCase()) ||
+            contexts.find((c: any) => (c.name || "").toLowerCase().includes(needle.toLowerCase()));
+
+          if (!match) {
+            throw new Error(`No context found matching "${needle}". Try /context list`);
+          }
+
+          await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "activate_context",
+            arguments: { context_id: match.id },
+          });
+          window.dispatchEvent(new CustomEvent("context:changed"));
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant" as const, content: `Activated context: ${match.name} (${match.id})` },
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant" as const,
+              content:
+                `Context commands:\n` +
+                `- /context list\n` +
+                `- /context active\n` +
+                `- /context activate <nameOrId>`,
+            },
+          ]);
+        }
+      } catch (error) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant" as const,
+            content: `Error: ${error instanceof Error ? error.message : "Command failed"}`,
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     // Filter out any tool or system messages - only send user and assistant messages
     const cleanedMessages = messages.filter(
       msg => msg.role === "user" || msg.role === "assistant"
@@ -104,30 +194,46 @@ export function Chat({ onActionButton }: ChatProps = {}) {
           </div>
         )}
         {messages.map((msg, idx) => (
-          <ChatMessage key={idx} role={msg.role} content={msg.content} />
+          <div key={idx} data-chat-message data-role={msg.role}>
+            <ChatMessage role={msg.role} content={msg.content} />
+          </div>
         ))}
         {loading && <div className="text-sm text-gray-500">Thinking...</div>}
       </div>
 
       <div className="border-t border-gray-200 px-3 py-2">
-        <div className="flex gap-2">
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSend();
+          }}
+        >
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && handleSend()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
             placeholder="Ask about your workbooks..."
             className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
             disabled={loading}
+            data-testid="chat-input"
           />
           <button
-            onClick={handleSend}
+            type="submit"
             disabled={loading || !input.trim()}
             className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Send"
+            data-testid="chat-send"
           >
             Send
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );

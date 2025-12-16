@@ -7,6 +7,7 @@ interface CollapsibleViewProps {
   onToggleCollapse: () => void;
   children: ReactNode;
   actionButton?: ReactNode;
+  testId?: string;
 }
 
 export function CollapsibleView({
@@ -15,6 +16,7 @@ export function CollapsibleView({
   onToggleCollapse,
   children,
   actionButton,
+  testId,
 }: CollapsibleViewProps) {
   return (
     <div className="flex h-full flex-col border-b border-gray-200">
@@ -23,6 +25,8 @@ export function CollapsibleView({
         <button
           onClick={onToggleCollapse}
           className="flex items-center gap-1 text-xs font-semibold text-gray-700 uppercase tracking-wide hover:text-gray-900"
+          data-testid={testId}
+          aria-expanded={!isCollapsed}
         >
           <ChevronRightIcon
             className={`h-3 w-3 transition-transform ${isCollapsed ? "" : "rotate-90"}`}

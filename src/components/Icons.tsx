@@ -147,6 +147,25 @@ export function FileIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+export function FolderIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.5 4.5h4l1.5 1.5H13.5c.6 0 1 .4 1 1v5.5c0 .6-.4 1-1 1h-11c-.6 0-1-.4-1-1V5.5c0-.6.4-1 1-1z" />
+      {/* Plus sign */}
+      <path d="M8 8.2v3M6.5 9.7h3" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
 export function NotebookIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg

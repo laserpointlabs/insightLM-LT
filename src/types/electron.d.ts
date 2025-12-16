@@ -12,6 +12,9 @@ export interface ElectronAPI {
   };
   workbook: {
     create: (name: string) => Promise<any>;
+    createFolder: (workbookId: string, folderName: string) => Promise<void>;
+    deleteFolder: (workbookId: string, folderName: string) => Promise<void>;
+    renameFolder: (workbookId: string, oldName: string, newName: string) => Promise<void>;
     getAll: () => Promise<any[]>;
     get: (id: string) => Promise<any | null>;
     rename: (id: string, newName: string) => Promise<void>;
@@ -47,6 +50,12 @@ export interface ElectronAPI {
       sourceWorkbookId: string,
       relativePath: string,
       targetWorkbookId: string,
+    ) => Promise<void>;
+    moveToFolder: (
+      sourceWorkbookId: string,
+      relativePath: string,
+      targetWorkbookId: string,
+      targetFolder?: string,
     ) => Promise<void>;
     getPath: (workbookId: string, relativePath: string) => Promise<string>;
     readBinary: (workbookId: string, relativePath: string) => Promise<string>;

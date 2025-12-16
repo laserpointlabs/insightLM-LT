@@ -7,6 +7,13 @@ dist-electron/
 *.log
 *.local
 
+# Runtime / test artifacts (local dirs)
+logs/
+
+# App/runtime test data (do not commit)
+data/test-*/
+data/**/test-*/
+
 # Environment
 .env
 .env.local

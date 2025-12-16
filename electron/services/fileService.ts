@@ -2,12 +2,33 @@ import * as fs from "fs";
 import * as path from "path";
 import { WorkbookService } from "./workbookService";
 import { DocumentExtractor } from "./documentExtractor";
+import { v4 as uuidv4 } from "uuid";
 
 export class FileService {
   private workbookService: WorkbookService;
 
   constructor(workbookService: WorkbookService) {
     this.workbookService = workbookService;
+  }
+
+  private toPosixPath(p: string): string {
+    return p.replace(/\\/g, "/");
+  }
+
+  private getFileStats(filePath: string): { modifiedAt?: string; size?: number } {
+    try {
+      if (!fs.existsSync(filePath)) return {};
+      const st = fs.statSync(filePath);
+      if (!st.isFile()) return {};
+      return { modifiedAt: st.mtime.toISOString(), size: st.size };
+    } catch {
+      return {};
+    }
+  }
+
+  private ensureDocumentEntry(metadata: any, entry: any): void {
+    if (!Array.isArray(metadata.documents)) metadata.documents = [];
+    metadata.documents.push(entry);
   }
 
   addDocument(workbookId: string, sourcePath: string, filename?: string): Promise<void> {
@@ -36,13 +57,25 @@ export class FileService {
       (doc: any) => doc.filename === finalFilename,
     );
 
+    const fileType = path.extname(finalFilename).toLowerCase().replace(/^\./, "");
+    const stats = this.getFileStats(destPath);
+    const canonicalPath = `documents/${finalFilename}`;
+
     if (existingIndex >= 0) {
       metadata.documents[existingIndex].addedAt = new Date().toISOString();
+      metadata.documents[existingIndex].path = canonicalPath;
+      metadata.documents[existingIndex].fileType = fileType;
+      if (stats.modifiedAt) metadata.documents[existingIndex].modifiedAt = stats.modifiedAt;
+      if (typeof stats.size === "number") metadata.documents[existingIndex].size = stats.size;
+      if (!metadata.documents[existingIndex].docId) metadata.documents[existingIndex].docId = uuidv4();
     } else {
-      metadata.documents.push({
+      this.ensureDocumentEntry(metadata, {
+        docId: uuidv4(),
         filename: finalFilename,
-        path: `documents/${finalFilename}`,
+        path: canonicalPath,
         addedAt: new Date().toISOString(),
+        fileType,
+        ...stats,
       });
     }
 
@@ -142,17 +175,34 @@ export class FileService {
     this.updateWorkbookMetadata(workbookId, (metadata) => {
       metadata.updated = new Date().toISOString();
 
+      const canonicalRel = this.toPosixPath(relativePath).replace(/^\.\//, "");
+      const filename = path.basename(canonicalRel);
+      const fileType = path.extname(filename).toLowerCase().replace(/^\./, "");
+      const stats = this.getFileStats(filePath);
+
       // Add the document to the workbook metadata if it's not already there
       const existingIndex = metadata.documents.findIndex(
-        (doc: any) => doc.filename === path.basename(relativePath),
+        (doc: any) => doc.path === canonicalRel || doc.filename === filename,
       );
 
       if (existingIndex < 0) {
-        metadata.documents.push({
-          filename: path.basename(relativePath),
-          path: relativePath,
+        this.ensureDocumentEntry(metadata, {
+          docId: uuidv4(),
+          filename,
+          path: canonicalRel,
           addedAt: new Date().toISOString(),
+          fileType,
+          ...stats,
         });
+      } else {
+        // Ensure docId + canonical path + stats are present
+        const doc = metadata.documents[existingIndex];
+        if (!doc.docId) doc.docId = uuidv4();
+        doc.filename = filename;
+        doc.path = canonicalRel;
+        doc.fileType = fileType;
+        if (stats.modifiedAt) doc.modifiedAt = stats.modifiedAt;
+        if (typeof stats.size === "number") doc.size = stats.size;
       }
 
       return metadata;
@@ -193,6 +243,11 @@ export class FileService {
         doc.path = path
           .join(path.dirname(oldRelativePath), newName)
           .replace(/\\/g, "/");
+        if (!doc.docId) doc.docId = uuidv4();
+        doc.fileType = path.extname(newName).toLowerCase().replace(/^\./, "");
+        const st = this.getFileStats(newPath);
+        if (st.modifiedAt) doc.modifiedAt = st.modifiedAt;
+        if (typeof st.size === "number") doc.size = st.size;
       }
       return metadata;
     });
@@ -217,9 +272,9 @@ export class FileService {
     }
 
     this.updateWorkbookMetadata(workbookId, (metadata) => {
-      const filename = path.basename(relativePath);
+      const canonicalRel = this.toPosixPath(relativePath).replace(/^\.\//, "");
       metadata.documents = metadata.documents.filter(
-        (d: any) => d.filename !== filename && d.path !== relativePath,
+        (d: any) => d.path !== canonicalRel,
       );
       return metadata;
     });
@@ -232,40 +287,77 @@ export class FileService {
     relativePath: string,
     targetWorkbookId: string,
   ): void {
+    this.moveDocumentToFolder(sourceWorkbookId, relativePath, targetWorkbookId);
+  }
+
+  moveDocumentToFolder(
+    sourceWorkbookId: string,
+    relativePath: string,
+    targetWorkbookId: string,
+    targetFolder?: string,
+  ): void {
+    const canonicalRel = this.toPosixPath(relativePath).replace(/^\.\//, "");
     const sourcePath = path.join(
       this.workbookService["workbooksDir"],
       sourceWorkbookId,
-      relativePath,
+      canonicalRel,
     );
-    const filename = path.basename(relativePath);
-    const targetPath = path.join(
-      this.workbookService["workbooksDir"],
-      targetWorkbookId,
-      "documents",
-      filename,
-    );
+    if (!fs.existsSync(sourcePath)) {
+      throw new Error(`File not found: ${canonicalRel}`);
+    }
+
+    const filename = path.posix.basename(canonicalRel);
+    const folder = (targetFolder || "").trim();
+    const destRel = folder ? `documents/${folder}/${filename}` : `documents/${filename}`;
 
     const targetDocsDir = path.join(
       this.workbookService["workbooksDir"],
       targetWorkbookId,
       "documents",
+      ...(folder ? [folder] : []),
     );
     this.ensureDirectoryExists(targetDocsDir);
 
+    const targetPath = path.join(
+      this.workbookService["workbooksDir"],
+      targetWorkbookId,
+      ...destRel.split("/"),
+    );
+    if (fs.existsSync(targetPath)) {
+      throw new Error(`Target file already exists: ${destRel}`);
+    }
+
     fs.renameSync(sourcePath, targetPath);
 
+    let movedDoc: any | null = null;
     this.updateWorkbookMetadata(sourceWorkbookId, (metadata) => {
+      movedDoc =
+        metadata.documents.find((d: any) => d.path === canonicalRel) ||
+        metadata.documents.find((d: any) => d.filename === filename) ||
+        null;
       metadata.documents = metadata.documents.filter(
-        (d: any) => d.path !== relativePath,
+        (d: any) => d.path !== canonicalRel && d.docId !== movedDoc?.docId,
       );
       return metadata;
     });
 
     this.updateWorkbookMetadata(targetWorkbookId, (metadata) => {
-      metadata.documents.push({
+      const stats = this.getFileStats(targetPath);
+      const fileType = path.extname(filename).toLowerCase().replace(/^\./, "");
+
+      // Preserve stable identity if available; otherwise assign.
+      const docId = movedDoc?.docId || uuidv4();
+
+      this.ensureDocumentEntry(metadata, {
+        ...(movedDoc || {}),
+        docId,
         filename,
-        path: `documents/${filename}`,
-        addedAt: new Date().toISOString(),
+        path: destRel,
+        folder: folder || undefined,
+        fileType,
+        ...stats,
+        // Keep existing addedAt if present; otherwise set now
+        addedAt: movedDoc?.addedAt || new Date().toISOString(),
       });
       return metadata;
     });

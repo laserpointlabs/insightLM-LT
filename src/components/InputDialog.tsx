@@ -49,9 +49,10 @@ export function InputDialog({
       <div
         className="fixed inset-0 z-50 bg-black bg-opacity-50"
         onClick={onCancel}
+        data-testid="input-dialog-backdrop"
       />
       <div className="fixed left-1/2 top-1/2 z-50 w-96 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white p-4 shadow-xl">
-        <h3 className="mb-3 text-lg font-semibold">{title}</h3>
+        <h3 className="mb-3 text-lg font-semibold" data-testid="input-dialog-title">{title}</h3>
         <form onSubmit={handleSubmit}>
           <input
             ref={inputRef}
@@ -61,12 +62,14 @@ export function InputDialog({
             onKeyDown={handleKeyDown}
             className="mb-4 w-full rounded border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             placeholder="Enter name..."
+            data-testid="input-dialog-input"
           />
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={onCancel}
               className="rounded px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
+              data-testid="input-dialog-cancel"
             >
               Cancel
             </button>
@@ -74,6 +77,7 @@ export function InputDialog({
               type="submit"
               disabled={!value.trim()}
               className="rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              data-testid="input-dialog-ok"
             >
               OK
             </button>

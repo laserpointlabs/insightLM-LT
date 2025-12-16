@@ -1,0 +1,412 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AddIcon, RefreshIcon } from "../Icons";
+import { ConfirmDialog } from "../ConfirmDialog";
+import { notifyError, notifySuccess } from "../../utils/notify";
+import { testIds } from "../../testing/testIds";
+import { setAutomationState } from "../../testing/automationState";
+
+type ContextSummary = {
+  id: string;
+  name: string;
+  workbook_ids: string[];
+  folders?: string[] | null;
+  created?: string;
+  updated?: string;
+};
+
+type WorkbookSummary = { id: string; name: string; archived?: boolean };
+
+interface ContextsViewProps {
+  onActionButton?: (button: React.ReactNode) => void;
+  onActiveContextChanged?: () => void;
+}
+
+export function ContextsView({ onActionButton, onActiveContextChanged }: ContextsViewProps = {}) {
+  const [contexts, setContexts] = useState<ContextSummary[]>([]);
+  const [activeContextId, setActiveContextId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [workbooks, setWorkbooks] = useState<WorkbookSummary[]>([]);
+
+  const [editor, setEditor] = useState<{
+    isOpen: boolean;
+    mode: "create" | "edit";
+    contextId?: string;
+    name: string;
+    selectedWorkbookIds: Set<string>;
+  }>({
+    isOpen: false,
+    mode: "create",
+    name: "",
+    selectedWorkbookIds: new Set(),
+  });
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  const canUseMCP = !!window.electronAPI?.mcp?.call;
+
+  const loadWorkbooks = useCallback(async () => {
+    if (!window.electronAPI?.workbook) return;
+    try {
+      const all = await window.electronAPI.workbook.getAll();
+      setWorkbooks((all || []).map((w: any) => ({ id: w.id, name: w.name, archived: w.archived })));
+    } catch {
+      // ignore; contexts can still render
+    }
+  }, []);
+
+  const loadContexts = useCallback(async () => {
+    if (!canUseMCP) {
+      setError("MCP API not available");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const listRes = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+        name: "list_contexts",
+        arguments: {},
+      });
+      const contextsList: ContextSummary[] = listRes?.contexts || [];
+      setContexts(contextsList);
+
+      const activeRes = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+        name: "get_active_context",
+        arguments: {},
+      });
+      const activeId = activeRes?.active?.id ?? null;
+      setActiveContextId(activeId);
+
+      // Expose deterministic UI state for automation (so automation can map name -> id without async eval).
+      setAutomationState({
+        contexts: {
+          activeContextId: activeId,
+          contexts: (contextsList || []).map((c) => ({
+            id: c.id,
+            name: c.name,
+            workbook_ids: c.workbook_ids || [],
+          })),
+          updatedAt: Date.now(),
+        },
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load contexts");
+    } finally {
+      setLoading(false);
+    }
+  }, [canUseMCP]);
+
+  useEffect(() => {
+    loadWorkbooks();
+    loadContexts();
+  }, [loadWorkbooks, loadContexts]);
+
+  useEffect(() => {
+    if (!onActionButton) return;
+    onActionButton(
+      <div className="flex items-center gap-0.5">
+        <button
+          onClick={() => {
+            const selected = new Set<string>();
+            setEditor({
+              isOpen: true,
+              mode: "create",
+              name: "",
+              selectedWorkbookIds: selected,
+            });
+          }}
+          className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+          title="Create Context"
+          aria-label="Create Context"
+          data-testid={testIds.contexts.create}
+        >
+          <AddIcon className="h-4 w-4" />
+        </button>
+        <button
+          onClick={loadContexts}
+          className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+          title="Refresh Contexts"
+          aria-label="Refresh Contexts"
+          data-testid={testIds.contexts.refresh}
+        >
+          <RefreshIcon className="h-4 w-4" />
+        </button>
+      </div>,
+    );
+  }, [onActionButton, loadContexts]);
+
+  const workbookNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const w of workbooks) m.set(w.id, w.name);
+    return m;
+  }, [workbooks]);
+
+  const openEdit = async (ctx: ContextSummary) => {
+    setEditor({
+      isOpen: true,
+      mode: "edit",
+      contextId: ctx.id,
+      name: ctx.name,
+      selectedWorkbookIds: new Set(ctx.workbook_ids || []),
+    });
+  };
+
+  const handleActivate = async (contextId: string) => {
+    if (!canUseMCP) return;
+    try {
+      await window.electronAPI.mcp.call("context-manager", "tools/call", {
+        name: "activate_context",
+        arguments: { context_id: contextId },
+      });
+      await loadContexts();
+      onActiveContextChanged?.();
+      window.dispatchEvent(new CustomEvent("context:changed"));
+      notifySuccess("Context activated", "Contexts");
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : "Failed to activate context", "Contexts");
+    }
+  };
+
+  const handleDelete = async (ctx: ContextSummary) => {
+    if (!canUseMCP) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: "Delete Context",
+      message: `Delete context "${ctx.name}"?`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        setConfirmDialog((p) => ({ ...p, isOpen: false }));
+        try {
+          await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "delete_context",
+            arguments: { context_id: ctx.id },
+          });
+          await loadContexts();
+          onActiveContextChanged?.();
+          window.dispatchEvent(new CustomEvent("context:changed"));
+          notifySuccess("Context deleted", "Contexts");
+        } catch (e) {
+          notifyError(e instanceof Error ? e.message : "Failed to delete context", "Contexts");
+        }
+      },
+    });
+  };
+
+  const saveEditor = async () => {
+    if (!canUseMCP) return;
+    const name = editor.name.trim();
+    const workbook_ids = Array.from(editor.selectedWorkbookIds);
+    if (!name) {
+      notifyError("Context name is required", "Contexts");
+      return;
+    }
+    if (workbook_ids.length === 0) {
+      notifyError("Select at least one workbook", "Contexts");
+      return;
+    }
+
+    try {
+      if (editor.mode === "create") {
+        const created = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+          name: "create_context",
+          arguments: { name, workbook_ids },
+        });
+        notifySuccess(`Context created (${created?.id || "unknown-id"})`, "Contexts");
+      } else {
+        const updated = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+          name: "update_context",
+          arguments: { context_id: editor.contextId, updates: { name, workbook_ids } },
+        });
+        notifySuccess(`Context updated (${updated?.id || editor.contextId || "unknown-id"})`, "Contexts");
+      }
+      setEditor((p) => ({ ...p, isOpen: false }));
+      await loadContexts();
+      onActiveContextChanged?.();
+      window.dispatchEvent(new CustomEvent("context:changed"));
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : "Failed to save context", "Contexts");
+    }
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex-1 overflow-y-auto p-2">
+        {loading && <div className="text-sm text-gray-500">Loading...</div>}
+        {error && <div className="text-sm text-red-500">{error}</div>}
+
+        {contexts.length === 0 && !loading && (
+          <div className="mt-4 text-sm text-gray-500">No contexts yet.</div>
+        )}
+
+        {contexts.map((ctx) => {
+          const isActive = ctx.id === activeContextId;
+          return (
+            <div
+              key={ctx.id}
+              data-testid={testIds.contexts.item(ctx.id)}
+              className={`mb-1 rounded border px-2 py-1 ${isActive ? "border-blue-300 bg-blue-50" : "border-gray-200 bg-white"}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <div className="truncate text-sm font-medium text-gray-800">{ctx.name}</div>
+                    {isActive && (
+                      <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-gray-500">
+                    {ctx.workbook_ids?.length || 0} workbooks
+                  </div>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-1">
+                  {!isActive && (
+                    <button
+                      className="rounded bg-blue-500 px-2 py-1 text-[11px] text-white hover:bg-blue-600"
+                      onClick={() => handleActivate(ctx.id)}
+                      title="Activate context"
+                      aria-label={`Activate context ${ctx.name}`}
+                      data-testid={testIds.contexts.activate(ctx.id)}
+                      data-context-id={ctx.id}
+                    >
+                      Activate
+                    </button>
+                  )}
+                  <button
+                    className="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+                    onClick={() => openEdit(ctx)}
+                    title="Edit context"
+                    aria-label={`Edit context ${ctx.name}`}
+                    data-testid={testIds.contexts.edit(ctx.id)}
+                    data-context-id={ctx.id}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="rounded border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50"
+                    onClick={() => handleDelete(ctx)}
+                    title="Delete context"
+                    aria-label={`Delete context ${ctx.name}`}
+                    data-testid={testIds.contexts.delete(ctx.id)}
+                    data-context-id={ctx.id}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-2 space-y-1">
+                {(ctx.workbook_ids || []).slice(0, 6).map((wid) => (
+                  <div key={wid} className="truncate text-[11px] text-gray-600">
+                    - {workbookNameById.get(wid) || wid}
+                  </div>
+                ))}
+                {(ctx.workbook_ids || []).length > 6 && (
+                  <div className="text-[11px] text-gray-400">
+                    + {(ctx.workbook_ids || []).length - 6} more
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {editor.isOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setEditor((p) => ({ ...p, isOpen: false }))} />
+          <div className="relative z-40 w-[520px] max-w-[90vw] rounded border border-gray-200 bg-white p-4 shadow-lg">
+            <div className="mb-3 text-sm font-semibold text-gray-800">
+              {editor.mode === "create" ? "Create Context" : "Edit Context"}
+            </div>
+
+            <div className="mb-3">
+              <label className="mb-1 block text-xs font-medium text-gray-600">Name</label>
+              <input
+                className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={editor.name}
+                onChange={(e) => setEditor((p) => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Aircraft Design"
+                data-testid={testIds.contexts.modal.name}
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="mb-1 block text-xs font-medium text-gray-600">Workbooks</label>
+              <div className="max-h-[260px] overflow-auto rounded border border-gray-200 p-2">
+                {workbooks.filter((w) => !w.archived).map((wb) => {
+                  const checked = editor.selectedWorkbookIds.has(wb.id);
+                  return (
+                    <label key={wb.id} className="flex cursor-pointer items-center gap-2 py-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setEditor((p) => {
+                            const next = new Set(p.selectedWorkbookIds);
+                            if (next.has(wb.id)) next.delete(wb.id);
+                            else next.add(wb.id);
+                            return { ...p, selectedWorkbookIds: next };
+                          });
+                        }}
+                        data-testid={testIds.contexts.modal.workbookCheckbox}
+                        data-workbook-id={wb.id}
+                      />
+                      <span className="truncate">{wb.name}</span>
+                      <span className="ml-auto truncate text-[10px] text-gray-400">{wb.id}</span>
+                    </label>
+                  );
+                })}
+                {workbooks.filter((w) => !w.archived).length === 0 && (
+                  <div className="text-xs text-gray-500">No workbooks available.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                className="rounded border border-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
+                onClick={() => setEditor((p) => ({ ...p, isOpen: false }))}
+                data-testid={testIds.contexts.modal.cancel}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600"
+                onClick={saveEditor}
+                data-testid={testIds.contexts.modal.save}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog((p) => ({ ...p, isOpen: false }))}
+      />
+    </div>
+  );
+}

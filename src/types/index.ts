@@ -4,6 +4,7 @@ export interface Workbook {
   created: string;
   updated: string;
   archived: boolean;
+  folders?: string[]; // Array of folder names within this workbook
   documents: Document[];
 }
 
@@ -84,7 +85,7 @@ export interface WorkbookActionContribution {
   id: string;
   title: string;
   icon?: React.ComponentType<{ className?: string }>;
-  onClick: (workbookId: string) => Promise<void> | void;
+  onClick: (workbookId: string, name?: string) => Promise<string | void> | string | void;
 }
 
 export interface McpServerContribution {
