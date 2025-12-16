@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { testIds } from "../testing/testIds";
 
 type WorkbookInfo = {
   id: string;
@@ -62,14 +63,14 @@ export function MoveFolderDialog({
       <div
         className="fixed inset-0 z-50 bg-black bg-opacity-50"
         onClick={onCancel}
-        data-testid="move-folder-dialog-backdrop"
+        data-testid={testIds.workbooks.moveFolder.backdrop}
       />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white p-4 shadow-xl"
-        data-testid="move-folder-dialog"
+        data-testid={testIds.workbooks.moveFolder.dialog}
       >
         <div className="mb-3">
-          <h3 className="text-lg font-semibold" data-testid="move-folder-title">
+          <h3 className="text-lg font-semibold" data-testid={testIds.workbooks.moveFolder.title}>
             Move Folder
           </h3>
           <div className="mt-1 text-xs text-gray-500">
@@ -84,7 +85,7 @@ export function MoveFolderDialog({
               className="w-full rounded border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               value={targetWorkbookId}
               onChange={(e) => setTargetWorkbookId(e.target.value)}
-              data-testid="move-folder-workbook-select"
+              data-testid={testIds.workbooks.moveFolder.workbookSelect}
             >
               {candidates.map((w) => (
                 <option key={w.id} value={w.id}>
@@ -102,7 +103,7 @@ export function MoveFolderDialog({
               value={targetFolderName}
               onChange={(e) => setTargetFolderName(e.target.value)}
               placeholder="Folder name…"
-              data-testid="move-folder-folder-input"
+              data-testid={testIds.workbooks.moveFolder.folderInput}
             />
             <div className="mt-1 text-xs text-gray-500">
               Existing folders:{" "}
@@ -113,12 +114,12 @@ export function MoveFolderDialog({
               )}
             </div>
             {folderConflict && (
-              <div className="mt-1 text-xs text-red-600" data-testid="move-folder-error">
+              <div className="mt-1 text-xs text-red-600" data-testid={testIds.workbooks.moveFolder.error}>
                 A folder named “{folderTrim}” already exists in the target workbook. Choose a different name.
               </div>
             )}
             {isNoop && (
-              <div className="mt-1 text-xs text-gray-500" data-testid="move-folder-noop">
+              <div className="mt-1 text-xs text-gray-500" data-testid={testIds.workbooks.moveFolder.noop}>
                 Select a different workbook or change the folder name.
               </div>
             )}
@@ -130,7 +131,7 @@ export function MoveFolderDialog({
             type="button"
             onClick={onCancel}
             className="rounded px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
-            data-testid="move-folder-cancel"
+            data-testid={testIds.workbooks.moveFolder.cancel}
           >
             Cancel
           </button>
@@ -139,7 +140,7 @@ export function MoveFolderDialog({
             disabled={!canSubmit}
             onClick={() => onConfirm(workbookTrim, folderTrim)}
             className="rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-300"
-            data-testid="move-folder-ok"
+            data-testid={testIds.workbooks.moveFolder.ok}
           >
             Move
           </button>
@@ -148,5 +149,3 @@ export function MoveFolderDialog({
     </>
   );
 }
-
-

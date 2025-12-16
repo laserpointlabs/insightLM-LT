@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { testIds } from "../testing/testIds";
 
 export type CollisionResolution = {
   action: "rename" | "overwrite" | "skip";
@@ -43,16 +44,16 @@ export function ConflictResolutionDialog({
       <div
         className="fixed inset-0 z-50 bg-black bg-opacity-50"
         onClick={onCancel}
-        data-testid="collision-dialog-backdrop"
+        data-testid={testIds.workbooks.collision.backdrop}
       />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white p-4 shadow-xl"
-        data-testid="collision-dialog"
+        data-testid={testIds.workbooks.collision.dialog}
       >
-        <h3 className="mb-2 text-lg font-semibold" data-testid="collision-dialog-title">
+        <h3 className="mb-2 text-lg font-semibold" data-testid={testIds.workbooks.collision.title}>
           {title}
         </h3>
-        <p className="mb-3 text-sm text-gray-700 whitespace-pre-wrap" data-testid="collision-dialog-message">
+        <p className="mb-3 text-sm text-gray-700 whitespace-pre-wrap" data-testid={testIds.workbooks.collision.message}>
           {message}
         </p>
 
@@ -63,7 +64,7 @@ export function ConflictResolutionDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            data-testid="collision-dialog-rename-input"
+            data-testid={testIds.workbooks.collision.renameInput}
           />
         </div>
 
@@ -73,7 +74,7 @@ export function ConflictResolutionDialog({
               type="checkbox"
               checked={applyToAll}
               onChange={(e) => setApplyToAll(e.target.checked)}
-              data-testid="collision-dialog-apply-all"
+              data-testid={testIds.workbooks.collision.applyAll}
             />
             Apply this choice to all remaining collisions in this operation
           </label>
@@ -84,7 +85,7 @@ export function ConflictResolutionDialog({
             type="button"
             onClick={() => onResolve({ action: "skip", applyToAll })}
             className="rounded px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            data-testid="collision-dialog-skip"
+            data-testid={testIds.workbooks.collision.skip}
           >
             Skip
           </button>
@@ -92,7 +93,7 @@ export function ConflictResolutionDialog({
             type="button"
             onClick={() => onResolve({ action: "overwrite", applyToAll })}
             className="rounded bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600"
-            data-testid="collision-dialog-overwrite"
+            data-testid={testIds.workbooks.collision.overwrite}
           >
             Overwrite
           </button>
@@ -101,7 +102,7 @@ export function ConflictResolutionDialog({
             disabled={!trimmed}
             onClick={() => onResolve({ action: "rename", newName: trimmed, applyToAll })}
             className="rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-300"
-            data-testid="collision-dialog-rename"
+            data-testid={testIds.workbooks.collision.rename}
           >
             Rename
           </button>

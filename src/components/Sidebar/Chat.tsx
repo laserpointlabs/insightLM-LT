@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { AddIcon, HistoryIcon, GearIcon } from "../Icons";
+import { testIds } from "../../testing/testIds";
 
 interface ChatProps {
   onActionButton?: (button: React.ReactNode) => void;
@@ -36,6 +37,7 @@ export function Chat({ onActionButton }: ChatProps = {}) {
             onClick={handleNewChat}
             className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
             title="New Chat"
+            data-testid={testIds.chat.newChat}
           >
             <AddIcon className="h-4 w-4" />
           </button>
@@ -43,6 +45,7 @@ export function Chat({ onActionButton }: ChatProps = {}) {
             onClick={handleShowHistory}
             className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
             title="Chat History"
+            data-testid={testIds.chat.history}
           >
             <HistoryIcon className="h-4 w-4" />
           </button>
@@ -50,6 +53,7 @@ export function Chat({ onActionButton }: ChatProps = {}) {
             onClick={handleShowSettings}
             className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
             title="Chat Settings"
+            data-testid={testIds.chat.settings}
           >
             <GearIcon className="h-4 w-4" />
           </button>
@@ -222,14 +226,14 @@ export function Chat({ onActionButton }: ChatProps = {}) {
             placeholder="Ask about your workbooks..."
             className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
             disabled={loading}
-            data-testid="chat-input"
+            data-testid={testIds.chat.input}
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
             className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Send"
-            data-testid="chat-send"
+            data-testid={testIds.chat.send}
           >
             Send
           </button>

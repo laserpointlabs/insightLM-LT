@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useNotificationStore } from "../../store/notificationStore";
+import { testIds } from "../../testing/testIds";
 
 function kindClasses(kind: "success" | "error" | "info") {
   switch (kind) {
@@ -33,25 +34,25 @@ export function ToastCenter() {
   return (
     <div
       className="pointer-events-none fixed right-3 top-3 z-[60] flex w-[360px] max-w-[90vw] flex-col gap-2"
-      data-testid="toast-center"
+      data-testid={testIds.toast.center}
     >
       {toasts.slice(-4).map((t) => (
         <div
           key={t.id}
           className={`pointer-events-auto rounded border px-3 py-2 shadow-lg ${kindClasses(t.kind)}`}
           role={t.kind === "error" ? "alert" : "status"}
-          data-testid={`toast-${t.kind}`}
+          data-testid={testIds.toast.kind(t.kind)}
         >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               {t.title && <div className="text-xs font-semibold">{t.title}</div>}
-              <div className="text-sm" data-testid="toast-message">{t.message}</div>
+              <div className="text-sm" data-testid={testIds.toast.message}>{t.message}</div>
             </div>
             <button
               className="rounded px-2 py-1 text-xs opacity-70 hover:opacity-100"
               onClick={() => remove(t.id)}
               aria-label="Dismiss notification"
-              data-testid="toast-dismiss"
+              data-testid={testIds.toast.dismiss}
             >
               ✕
             </button>

@@ -25,7 +25,9 @@
     "test:decoupling:phase1": "node tests/test-mcp-tool-discovery.mjs",
     "test:decoupling:phase2": "node tests/test-phase2-decoupling.mjs",
     "test:decoupling:phase3": "node tests/test-phase3-provider-abstraction.mjs",
-    "test:decoupling:phase4": "node tests/test-phase4-dashboard-decoupling.mjs"
+    "test:decoupling:phase4": "node tests/test-phase4-dashboard-decoupling.mjs",
+    "test:automation:smoke": "node tests/automation-smoke-ui.mjs",
+    "test:automation:prod": "node tests/run-prod-renderer-smoke.mjs"
   },
   "keywords": [
     "electron",
@@ -49,7 +51,8 @@
     "kill-port": "^2.0.1",
     "typescript": "^5.3.3",
     "vite": "^5.0.8",
-    "vitest": "^4.0.15"
+    "vitest": "^4.0.15",
+    "ws": "^8.18.0"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",

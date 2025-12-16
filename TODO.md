@@ -24,10 +24,13 @@ This file is the single source of truth for roadmap planning.
 - [ ] Standardize modal patterns: InputDialog / ConfirmDialog / Toast (consistent testids + keyboard handling)
 
 ### Automation / Testability (MCP-safe)
-- [ ] Centralize all `data-testid` strings (continue expanding `src/testing/testIds.ts`)
-- [ ] Ensure **selector-only** automation for critical flows (Contexts + Workbooks + Chat)
-- [ ] Add “Automation Mode” coverage: verify hover-only strips become visible and stable
-- [ ] Docs: keep `docs/Automation/ELECTRON_MCP_UI_AUTOMATION.md` current
+- [x] Centralize all `data-testid` strings (expanded `src/testing/testIds.ts` + updated Workbooks/Chat/Dialogs/Toast/ActivityBar)
+- [x] Ensure **selector-only** automation for critical flows (Contexts + Workbooks + Chat)
+- [x] Add “Automation Mode” coverage: verify hover-only strips become visible and stable (smoke forces automation mode on)
+- [x] Docs: keep `docs/Automation/ELECTRON_MCP_UI_AUTOMATION.md` current (canonical selectors + flows)
+- [x] Add UI-level automation smoke (CDP): `npm run test:automation:smoke`
+- [x] Add local “prod renderer” smoke (no electron-builder needed): `npm run test:automation:prod`
+- [x] Add manual-only GitHub Action to run packaged smoke: `.github/workflows/packaged-smoke.yml` (+ how-to: `.github/workflows/PACKAGED_SMOKE_HOWTO.md`)
 
 ### Contexts (scoping / safety)
 - [x] Add explicit “No context / All workbooks” mode in UI (toggle off scoping)

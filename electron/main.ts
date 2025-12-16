@@ -53,7 +53,10 @@ async function findVitePort(): Promise<number> {
 
 async function createWindow() {
   // Determine preload path - in dev, __dirname is dist-electron, preload.js is in same directory
-  const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+  // Allow forcing "prod renderer" locally (load dist/index.html) without packaging via electron-builder.
+  // This is useful for running the CDP UI smoke without requiring Windows symlink/admin privileges.
+  const forceProdUI = process.env.INSIGHTLM_FORCE_PROD_UI === "1" || process.env.INSIGHTLM_FORCE_PROD_UI === "true";
+  const isDev = !forceProdUI && (process.env.NODE_ENV === "development" || !app.isPackaged);
   const preloadPath = path.join(__dirname, "preload.js");
 
   console.log("Preload path:", preloadPath);

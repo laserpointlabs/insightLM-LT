@@ -494,6 +494,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
             onClick={handleCreateWorkbook}
             className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
             title="Create New Workbook"
+            data-testid={testIds.workbooks.header.create}
           >
             <AddIcon className="h-4 w-4" />
           </button>
@@ -501,6 +502,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
             onClick={handleRefreshWorkbooks}
             className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
             title="Refresh Workbooks"
+            data-testid={testIds.workbooks.header.refresh}
           >
             <RefreshIcon className="h-4 w-4" />
           </button>
@@ -508,6 +510,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
             onClick={handleCollapseAll}
             className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
             title="Collapse All"
+            data-testid={testIds.workbooks.header.collapseAll}
           >
             <CollapseAllIcon className="h-4 w-4" />
           </button>
@@ -1396,7 +1399,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
             className={`mb-1 rounded ${dragOverTarget?.kind === "workbook" && dragOverTarget.workbookId === workbook.id ? "bg-blue-50 ring-1 ring-blue-300" : ""}`}
             onDrop={(e) => handleDropOnWorkbook(e, workbook.id)}
             onDragOver={(e) => handleDragOverWorkbook(e, workbook.id)}
-            data-testid={`workbooks-item-${workbook.id}`}
+            data-testid={testIds.workbooks.item(workbook.id)}
           >
             <div
               className="group flex cursor-pointer items-center justify-between rounded p-1 hover:bg-gray-100"
@@ -1405,7 +1408,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
               <span
                 className="flex items-center gap-1 text-sm flex-1"
                 onClick={() => toggleWorkbook(workbook.id)}
-                data-testid={`workbooks-toggle-${workbook.id}`}
+                data-testid={testIds.workbooks.toggle(workbook.id)}
               >
                 {expandedWorkbooks.has(workbook.id) ? "▼" : "▶"}{" "}
                 {workbook.name}
@@ -1421,7 +1424,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                     }}
                     className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                     title="Create Markdown"
-                    data-testid={`workbooks-create-markdown-${workbook.id}`}
+                    data-testid={testIds.workbooks.createMarkdown(workbook.id)}
                   >
                     <AddIcon className="h-4 w-4" />
                   </button>
@@ -1432,7 +1435,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                     }}
                     className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                     title="Import Files"
-                      data-testid={`workbooks-create-document-${workbook.id}`}
+                    data-testid={testIds.workbooks.createDocument(workbook.id)}
                   >
                     <FileIcon className="h-4 w-4" />
                   </button>
@@ -1443,7 +1446,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                       }}
                       className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                       title="Create Folder"
-                      data-testid={`workbooks-create-folder-${workbook.id}`}
+                      data-testid={testIds.workbooks.createFolder(workbook.id)}
                     >
                       <FolderIcon className="h-4 w-4" />
                     </button>
@@ -1456,7 +1459,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                       }}
                       className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                       title={action.title}
-                        data-testid={`workbooks-action-${action.id}-${workbook.id}`}
+                      data-testid={testIds.workbooks.action(action.id, workbook.id)}
                     >
                       {action.icon ? <action.icon className="h-4 w-4" /> : <span className="text-xs">{action.title}</span>}
                     </button>
@@ -1518,7 +1521,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                 setDraggingFolder(null);
                                 setDragOverTarget(null);
                               }}
-                              data-testid={`workbooks-folder-${workbook.id}-${encodeURIComponent(folderName)}`}
+                              data-testid={testIds.workbooks.folder(workbook.id, folderName)}
                               data-folder-name={folderName}
                             >
                               <span className="flex items-center gap-1">
@@ -1532,7 +1535,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                   }}
                                   className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                                   title="Create Markdown in folder"
-                                  data-testid={`workbooks-folder-create-markdown-${workbook.id}-${encodeURIComponent(folderName)}`}
+                                  data-testid={testIds.workbooks.folderCreateMarkdown(workbook.id, folderName)}
                                 >
                                   <AddIcon className="h-4 w-4" />
                                 </button>
@@ -1543,7 +1546,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                   }}
                                   className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                                   title="Add files to folder"
-                                  data-testid={`workbooks-folder-addfiles-${workbook.id}-${encodeURIComponent(folderName)}`}
+                                  data-testid={testIds.workbooks.folderAddFiles(workbook.id, folderName)}
                                 >
                                   <FileIcon className="h-4 w-4" />
                                 </button>
@@ -1558,7 +1561,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                       }}
                                       className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                                       title={action.title}
-                                      data-testid={`workbooks-folder-action-${action.id}-${workbook.id}-${encodeURIComponent(folderName)}`}
+                                      data-testid={testIds.workbooks.folderAction(action.id, workbook.id, folderName)}
                                     >
                                       {action.icon ? <action.icon className="h-4 w-4" /> : <span className="text-xs">{action.title}</span>}
                                     </button>
@@ -1594,7 +1597,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                         setDraggingDoc(null);
                                         setDragOverTarget(null);
                                       }}
-                                      data-testid={`workbooks-doc-${workbook.id}-${encodeURIComponent(doc.path || doc.filename)}`}
+                                      data-testid={testIds.workbooks.doc(workbook.id, String(doc.path || doc.filename || ""))}
                                     >
                                       <span className="truncate">📄 {doc.filename}</span>
                                       <div className={`flex items-center gap-0.5 ${forceVisibleControls ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
@@ -1606,7 +1609,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                           className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                                           title="Rename"
                                           aria-label="Rename"
-                                          data-testid={`workbooks-doc-rename-${workbook.id}-${encodeURIComponent(getDocRelativePath(doc))}`}
+                                          data-testid={testIds.workbooks.docRename(workbook.id, getDocRelativePath(doc))}
                                         >
                                           <span className="text-[11px]">✎</span>
                                         </button>
@@ -1618,7 +1621,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                           className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                                           title="Move"
                                           aria-label="Move"
-                                          data-testid={`workbooks-doc-move-${workbook.id}-${encodeURIComponent(getDocRelativePath(doc))}`}
+                                          data-testid={testIds.workbooks.docMove(workbook.id, getDocRelativePath(doc))}
                                         >
                                           <span className="text-[11px]">⇄</span>
                                         </button>
@@ -1630,7 +1633,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                           className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-red-700"
                                           title="Delete"
                                           aria-label="Delete"
-                                          data-testid={`workbooks-doc-delete-${workbook.id}-${encodeURIComponent(getDocRelativePath(doc))}`}
+                                          data-testid={testIds.workbooks.docDelete(workbook.id, getDocRelativePath(doc))}
                                         >
                                           <DeleteIcon className="h-4 w-4" />
                                         </button>
@@ -1668,7 +1671,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                             setDraggingDoc(null);
                             setDragOverTarget(null);
                           }}
-                          data-testid={`workbooks-doc-${workbook.id}-${encodeURIComponent(doc.path || doc.filename)}`}
+                          data-testid={testIds.workbooks.doc(workbook.id, String(doc.path || doc.filename || ""))}
                         >
                           <span className="truncate">📄 {doc.filename}</span>
                           <div className={`flex items-center gap-0.5 ${forceVisibleControls ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
@@ -1680,7 +1683,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                               className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                               title="Rename"
                               aria-label="Rename"
-                              data-testid={`workbooks-doc-rename-${workbook.id}-${encodeURIComponent(getDocRelativePath(doc))}`}
+                              data-testid={testIds.workbooks.docRename(workbook.id, getDocRelativePath(doc))}
                             >
                               <span className="text-[11px]">✎</span>
                             </button>
@@ -1692,7 +1695,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                               className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                               title="Move"
                               aria-label="Move"
-                              data-testid={`workbooks-doc-move-${workbook.id}-${encodeURIComponent(getDocRelativePath(doc))}`}
+                              data-testid={testIds.workbooks.docMove(workbook.id, getDocRelativePath(doc))}
                             >
                               <span className="text-[11px]">⇄</span>
                             </button>
@@ -1704,7 +1707,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                               className="flex items-center justify-center rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-red-700"
                               title="Delete"
                               aria-label="Delete"
-                              data-testid={`workbooks-doc-delete-${workbook.id}-${encodeURIComponent(getDocRelativePath(doc))}`}
+                              data-testid={testIds.workbooks.docDelete(workbook.id, getDocRelativePath(doc))}
                             >
                               <DeleteIcon className="h-4 w-4" />
                             </button>
@@ -1787,7 +1790,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                   documentContextMenu.documentName,
                 )
               }
-              data-testid="workbooks-doc-context-rename"
+              data-testid={testIds.workbooks.contextMenu.docRename}
             >
               Rename
             </button>
@@ -1800,7 +1803,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                   documentContextMenu.documentName,
                 )
               }
-              data-testid="workbooks-doc-context-move"
+              data-testid={testIds.workbooks.contextMenu.docMove}
             >
               Move
             </button>
@@ -1813,7 +1816,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                   documentContextMenu.documentName,
                 )
               }
-              data-testid="workbooks-doc-context-delete"
+              data-testid={testIds.workbooks.contextMenu.docDelete}
             >
               Delete
             </button>
@@ -1836,21 +1839,21 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                 setFolderContextMenu(null);
                 setMoveFolderDialog({ isOpen: true, sourceWorkbookId: fromWb, sourceFolderName: fromFolder });
               }}
-              data-testid="workbooks-folder-context-move"
+              data-testid={testIds.workbooks.contextMenu.folderMove}
             >
               Move…
             </button>
             <button
               className="block w-full px-3 py-1 text-left text-sm hover:bg-gray-100"
               onClick={() => handleRenameFolder(folderContextMenu.workbookId, folderContextMenu.folderName)}
-              data-testid="workbooks-folder-context-rename"
+              data-testid={testIds.workbooks.contextMenu.folderRename}
             >
               Rename
             </button>
             <button
               className="block w-full px-3 py-1 text-left text-sm text-red-600 hover:bg-gray-100"
               onClick={() => handleDeleteFolder(folderContextMenu.workbookId, folderContextMenu.folderName)}
-              data-testid="workbooks-folder-context-delete"
+              data-testid={testIds.workbooks.contextMenu.folderDelete}
             >
               Delete
             </button>

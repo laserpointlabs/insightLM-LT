@@ -16,6 +16,7 @@ import { spreadsheetExtensionManifest } from "./extensions/spreadsheet";
 import { ExtensionToggle } from "./components/Extensions/ExtensionToggle";
 import { ToastCenter } from "./components/Notifications/ToastCenter";
 import { initAutomationUI } from "./testing/automationUi";
+import { testIds } from "./testing/testIds";
 
 function App() {
   const [dashboardActionButton, setDashboardActionButton] = useState<React.ReactNode>(null);
@@ -103,6 +104,7 @@ function App() {
                 isCollapsed={isDashboardsCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("dashboards")}
                 actionButton={dashboardActionButton}
+                testId={testIds.sidebar.headers.dashboards}
               >
                 <DashboardView onActionButton={setDashboardActionButton} />
               </CollapsibleView>
@@ -114,6 +116,7 @@ function App() {
                 isCollapsed={isDashboardsCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("dashboards")}
                 actionButton={dashboardActionButton}
+                testId={testIds.sidebar.headers.dashboards}
               >
                 <div />
               </CollapsibleView>
@@ -148,7 +151,7 @@ function App() {
                 isCollapsed={isContextsCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("contexts")}
                 actionButton={contextsActionButton}
-                testId="sidebar-contexts-header"
+                testId={testIds.sidebar.headers.contexts}
               >
                 <ContextsView
                   onActionButton={setContextsActionButton}
@@ -163,7 +166,7 @@ function App() {
                 isCollapsed={isContextsCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("contexts")}
                 actionButton={contextsActionButton}
-                testId="sidebar-contexts-header"
+                testId={testIds.sidebar.headers.contexts}
               >
                 <div />
               </CollapsibleView>
@@ -198,7 +201,7 @@ function App() {
                 isCollapsed={isWorkbooksCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("workbooks")}
                 actionButton={workbookActionButton}
-                testId="sidebar-workbooks-header"
+                testId={testIds.sidebar.headers.workbooks}
               >
                 <WorkbooksView onActionButton={setWorkbookActionButton} />
               </CollapsibleView>
@@ -210,7 +213,7 @@ function App() {
                 isCollapsed={isWorkbooksCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("workbooks")}
                 actionButton={workbookActionButton}
-                testId="sidebar-workbooks-header"
+                testId={testIds.sidebar.headers.workbooks}
               >
                 <div />
               </CollapsibleView>
@@ -238,6 +241,7 @@ function App() {
               isCollapsed={isChatCollapsed}
               onToggleCollapse={() => toggleViewCollapse("chat")}
               actionButton={chatActionButton}
+              testId={testIds.sidebar.headers.chat}
             >
               <Chat onActionButton={setChatActionButton} />
             </CollapsibleView>

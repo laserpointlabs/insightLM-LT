@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { testIds } from "../testing/testIds";
 
 type WorkbookInfo = {
   id: string;
@@ -84,14 +85,14 @@ export function MoveDocumentDialog({
       <div
         className="fixed inset-0 z-50 bg-black bg-opacity-50"
         onClick={onCancel}
-        data-testid="move-doc-dialog-backdrop"
+        data-testid={testIds.workbooks.moveDoc.backdrop}
       />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white p-4 shadow-xl"
-        data-testid="move-doc-dialog"
+        data-testid={testIds.workbooks.moveDoc.dialog}
       >
         <div className="mb-3">
-          <h3 className="text-lg font-semibold" data-testid="move-doc-title">
+          <h3 className="text-lg font-semibold" data-testid={testIds.workbooks.moveDoc.title}>
             Move Document
           </h3>
           <div className="mt-1 text-xs text-gray-500">
@@ -106,7 +107,7 @@ export function MoveDocumentDialog({
               className="w-full rounded border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               value={targetWorkbookId}
               onChange={(e) => setTargetWorkbookId(e.target.value)}
-              data-testid="move-doc-workbook-select"
+              data-testid={testIds.workbooks.moveDoc.workbookSelect}
             >
               {candidates.map((w) => (
                 <option key={w.id} value={w.id}>
@@ -123,7 +124,7 @@ export function MoveDocumentDialog({
                 className="w-full rounded border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 value={folderTrim}
                 onChange={(e) => setTargetFolder(e.target.value)}
-                data-testid="move-doc-folder-select"
+                data-testid={testIds.workbooks.moveDoc.folderSelect}
               >
                 <option value="">(root)</option>
                 {folderNames.map((f) => (
@@ -150,18 +151,18 @@ export function MoveDocumentDialog({
                 value={targetFilename}
                 onChange={(e) => setTargetFilename(e.target.value)}
                 placeholder="filename.ext"
-                data-testid="move-doc-filename-input"
+                data-testid={testIds.workbooks.moveDoc.filenameInput}
               />
               <div className="mt-1 text-xs text-gray-500">
                 Destination: <span className="font-mono">{destRel}</span>
               </div>
               {conflict && !isNoop && (
-                <div className="mt-1 text-xs text-red-600" data-testid="move-doc-error">
+                <div className="mt-1 text-xs text-red-600" data-testid={testIds.workbooks.moveDoc.error}>
                   A file already exists at that destination. Choose a different folder or filename.
                 </div>
               )}
               {isNoop && (
-                <div className="mt-1 text-xs text-gray-500" data-testid="move-doc-noop">
+                <div className="mt-1 text-xs text-gray-500" data-testid={testIds.workbooks.moveDoc.noop}>
                   Select a different destination or change the filename.
                 </div>
               )}
@@ -174,7 +175,7 @@ export function MoveDocumentDialog({
             type="button"
             onClick={onCancel}
             className="rounded px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
-            data-testid="move-doc-cancel"
+            data-testid={testIds.workbooks.moveDoc.cancel}
           >
             Cancel
           </button>
@@ -189,7 +190,7 @@ export function MoveDocumentDialog({
               })
             }
             className="rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-300"
-            data-testid="move-doc-ok"
+            data-testid={testIds.workbooks.moveDoc.ok}
           >
             Move
           </button>

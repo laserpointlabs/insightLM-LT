@@ -1,6 +1,7 @@
 {
   "appId": "com.insightlm.lt",
   "productName": "insightLM-LT",
+  "npmRebuild": false,
   "directories": {
     "output": "out"
   },
