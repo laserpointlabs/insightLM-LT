@@ -38,6 +38,7 @@ This file is the single source of truth for roadmap planning.
 - [x] Make active context indicator clickable (quick jump to Contexts)
 
 ### Chat (core)
+- [ ] Rename chat to iDA (INtegrated Digital Assistant) (or DAS Digital Assistant System... lets think)
 - [ ] Add small UX hint when no workbooks are scoped (link to Contexts to fix)
 - [ ] Add deterministic chat history scaffolding (even if minimal in 1.0)
 - [ ] Tabbed and stored chats where chat context is first class (we can discuss need and complexity)
@@ -45,19 +46,32 @@ This file is the single source of truth for roadmap planning.
 - [ ] @commands for specific context calls to worbooks, folders, and docs [Nice have and carries over to the dash boards]
 
 ### Dashboards (MVP)
-- [ ] Ensure tile formatting always returns valid JSON (even for “no data found”)
-- [ ] Add “Explain / View Sources” affordance per tile
-- [ ] Allow user to edit question
-- [ ] General tile clean up per best practice
+- [x] Ensure tile formatting always returns valid JSON (even for “no data found”)
+- [x] Add “Explain / View Sources” affordance per tile (stable testIds + automation-safe UI)
+- [x] Allow user to edit card question (in-place edit + re-run)
+- [x] General tile clean up per best practice (compact header controls + responsive results sizing)
+- [x] Add Visualization picker per tile (force Counter/Table/Graph/etc) + expand prod smoke to validate multiple tile types
+- [x] Ensure Dashboards are not scoped by context (dashboard queries ignore active Context scoping)
+- [x] Allow direct calls to workbooks/folders/files using @ for dashboard results (Dashboard question box typeahead inserts `workbook://...` refs)
+- [x] Graph tiles: ensure bar charts render reliably (avoid “hidden” charts; show explicit empty-state when no labels/values)
+- [x] Graph tiles (quality): improve CSV-backed chart extraction so common questions produce multi-bar outputs (robust column picking + grouping) + smoke asserts >1 bar
 
 ### CI / Packaging / Updates
 - [ ] CI build artifacts (NSIS installer + portable)
 - [ ] Auto-update pipeline (release + install)
 - [ ] Basic crash log capture + “Report Issue” bundle (logs + config)
 
+### Corrections/Bugs
+- [ ] When saving a tab, after the save the last tab in the list is broght forward, not the saved or current working tab
+
 ---
 
 ## 1.1 — “Scale & safety”
+
+### Dashboards
+- [ ] Spreadsheet range charts: allow questions like “plot A1:C5 as a line chart” (multi-series) from a spreadsheet, infer X axis, and render multiple lines
+- [ ] Time tracking tiles where the change in values is stored and plotted over time
+- [ ] Color coded based on cell colors in spread sheet - allows users to set pass/fail/warning values and propegate to dashboard without inteaction. 
 
 ### Workbooks (power user)
 - [ ] Bulk operations: multi-select + move/delete/rename/archive (docs + folders)
@@ -125,3 +139,6 @@ This file is the single source of truth for roadmap planning.
 - [ ] Update Chat area
 - [ ] Add @(Focused Context), /(Commands), Rules
 - [ ] Add Teams, Agents, Ask, and Plan capabilities
+
+### Import workbook/dashboard stack
+- [ ] allow a user to import a prebuild workbook and dashboard stack

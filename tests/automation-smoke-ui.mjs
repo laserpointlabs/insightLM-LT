@@ -154,6 +154,10 @@ async function setInputValue(evaluate, selector, value) {
       const desc = Object.getOwnPropertyDescriptor(proto, "value");
       if (desc && typeof desc.set === "function") desc.set.call(el, ${jsString(value)});
       else el.value = ${jsString(value)};
+      try {
+        // Keep caret at end so @-typeahead logic (caret-based) behaves like real typing.
+        el.setSelectionRange(el.value.length, el.value.length);
+      } catch {}
       el.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
       el.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
       return true;
@@ -316,6 +320,27 @@ async function run() {
     if (!movedOk) fail("Move doc into folder did not reflect in UI");
     console.log("✅ Moved doc into folder");
 
+    // Create a deterministic CSV fixture for dashboard graph testing.
+    // The Workbooks UI "Import Files" button does not create arbitrary files, so we write the fixture directly.
+    const csvName = "project_budget_2025.csv";
+    const csvRelPath = `documents/${csvName}`;
+    // Write CSV contents: multiple categories for year 2025.
+    const csvContent = [
+      "year,category,budget",
+      "2025,Engineering,120",
+      "2025,Manufacturing,200",
+      "2025,Test,80",
+      "2024,Engineering,50",
+    ].join("\\n");
+    await evaluate(`
+      (async () => {
+        if (!window.electronAPI?.file?.write) return false;
+        await window.electronAPI.file.write(${jsString(workbookId)}, ${jsString(csvRelPath)}, ${jsString(csvContent)});
+        return true;
+      })()
+    `);
+    console.log("✅ Created CSV fixture for graph test");
+
     // Expand Chat and send message.
     await ensureExpanded(evaluate, "sidebar-chat-header");
     await waitForSelector(evaluate, 'input[data-testid="chat-input"]', 20000);
@@ -340,6 +365,235 @@ async function run() {
     })();
     if (!userMsgOk) fail("Chat message was not rendered in UI");
     console.log("✅ Sent chat message");
+
+    // Dashboards: create a dashboard and add a query (automation-safe selectors).
+    await ensureExpanded(evaluate, "sidebar-dashboards-header");
+    await clickSelector(evaluate, 'button[data-testid="dashboards-create"]');
+    await waitForSelector(evaluate, 'input[data-testid="input-dialog-input"]', 20000);
+    const dashName = `Auto Smoke Dash ${Date.now()}`;
+    await setInputValue(evaluate, 'input[data-testid="input-dialog-input"]', dashName);
+    await clickSelector(evaluate, 'button[data-testid="input-dialog-ok"]');
+
+    // Dashboard should open in viewer, add a simple query.
+    await waitForSelector(evaluate, 'input[data-testid="dashboards-add-question-input"]', 20000);
+
+    // Sanity: @ mention menu opens and inserts a workbook:// reference.
+    await clickSelector(evaluate, 'input[data-testid="dashboards-add-question-input"]');
+    await setInputValue(evaluate, 'input[data-testid="dashboards-add-question-input"]', '@');
+    const menuOk = await waitForSelector(evaluate, 'div[data-testid="dashboards-add-question-mention-menu"]', 20000);
+    if (!menuOk) fail("Dashboards @ mention menu did not appear");
+    const itemOk = await waitForSelector(evaluate, 'button[data-testid^="dashboards-add-question-mention-item-"]', 30000);
+    if (!itemOk) {
+      const debug = await evaluate(`
+        (() => {
+          const menuText = (document.querySelector('div[data-testid="dashboards-add-question-mention-menu"]')?.innerText || "").trim();
+          const wbr = (document.querySelector('input[data-testid="dashboards-add-question-input"]')?.value || "");
+          return { menuText: menuText.slice(0, 120), value: wbr.slice(0, 120) };
+        })()
+      `);
+      console.error("Mention debug:", debug);
+      fail("Dashboards @ mention menu appeared but no items were available");
+    }
+    const firstMention = await evaluate(`
+      (() => {
+        const btn = document.querySelector('button[data-testid^="dashboards-add-question-mention-item-"]');
+        return btn ? btn.getAttribute("data-testid") : null;
+      })()
+    `);
+    if (!firstMention) fail("Dashboards @ mention menu opened but had no items");
+    await clickSelector(evaluate, `button[data-testid="${firstMention}"]`);
+    // Verify the input now contains workbook://
+    const hasWorkbookRef = await evaluate(`
+      (() => {
+        const el = document.querySelector('input[data-testid="dashboards-add-question-input"]');
+        return !!el && (el.value || "").includes("workbook://");
+      })()
+    `);
+    if (!hasWorkbookRef) fail("Selecting a @ mention did not insert a workbook:// reference into the question input");
+    console.log("✅ Dashboards @ mention inserts workbook:// reference");
+
+    await setInputValue(evaluate, 'input[data-testid="dashboards-add-question-input"]', 'How many documents do we have?');
+    await clickSelector(evaluate, 'button[data-testid="dashboards-add-query"]');
+    console.log("✅ Created dashboard + added a query");
+
+    async function getTileIds() {
+      const ids = await evaluate(`
+        (() => {
+          // Use the tile menu buttons as the canonical per-tile element to avoid matching
+          // nested elements like dashboard-tile-result-*
+          const btns = Array.from(document.querySelectorAll('button[data-testid^="dashboard-tile-menu-"]'));
+          return btns
+            .map(b => b.getAttribute("data-testid"))
+            .filter(Boolean);
+        })()
+      `);
+      return Array.isArray(ids)
+        ? ids.map((t) => String(t).replace(/^dashboard-tile-menu-/, ""))
+        : [];
+    }
+
+    async function waitForNewTileId(prevIds, timeoutMs = 20000) {
+      const prevSet = new Set(prevIds.map(String));
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const ids = await getTileIds();
+        const newOnes = ids.filter((id) => !prevSet.has(String(id)));
+        if (newOnes.length) return newOnes[newOnes.length - 1];
+        await sleep(150);
+      }
+      return null;
+    }
+
+    async function waitForResultType(queryId, expectedType, timeoutMs = 20000) {
+      const start = Date.now();
+      const sel = `div[data-testid="dashboard-tile-result-${queryId}"]`;
+      while (Date.now() - start < timeoutMs) {
+        const got = await evaluate(`
+          (() => {
+            const el = document.querySelector(${jsString(sel)});
+            return el ? (el.getAttribute("data-result-type") || "") : null;
+          })()
+        `);
+        if (got && String(got) === String(expectedType)) return true;
+        await sleep(150);
+      }
+      return false;
+    }
+
+    // Edit the question on the first tile (ensures edit flow exists and is stable).
+    const firstTileTid = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 60000) {
+        const tid = await evaluate(`
+          (() => {
+            const el = document.querySelector('[data-testid^="dashboard-tile-"]');
+            return el ? el.getAttribute("data-testid") : null;
+          })()
+        `);
+        if (tid) return tid;
+        await sleep(150);
+      }
+      return null;
+    })();
+    if (!firstTileTid) fail("Dashboard tile did not render");
+    const queryId = String(firstTileTid).replace(/^dashboard-tile-/, "");
+
+    // Open tile menu, then edit question.
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-menu-${queryId}"]`);
+    await waitForSelector(evaluate, `div[data-testid="dashboard-tile-menu-panel-${queryId}"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-edit-question-${queryId}"]`);
+    await waitForSelector(evaluate, 'input[data-testid="input-dialog-input"]', 20000);
+    const qCounter = `How many documents do we have? (counter ${Date.now()})`;
+    await setInputValue(evaluate, 'input[data-testid="input-dialog-input"]', qCounter);
+    await clickSelector(evaluate, 'button[data-testid="input-dialog-ok"]');
+    console.log("✅ Edited dashboard tile question");
+
+    // Force visualization to Counter and verify rendered result type.
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-menu-${queryId}"]`);
+    await waitForSelector(evaluate, `div[data-testid="dashboard-tile-menu-panel-${queryId}"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-viz-${queryId}"]`);
+    await waitForSelector(evaluate, `button[data-testid="dashboard-tile-viz-${queryId}-counter"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-viz-${queryId}-counter"]`);
+    const counterOk = await waitForResultType(queryId, "counter", 60000);
+    if (!counterOk) fail("Counter tile did not render as counter");
+    console.log("✅ Verified Counter tile type");
+
+    // Add a second tile and force visualization to Table.
+    const beforeTable = await getTileIds();
+    const qTable = `List documents (table ${Date.now()})`;
+    await setInputValue(evaluate, 'input[data-testid="dashboards-add-question-input"]', qTable);
+    await clickSelector(evaluate, 'button[data-testid="dashboards-add-query"]');
+    const tableId = await waitForNewTileId(beforeTable, 20000);
+    if (!tableId) fail("Second dashboard tile (table) did not render");
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-menu-${tableId}"]`);
+    await waitForSelector(evaluate, `div[data-testid="dashboard-tile-menu-panel-${tableId}"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-viz-${tableId}"]`);
+    await waitForSelector(evaluate, `button[data-testid="dashboard-tile-viz-${tableId}-table"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-viz-${tableId}-table"]`);
+    const tableOk = await waitForResultType(tableId, "table", 60000);
+    if (!tableOk) fail("Table tile did not render as table");
+    console.log("✅ Verified Table tile type");
+
+    // NOTE: We intentionally do NOT test a generic "graph documents" query here because it is LLM-dependent.
+    // Graph behavior is validated deterministically below using a CSV-backed graph tile with >1 points.
+
+    // CSV-backed graph quality assertion: must have >1 bar (data points).
+    const csvGraphQ = `Summarize the total budget in a bar graph for 2025 from workbook://${workbookId}/${csvRelPath}`;
+    const beforeCsvGraph = await getTileIds();
+    await setInputValue(evaluate, 'input[data-testid="dashboards-add-question-input"]', csvGraphQ);
+    await clickSelector(evaluate, 'button[data-testid="dashboards-add-query"]');
+    const csvGraphId = await waitForNewTileId(beforeCsvGraph, 20000);
+    if (!csvGraphId) fail("CSV graph tile did not render");
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-menu-${csvGraphId}"]`);
+    await waitForSelector(evaluate, `div[data-testid="dashboard-tile-menu-panel-${csvGraphId}"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-viz-${csvGraphId}"]`);
+    await waitForSelector(evaluate, `button[data-testid="dashboard-tile-viz-${csvGraphId}-graph"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-viz-${csvGraphId}-graph"]`);
+    const csvGraphOk = await waitForResultType(csvGraphId, "graph", 60000);
+    if (!csvGraphOk) fail("CSV graph tile did not render as graph");
+
+    const pointsOk = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 60000) {
+        const pts = await evaluate(`
+          (() => {
+            const root = document.querySelector(${jsString(`div[data-testid="dashboard-tile-result-${csvGraphId}"]`)});
+            if (!root) return null;
+            const chart = root.querySelector('[data-graph-points]');
+            if (!chart) return null;
+            const v = chart.getAttribute('data-graph-points') || "0";
+            const n = Number(v);
+            return Number.isFinite(n) ? n : 0;
+          })()
+        `);
+        if (typeof pts === "number" && pts > 1) return true;
+        await sleep(150);
+      }
+      return false;
+    })();
+    if (!pointsOk) fail("CSV graph did not produce >1 data points (expected multi-bar chart)");
+    console.log("✅ Verified CSV graph has >1 data point");
+
+    // Flip chart style to line and pie and assert it still renders with >1 points.
+    async function waitForGraphChartType(queryId, expected, timeoutMs = 20000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const v = await evaluate(`
+          (() => {
+            const root = document.querySelector(${jsString(`div[data-testid="dashboard-tile-result-${csvGraphId}"]`)});
+            if (!root) return null;
+            const chart = root.querySelector('[data-graph-chart-type]');
+            return chart ? (chart.getAttribute('data-graph-chart-type') || null) : null;
+          })()
+        `);
+        if (v && String(v) === String(expected)) return true;
+        await sleep(150);
+      }
+      return false;
+    }
+
+    // Line
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-menu-${csvGraphId}"]`);
+    await waitForSelector(evaluate, `div[data-testid="dashboard-tile-menu-panel-${csvGraphId}"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-chart-${csvGraphId}"]`);
+    await waitForSelector(evaluate, `button[data-testid="dashboard-tile-chart-${csvGraphId}-line"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-chart-${csvGraphId}-line"]`);
+    const lineOk = await waitForGraphChartType(csvGraphId, "line", 20000);
+    if (!lineOk) fail("CSV graph did not switch to line chart");
+    const linePointsOk = await waitForSelector(evaluate, `div[data-testid="dashboard-tile-result-${csvGraphId}"] [data-graph-points]:not([data-graph-points="0"])`, 20000);
+    if (!linePointsOk) fail("Line chart appears to have 0 points");
+
+    // Pie
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-menu-${csvGraphId}"]`);
+    await waitForSelector(evaluate, `div[data-testid="dashboard-tile-menu-panel-${csvGraphId}"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-chart-${csvGraphId}"]`);
+    await waitForSelector(evaluate, `button[data-testid="dashboard-tile-chart-${csvGraphId}-pie"]`, 20000);
+    await clickSelector(evaluate, `button[data-testid="dashboard-tile-chart-${csvGraphId}-pie"]`);
+    const pieOk = await waitForGraphChartType(csvGraphId, "pie", 20000);
+    if (!pieOk) fail("CSV graph did not switch to pie chart");
+    const piePointsOk = await waitForSelector(evaluate, `div[data-testid="dashboard-tile-result-${csvGraphId}"] [data-graph-points]:not([data-graph-points="0"])`, 20000);
+    if (!piePointsOk) fail("Pie chart appears to have 0 points");
+    console.log("✅ Verified CSV graph toggles line/pie");
 
     console.log("\n🎉 UI automation smoke PASSED");
     process.exit(0);

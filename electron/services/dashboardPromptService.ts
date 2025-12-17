@@ -115,6 +115,18 @@ You MUST respond with ONLY valid JSON in this exact format:
   "title": "<chart title>"
 }
 
+CSV guidance (important for deterministic bar charts):
+1. If the question references a CSV file (e.g. ends with ".csv" or contains a workbook://... .csv path), you MUST read that CSV using available tools (do not guess).
+2. Prefer producing a BAR chart with multiple bars. Aim for 3-12 labels/values when possible.
+3. Column selection rules:
+   - Choose the numeric column that best matches keywords like: budget, cost, amount, total, spend, dollars, usd.
+   - Choose a label column that best matches: category, project, item, name, department, month.
+   - If the question asks for a specific year (e.g. 2025), filter rows by a year column or a date column that begins with that year.
+4. Aggregation rules:
+   - If there are repeated labels, SUM the numeric values per label.
+   - If labels are dates, group by month (YYYY-MM) unless asked otherwise.
+5. If the CSV truly has fewer than 2 usable data points, return empty arrays (labels:[], values:[]) rather than fabricating.
+
 Rules:
 1. Search the documents using available tools
 2. Extract the relevant data
@@ -318,11 +330,13 @@ Response: {"color": "yellow", "label": "Acme Aerospace NDA", "message": "Expires
       // Inject current date into system prompt
       const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
 
+      const explicitRefRules = `\n\nExplicit references:\n- The user may include explicit targets like "workbook://<workbookId>/" or "workbook://<workbookId>/<path>".\n- If explicit workbook:// references are present, treat them as authoritative and focus retrieval/reads on those workbooks/files.\n- Do NOT invent file paths. Use available tools (list/search/read) to resolve and extract data from the referenced targets.\n`;
+
       const systemPromptWithDate = `CURRENT DATE: ${currentDate}
 
 ${schemaConfig.system}
 
-Important: Use the current date (${currentDate}) for all time-based calculations (days until, expiring soon, etc).`;
+Important: Use the current date (${currentDate}) for all time-based calculations (days until, expiring soon, etc).${explicitRefRules}`;
 
       const promptConfig: LLMPromptConfig = {
         systemPrompt: systemPromptWithDate,

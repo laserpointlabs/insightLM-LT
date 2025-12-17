@@ -4,6 +4,7 @@ export interface DashboardQuery {
   title?: string; // Optional custom title (defaults to question if not set)
   queryType: "count" | "filter" | "date_range" | "aggregate" | "custom";
   tileType?: "counter" | "counter_warning" | "graph" | "table" | "text" | "date" | "color"; // Visualization type
+  graphChartType?: "bar" | "line" | "pie"; // Chart style for graph tiles
   workbookId?: string;
   filters?: Record<string, any>;
   createdAt: string;
@@ -54,6 +55,14 @@ export interface DashboardResult {
 
   // Error type
   error?: string;
+
+  // Optional sources/explainability metadata (renderers may choose to ignore).
+  sources?: Array<{
+    workbookId: string;
+    filePath: string;
+    filename?: string;
+  }>;
+  explanation?: string;
 }
 
 export interface Dashboard {

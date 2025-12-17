@@ -119,6 +119,42 @@ def parse_llm_response(response: str, expected_schema: Dict[str, Any], tile_type
                             break
 
     if not json_str:
+        # Treat "no data" / "not found" / "N/A" and similar "can't locate" responses as a valid empty result
+        # rather than an error. This keeps tiles deterministic even when the LLM responds conversationally.
+        lower = response.lower()
+        if any(p in lower for p in [
+            "no data",
+            "not found",
+            "none found",
+            "n/a",
+            "no results",
+            "no matches",
+            "not available",
+            "does not provide",
+            "doesn't provide",
+            "cannot find",
+            "can't find",
+            "could not find",
+            "does not appear",
+            "doesn't appear",
+            "please check",
+            "please specify",
+        ]):
+            if tile_type == "counter":
+                return {"success": True, "result": {"type": "counter", "value": None, "label": "", "subtitle": "No data found"}}
+            if tile_type == "counter_warning":
+                return {"success": True, "result": {"type": "counter_warning", "value": 0, "label": "", "level": "success", "items": []}}
+            if tile_type == "table":
+                return {"success": True, "result": {"type": "table", "columns": [], "rows": [], "totalRows": 0}}
+            if tile_type == "graph":
+                return {"success": True, "result": {"type": "graph", "chartType": "bar", "data": {"labels": [], "values": []}, "title": ""}}
+            if tile_type == "date":
+                return {"success": True, "result": {"type": "date", "date": "", "label": "", "daysUntil": None}}
+            if tile_type == "color":
+                return {"success": True, "result": {"type": "color", "color": "green", "label": "", "message": "No data found"}}
+            # text default
+            return {"success": True, "result": {"type": "text", "content": "No data found.", "format": "markdown"}}
+
         return {
             "success": False,
             "error": f"No valid JSON found in response: {response[:200]}"
@@ -163,8 +199,18 @@ def parse_llm_response(response: str, expected_schema: Dict[str, Any], tile_type
             }
 
         elif tile_type == "graph":
+            # Fail-soft: if the LLM returns an empty/partial object, render an empty graph
+            # rather than breaking the tile.
             if "labels" not in data or "values" not in data:
-                return {"success": False, "error": "Graph data must have 'labels' and 'values' fields"}
+                return {
+                    "success": True,
+                    "result": {
+                        "type": "graph",
+                        "chartType": "bar",
+                        "data": {"labels": [], "values": []},
+                        "title": data.get("title", "") if isinstance(data, dict) else ""
+                    }
+                }
 
             return {
                 "success": True,
@@ -259,6 +305,23 @@ def parse_llm_response(response: str, expected_schema: Dict[str, Any], tile_type
             return {"success": False, "error": f"Unknown tile type: {tile_type}"}
 
     except json.JSONDecodeError as e:
+        lower = response.lower()
+        if any(p in lower for p in ["no data", "not found", "none found", "n/a", "no results", "no matches"]):
+            # Same fallback behavior as above
+            if tile_type == "table":
+                return {"success": True, "result": {"type": "table", "columns": [], "rows": [], "totalRows": 0}}
+            if tile_type == "graph":
+                return {"success": True, "result": {"type": "graph", "chartType": "bar", "data": {"labels": [], "values": []}, "title": ""}}
+            if tile_type == "counter":
+                return {"success": True, "result": {"type": "counter", "value": None, "label": "", "subtitle": "No data found"}}
+            if tile_type == "counter_warning":
+                return {"success": True, "result": {"type": "counter_warning", "value": 0, "label": "", "level": "success", "items": []}}
+            if tile_type == "date":
+                return {"success": True, "result": {"type": "date", "date": "", "label": "", "daysUntil": None}}
+            if tile_type == "color":
+                return {"success": True, "result": {"type": "color", "color": "green", "label": "", "message": "No data found"}}
+            return {"success": True, "result": {"type": "text", "content": "No data found.", "format": "markdown"}}
+
         return {
             "success": False,
             "error": f"Invalid JSON in response: {e}"

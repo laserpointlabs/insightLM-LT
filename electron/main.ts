@@ -284,7 +284,13 @@ app.whenReady().then(async () => {
   const { DashboardQueryService } = require("./services/dashboardService");
   const { DashboardPromptService } = require("./services/dashboardPromptService");
   const dashboardPromptService = new DashboardPromptService();
-  const dashboardQueryService = new DashboardQueryService(mcpService, toolRegistry, llmService, dashboardPromptService);
+  const dashboardQueryService = new DashboardQueryService(
+    mcpService,
+    toolRegistry,
+    llmService,
+    dashboardPromptService,
+    fileServiceForLLM,
+  );
 
   // Setup IPC handlers
   setupWorkbookIPC(configService);

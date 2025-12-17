@@ -59,6 +59,43 @@ export const testIds = {
     cancel: "confirm-dialog-cancel",
     confirm: "confirm-dialog-confirm",
   },
+  dashboards: {
+    sidebar: {
+      create: "dashboards-create",
+      item: (dashboardId: string) => `dashboards-item-${dashboardId}`,
+      contextMenu: {
+        rename: "dashboards-context-rename",
+        delete: "dashboards-context-delete",
+      },
+    },
+    viewer: {
+      addQuestionInput: "dashboards-add-question-input",
+      addQuestionMentionMenu: "dashboards-add-question-mention-menu",
+      addQuestionMentionItem: (kind: string, id: string) =>
+        `dashboards-add-question-mention-item-${kind}-${encodeURIComponent(String(id || ""))}`,
+      addQuery: "dashboards-add-query",
+      refreshAll: "dashboards-refresh-all",
+    },
+    tile: {
+      container: (queryId: string) => `dashboard-tile-${queryId}`,
+      result: (queryId: string) => `dashboard-tile-result-${queryId}`,
+      sizeSelect: (queryId: string) => `dashboard-tile-size-${queryId}`,
+      vizSelect: (queryId: string) => `dashboard-tile-viz-${queryId}`,
+      vizOption: (queryId: string, tileType: string) => `dashboard-tile-viz-${queryId}-${tileType}`,
+      chartSelect: (queryId: string) => `dashboard-tile-chart-${queryId}`,
+      chartOption: (queryId: string, chartType: string) => `dashboard-tile-chart-${queryId}-${chartType}`,
+      refresh: (queryId: string) => `dashboard-tile-refresh-${queryId}`,
+      remove: (queryId: string) => `dashboard-tile-remove-${queryId}`,
+      editQuestion: (queryId: string) => `dashboard-tile-edit-question-${queryId}`,
+      explain: (queryId: string) => `dashboard-tile-explain-${queryId}`,
+      sources: (queryId: string) => `dashboard-tile-sources-${queryId}`,
+      menu: (queryId: string) => `dashboard-tile-menu-${queryId}`,
+      menuPanel: (queryId: string) => `dashboard-tile-menu-panel-${queryId}`,
+      infoClose: (queryId: string) => `dashboard-tile-info-close-${queryId}`,
+      sourcesPanel: (queryId: string) => `dashboard-tile-sources-panel-${queryId}`,
+      explainPanel: (queryId: string) => `dashboard-tile-explain-panel-${queryId}`,
+    },
+  },
   workbooks: {
     header: {
       create: "workbooks-create",

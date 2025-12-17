@@ -57,6 +57,7 @@ export class LLMService {
    * - { contextId: string, workbookIds: Set<string> }: scope active
    */
   private cachedContextScope: null | { contextId: string | null; workbookIds: Set<string> | null } = null;
+  private disableContextScopingForRequest: boolean = false;
 
   constructor(
     config: LLMConfig,
@@ -183,11 +184,15 @@ export class LLMService {
     console.log(`[LLM] Updated available tools: ${coreCount} core + ${mcpCount} MCP = ${this.availableTools.length} total`);
   }
 
-  async chat(messages: LLMMessage[]): Promise<string> {
+  async chat(
+    messages: LLMMessage[],
+    options?: { ignoreContextScope?: boolean },
+  ): Promise<string> {
     // Reset files read tracker for new chat request
     this.filesReadInCurrentChat = [];
     // Reset cached context scope per chat request (so active context changes apply immediately)
     this.cachedContextScope = null;
+    this.disableContextScopingForRequest = !!options?.ignoreContextScope;
 
     // Add system message with tool definitions if not present
     const systemMessage: LLMMessage = {
@@ -200,18 +205,23 @@ export class LLMService {
       : [systemMessage, ...messages];
 
     let response: string;
-    switch (this.config.provider) {
-      case "openai":
-        response = await this.chatWithToolsOpenAI(messagesWithSystem);
-        break;
-      case "claude":
-        response = await this.chatWithToolsClaude(messagesWithSystem);
-        break;
-      case "ollama":
-        response = await this.chatWithToolsOllama(messagesWithSystem);
-        break;
-      default:
-        throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
+    try {
+      switch (this.config.provider) {
+        case "openai":
+          response = await this.chatWithToolsOpenAI(messagesWithSystem);
+          break;
+        case "claude":
+          response = await this.chatWithToolsClaude(messagesWithSystem);
+          break;
+        case "ollama":
+          response = await this.chatWithToolsOllama(messagesWithSystem);
+          break;
+        default:
+          throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
+      }
+    } finally {
+      // Ensure per-request override never leaks across calls.
+      this.disableContextScopingForRequest = false;
     }
 
     // Add file references if any files were read
@@ -577,6 +587,12 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
 
     // Default: no scope (operate across all workbooks)
     const empty = { contextId: null, workbookIds: null as Set<string> | null };
+
+    // Request override: allow callers (e.g., Dashboards) to ignore active context scoping.
+    if (this.disableContextScopingForRequest) {
+      this.cachedContextScope = empty;
+      return this.cachedContextScope;
+    }
 
     // UI override: allow "All workbooks" mode (ignore active context scoping)
     if ((global as any).__insightlmDisableContextScoping === true) {

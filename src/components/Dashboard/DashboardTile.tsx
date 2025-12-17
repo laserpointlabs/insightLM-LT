@@ -4,6 +4,8 @@ import { useDashboardStore } from "../../store/dashboardStore";
 import { useWorkbookStore } from "../../store/workbookStore";
 import { dashboardService } from "../../services/dashboardService";
 import { DashboardResults } from "./DashboardResults";
+import { testIds } from "../../testing/testIds";
+import { InputDialog } from "../InputDialog";
 
 interface DashboardTileProps {
   query: DashboardQuery;
@@ -44,8 +46,18 @@ export function DashboardTile({
   const [hasMoved, setHasMoved] = useState(false); // Track if mouse actually moved during drag
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(query.title || query.question);
+  const [showExplain, setShowExplain] = useState(false);
+  const [showSources, setShowSources] = useState(false);
+  const [sizePickerOpen, setSizePickerOpen] = useState(false);
+  const [vizPickerOpen, setVizPickerOpen] = useState(false);
+  const [chartPickerOpen, setChartPickerOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editQuestionDialogOpen, setEditQuestionDialogOpen] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState(currentQuery.question);
   const dragTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const tileRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuPanelRef = useRef<HTMLDivElement>(null);
 
   // Sync local result state with store when query.result updates externally
   // This handles cases where results are updated via handleRefreshAll or other external updates
@@ -67,30 +79,53 @@ export function DashboardTile({
     }
   }, []);
 
-  const runQuery = async () => {
+  const computeTileType = (q: DashboardQuery) =>
+    q.tileType ||
+    (q.queryType === "date_range"
+      ? "counter_warning"
+      : q.queryType === "filter"
+        ? "table"
+        : q.queryType === "aggregate"
+          ? "graph"
+          : "counter");
+
+  const runQuery = async (
+    overrideQuestion?: string,
+    overrideTileType?: DashboardQuery["tileType"],
+  ) => {
     setIsRunning(true);
     setError(null);
     try {
+      const q = currentQuery;
+      const tileType = overrideTileType || computeTileType(q);
+      const questionToRun = (overrideQuestion ?? q.question).trim();
+      if (!questionToRun) {
+        setError("Question cannot be empty");
+        setResult(undefined);
+        return;
+      }
+
       // Execute query via MCP Dashboard Server (new prompt manager flow)
       if (window.electronAPI?.mcp?.dashboardQuery) {
-        // Determine tile type from query type or explicit tileType
-        const tileType = query.tileType ||
-                        (query.queryType === "date_range" ? "counter_warning" :
-                         query.queryType === "filter" ? "table" :
-                         query.queryType === "aggregate" ? "graph" :
-                         "counter"); // default
-
         const response = await window.electronAPI.mcp.dashboardQuery(
-          query.question,
+          questionToRun,
           tileType
         );
 
         if (response && response.success && response.result) {
-          setResult(response.result);
+          const nextRes = (() => {
+            const r = response.result as any;
+            if (r && r.type === "graph" && q.graphChartType) {
+              return { ...r, chartType: q.graphChartType };
+            }
+            return r;
+          })();
+          setResult(nextRes);
           setError(null);
-          updateQuery(dashboardId, query.id, {
-            result: response.result,
+          updateQuery(dashboardId, q.id, {
+            result: nextRes,
             lastRun: new Date().toISOString(),
+            ...(overrideTileType ? { tileType: overrideTileType } : {}),
           });
         } else if (response && response.error) {
           setError(response.error);
@@ -98,12 +133,20 @@ export function DashboardTile({
         }
       } else {
         // Fallback to legacy implementation
-        const queryResult = await dashboardService.executeQuery(query, workbooks);
-        setResult(queryResult);
+        const queryResult = await dashboardService.executeQuery({ ...currentQuery, question: questionToRun }, workbooks);
+        const nextRes = (() => {
+          const r = queryResult as any;
+          if (r && r.type === "graph" && q.graphChartType) {
+            return { ...r, chartType: q.graphChartType };
+          }
+          return r;
+        })();
+        setResult(nextRes);
         setError(null);
-        updateQuery(dashboardId, query.id, {
-          result: queryResult,
+        updateQuery(dashboardId, currentQuery.id, {
+          result: nextRes,
           lastRun: new Date().toISOString(),
+          ...(overrideTileType ? { tileType: overrideTileType } : {}),
         });
       }
     } catch (err) {
@@ -291,6 +334,67 @@ export function DashboardTile({
 
   const tileSize = getTileSize();
   const displayTitle = query.title || query.question;
+  const sources = Array.isArray((result as any)?.sources) ? ((result as any).sources as any[]) : [];
+  const isCompactHeader = tileSize === "small" || tileSize === "medium";
+  const forceVisibleControls =
+    typeof document !== "undefined" && document.body?.dataset?.automationMode === "true";
+
+  const cycleSize = () => {
+    const order: Array<"small" | "medium" | "large" | "full-width"> = ["small", "medium", "large", "full-width"];
+    const idx = Math.max(0, order.indexOf(tileSize));
+    const next = order[(idx + 1) % order.length];
+    onSizeChange(query.id, next);
+  };
+
+  const sizeLabel = tileSize === "full-width" ? "W" : tileSize === "large" ? "L" : tileSize === "medium" ? "M" : "S";
+
+  // Close the tile menu on outside click / Escape without blocking the UI with a backdrop.
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        setSizePickerOpen(false);
+        setVizPickerOpen(false);
+        setChartPickerOpen(false);
+        setShowExplain(false);
+        setShowSources(false);
+      }
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (menuButtonRef.current?.contains(t)) return;
+      if (menuPanelRef.current?.contains(t)) return;
+      setMenuOpen(false);
+      setSizePickerOpen(false);
+      setVizPickerOpen(false);
+      setChartPickerOpen(false);
+    };
+
+    // Capture phase to win against other handlers (drag, etc.)
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [menuOpen]);
+
+  // Also allow Escape to exit Explain/Sources back to results, even when the menu isn't open.
+  useEffect(() => {
+    if (!showExplain && !showSources) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowExplain(false);
+        setShowSources(false);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [showExplain, showSources]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -320,13 +424,14 @@ export function DashboardTile({
         boxSizing: "border-box", // Include padding/borders in width calculation
       }}
       tabIndex={0}
+      data-testid={testIds.dashboards.tile.container(query.id)}
     >
       {/* Tile Header */}
       <div
-        className="tile-header flex items-start justify-between border-b border-gray-200 bg-gray-50 px-3 py-2 cursor-grab active:cursor-grabbing"
+        className="tile-header group flex items-start justify-between gap-2 overflow-visible border-b border-gray-200 bg-gray-50 px-3 py-2 cursor-grab active:cursor-grabbing"
         onMouseDown={handleMouseDown}
       >
-        <div className="flex-1 min-w-0 group title-text" onDoubleClick={handleTitleDoubleClick}>
+        <div className="min-w-0 flex-1 title-text overflow-hidden" onDoubleClick={handleTitleDoubleClick}>
           {isEditingTitle ? (
             <input
               type="text"
@@ -348,85 +453,422 @@ export function DashboardTile({
             />
           ) : (
             <div className="relative cursor-text">
-              <h3 className="text-sm font-semibold text-gray-800 truncate pr-6" title={`Double-click to edit\n\nTitle: ${displayTitle}\nQuestion: ${query.question}`}>
+              <h3
+                className="text-sm font-semibold text-gray-800 truncate"
+                title={`Double-click to edit\n\nTitle: ${displayTitle}\nQuestion: ${query.question}`}
+              >
                 {displayTitle}
               </h3>
-              <span className="absolute right-0 top-0 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                ✎
-              </span>
             </div>
           )}
-          <div className="text-xs text-gray-500 mt-0.5 truncate" title={query.question}>
-            {query.queryType}
-            {query.lastRun &&
-              ` • ${new Date(query.lastRun).toLocaleTimeString()}`}
+          <div className="mt-0.5 text-[11px] text-gray-500 truncate" title={query.question}>
+            <span className="capitalize">{query.queryType}</span>
+            {query.lastRun && ` • ${new Date(query.lastRun).toLocaleTimeString()}`}
           </div>
         </div>
-        <div className="flex gap-1 ml-2 flex-shrink-0">
-          {/* Size selector */}
-          <select
-            value={tileSize}
-            onChange={(e) => onSizeChange(query.id, e.target.value as any)}
-            className="rounded border border-gray-300 px-1.5 py-0.5 text-xs"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <option value="small">Small</option>
-            <option value="medium">Medium</option>
-            <option value="large">Large</option>
-            <option value="full-width">Full Width</option>
-          </select>
+        <div className="relative flex shrink-0 items-center">
           <button
+            ref={menuButtonRef}
             onClick={(e) => {
               e.stopPropagation();
-              runQuery();
+              setMenuOpen((v) => !v);
             }}
-            disabled={isRunning}
-            className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200 disabled:opacity-50"
-            title="Refresh"
+            className={`rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 hover:text-gray-900 ${
+              forceVisibleControls ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
+            title="Actions"
+            data-testid={testIds.dashboards.tile.menu(query.id)}
           >
-            {isRunning ? "..." : "↻"}
+            ⋯
           </button>
-          <button
-            onClick={async (e) => {
-              e.stopPropagation();
-              try {
-                await removeQuery(dashboardId, query.id);
-              } catch (err) {
-                console.error("Failed to remove query:", err);
-              }
-            }}
-            className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-            title="Remove"
-          >
-            ×
-          </button>
+
+          {menuOpen && (
+            <>
+              <div
+                className="absolute right-0 top-full z-50 mt-1 w-56 max-h-72 overflow-auto rounded border border-gray-200 bg-white py-1 shadow-lg"
+                data-testid={testIds.dashboards.tile.menuPanel(query.id)}
+                ref={menuPanelRef}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSizePickerOpen(false);
+                    setVizPickerOpen((v) => !v);
+                  }}
+                  data-testid={testIds.dashboards.tile.vizSelect(query.id)}
+                >
+                  Visualization:{" "}
+                  {(computeTileType(currentQuery) || "counter") === "counter_warning"
+                    ? "Counter (warning)"
+                    : (computeTileType(currentQuery) || "counter") === "counter"
+                      ? "Counter"
+                      : (computeTileType(currentQuery) || "counter") === "table"
+                        ? "Table"
+                        : (computeTileType(currentQuery) || "counter") === "graph"
+                          ? "Graph"
+                          : (computeTileType(currentQuery) || "counter") === "text"
+                            ? "Text"
+                            : (computeTileType(currentQuery) || "counter") === "date"
+                              ? "Date"
+                              : "Status"}
+                </button>
+                {vizPickerOpen && (
+                  <div className="mt-1 border-t border-gray-100 pt-1">
+                    {(
+                      ["counter", "table", "graph", "text", "date", "color", "counter_warning"] as const
+                    ).map((t) => (
+                      <button
+                        key={t}
+                        className="block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setVizPickerOpen(false);
+                          setSizePickerOpen(false);
+                          setMenuOpen(false);
+                          updateQuery(dashboardId, query.id, { tileType: t });
+                          runQuery(undefined, t);
+                        }}
+                        data-testid={testIds.dashboards.tile.vizOption(query.id, t)}
+                      >
+                        {t === "counter_warning"
+                          ? "Counter (warning)"
+                          : t.charAt(0).toUpperCase() + t.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* Chart style picker (only for graph tiles). */}
+                {(computeTileType(currentQuery) || "counter") === "graph" && (
+                  <>
+                    <button
+                      className="block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSizePickerOpen(false);
+                        setVizPickerOpen(false);
+                        setChartPickerOpen((v) => !v);
+                      }}
+                      data-testid={testIds.dashboards.tile.chartSelect(query.id)}
+                    >
+                      Chart: {(currentQuery.graphChartType || (result as any)?.chartType || "bar")}
+                    </button>
+                    {chartPickerOpen && (
+                      <div className="mt-1 border-t border-gray-100 pt-1">
+                        {(["bar", "line", "pie"] as const).map((ct) => (
+                          <button
+                            key={ct}
+                            className="block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setChartPickerOpen(false);
+                              setMenuOpen(false);
+                              updateQuery(dashboardId, query.id, { graphChartType: ct });
+                              setResult((prev: any) => (prev && prev.type === "graph" ? { ...prev, chartType: ct } : prev));
+                            }}
+                            data-testid={testIds.dashboards.tile.chartOption(query.id, ct)}
+                          >
+                            {ct.charAt(0).toUpperCase() + ct.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    setVizPickerOpen(false);
+                    setChartPickerOpen(false);
+                    runQuery();
+                  }}
+                  data-testid={testIds.dashboards.tile.refresh(query.id)}
+                >
+                  Refresh
+                </button>
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    setVizPickerOpen(false);
+                    setChartPickerOpen(false);
+                    setPendingQuestion(currentQuery.question);
+                    setEditQuestionDialogOpen(true);
+                  }}
+                  data-testid={testIds.dashboards.tile.editQuestion(query.id)}
+                >
+                  Edit question…
+                </button>
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setVizPickerOpen(false);
+                    setChartPickerOpen(false);
+                    setSizePickerOpen(true);
+                  }}
+                  data-testid={testIds.dashboards.tile.sizeSelect(query.id)}
+                >
+                  Size: {tileSize === "full-width" ? "Full width" : tileSize}
+                </button>
+                {sizePickerOpen && (
+                  <div className="mt-1 border-t border-gray-100 pt-1">
+                    {(["small", "medium", "large", "full-width"] as const).map((s) => (
+                      <button
+                        key={s}
+                        className={`block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 ${s === tileSize ? "font-semibold" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSizePickerOpen(false);
+                          setMenuOpen(false);
+                          onSizeChange(query.id, s);
+                        }}
+                      >
+                        {s === "full-width" ? "Full width" : s.charAt(0).toUpperCase() + s.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    setShowExplain((prev) => {
+                      const next = !prev;
+                      if (next) setShowSources(false);
+                      return next;
+                    });
+                  }}
+                  data-testid={testIds.dashboards.tile.explain(query.id)}
+                >
+                  Explain
+                </button>
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 disabled:opacity-50"
+                  disabled={!sources.length}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    setShowSources((prev) => {
+                      const next = !prev;
+                      if (next) setShowExplain(false);
+                      return next;
+                    });
+                  }}
+                  data-testid={testIds.dashboards.tile.sources(query.id)}
+                >
+                  View sources
+                </button>
+                <div className="my-1 border-t border-gray-100" />
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs text-red-700 hover:bg-red-50"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    try {
+                      await removeQuery(dashboardId, query.id);
+                    } catch (err) {
+                      console.error("Failed to remove query:", err);
+                    }
+                  }}
+                  data-testid={testIds.dashboards.tile.remove(query.id)}
+                >
+                  Delete tile
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* Tile Content */}
-      <div className="p-3 flex-1 overflow-auto">
-        {error ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="text-red-500 text-sm mb-2">⚠ Error</div>
-            <div className="text-xs text-gray-600">{error}</div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                runQuery();
-              }}
-              className="mt-3 rounded bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600"
-            >
-              Retry
-            </button>
-          </div>
-        ) : result ? (
-          <DashboardResults result={result} />
-        ) : (
-          <div className="text-sm text-gray-500">
-            {isRunning ? "Loading..." : "No data"}
+      <div
+        className={`relative p-2 flex-1 ${tileSize === "small" || tileSize === "medium" ? "overflow-hidden" : "overflow-auto"}`}
+      >
+        {/* For small/medium tiles, show Explain/Sources as an overlay so it doesn't push results out of view. */}
+        {(tileSize === "small" || tileSize === "medium") && (showExplain || showSources) && (
+          <div className="absolute inset-0 z-10 bg-white/95 p-2">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-gray-800">
+                {showExplain ? "Explain" : "Sources"}
+              </div>
+              <button
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowExplain(false);
+                  setShowSources(false);
+                }}
+                data-testid={testIds.dashboards.tile.infoClose(query.id)}
+                title="Back to result"
+              >
+                Back to result
+              </button>
+            </div>
+
+            {showExplain && (
+              <div
+                className="h-[calc(100%-2.25rem)] overflow-auto rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700"
+                data-testid={testIds.dashboards.tile.explainPanel(query.id)}
+              >
+                <div className="mt-1 text-gray-600">
+                  Question: <span className="font-mono">{query.question}</span>
+                </div>
+                <div className="mt-1 text-gray-600">
+                  Type: <span className="font-mono">{(result as any)?.type || query.tileType || "unknown"}</span>
+                </div>
+                {typeof (result as any)?.explanation === "string" && (result as any).explanation.trim() ? (
+                  <div className="mt-2 whitespace-pre-wrap">{(result as any).explanation}</div>
+                ) : (
+                  <div className="mt-2 text-gray-500">
+                    Explanation text coming next (we’ll generate a deterministic explanation + citations).
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showSources && (
+              <div
+                className="h-[calc(100%-2.25rem)] overflow-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-700"
+                data-testid={testIds.dashboards.tile.sourcesPanel(query.id)}
+              >
+                {sources.length ? (
+                  <ul className="mt-1 list-disc pl-4">
+                    {sources.map((s: any, idx: number) => (
+                      <li key={`${s.workbookId || "wb"}:${s.filePath || idx}`}>
+                        <span className="font-mono">{s.workbookId}</span>:{" "}
+                        <span className="font-mono">{s.filePath}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="mt-1 text-gray-500">(no sources captured)</div>
+                )}
+              </div>
+            )}
           </div>
         )}
+
+        {/* For large/full tiles, render panels inline above the result. */}
+        {tileSize !== "small" && tileSize !== "medium" && showExplain && (
+          <div
+            className="mb-2 rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700"
+            data-testid={testIds.dashboards.tile.explainPanel(query.id)}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="font-semibold">Explain</div>
+              <button
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowExplain(false);
+                  setShowSources(false);
+                }}
+                data-testid={testIds.dashboards.tile.infoClose(query.id)}
+                title="Back to result"
+              >
+                Back to result
+              </button>
+            </div>
+            <div className="mt-1 text-gray-600">
+              Question: <span className="font-mono">{query.question}</span>
+            </div>
+            <div className="mt-1 text-gray-600">
+              Type: <span className="font-mono">{(result as any)?.type || query.tileType || "unknown"}</span>
+            </div>
+            {typeof (result as any)?.explanation === "string" && (result as any).explanation.trim() ? (
+              <div className="mt-2 whitespace-pre-wrap">{(result as any).explanation}</div>
+            ) : (
+              <div className="mt-2 text-gray-500">Explanation text coming next (we’ll generate a deterministic explanation + citations).</div>
+            )}
+          </div>
+        )}
+
+        {tileSize !== "small" && tileSize !== "medium" && showSources && (
+          <div
+            className="mb-2 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700"
+            data-testid={testIds.dashboards.tile.sourcesPanel(query.id)}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="font-semibold">Sources</div>
+              <button
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowExplain(false);
+                  setShowSources(false);
+                }}
+                data-testid={testIds.dashboards.tile.infoClose(query.id)}
+                title="Back to result"
+              >
+                Back to result
+              </button>
+            </div>
+            {sources.length ? (
+              <ul className="mt-1 list-disc pl-4">
+                {sources.map((s: any, idx: number) => (
+                  <li key={`${s.workbookId || "wb"}:${s.filePath || idx}`}>
+                    <span className="font-mono">{s.workbookId}</span>:{" "}
+                    <span className="font-mono">{s.filePath}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-1 text-gray-500">(no sources captured)</div>
+            )}
+          </div>
+        )}
+        <div
+          className="h-full"
+          data-testid={testIds.dashboards.tile.result(query.id)}
+          data-result-type={result?.type || (error ? "error" : "")}
+        >
+          {error ? (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="text-red-500 text-sm mb-2">⚠ Error</div>
+              <div className="text-xs text-gray-600">{error}</div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runQuery();
+                }}
+                className="mt-3 rounded bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600"
+              >
+                Retry
+              </button>
+            </div>
+          ) : result ? (
+            <DashboardResults result={result} tileSize={tileSize} />
+          ) : (
+            <div className="text-sm text-gray-500">
+              {isRunning ? "Loading..." : "No data"}
+            </div>
+          )}
+        </div>
       </div>
+
+      <InputDialog
+        isOpen={editQuestionDialogOpen}
+        title="Edit Question"
+        defaultValue={pendingQuestion}
+        onCancel={() => setEditQuestionDialogOpen(false)}
+        onConfirm={async (value) => {
+          const newQ = (value || "").trim();
+          setEditQuestionDialogOpen(false);
+          if (!newQ || newQ === currentQuery.question) return;
+          await updateQuery(dashboardId, currentQuery.id, { question: newQ });
+          // Re-run deterministically against the new question immediately.
+          await runQuery(newQ);
+        }}
+      />
     </div>
   );
 }
