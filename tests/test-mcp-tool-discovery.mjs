@@ -81,10 +81,11 @@ function sendRequest(proc, method, params = {}, requestId = 1000) {
 
     proc.stdout.on('data', onData);
 
+    const timeoutMs = process.env.CI ? 20000 : 5000;
     timeoutId = setTimeout(() => {
       cleanup();
       reject(new Error(`Request timeout for ${method}`));
-    }, 5000);
+    }, timeoutMs);
 
     // Send MCP-compliant request
     const request = {
@@ -134,7 +135,7 @@ async function testServer(serverConfig) {
   });
 
   // Wait for initialization
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, process.env.CI ? 1500 : 500));
 
   let tools = [];
   
@@ -145,7 +146,18 @@ async function testServer(serverConfig) {
   } else {
     // For servers that use tools/list (like jupyter-server and workbook-rag)
     try {
-      const response = await sendRequest(proc, 'tools/list', {}, 1001);
+      let response;
+      try {
+        response = await sendRequest(proc, 'tools/list', {}, 1001);
+      } catch (e) {
+        // In CI, some Python servers can take longer to become responsive. Retry once.
+        if (process.env.CI && String(e?.message || '').includes('timeout')) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          response = await sendRequest(proc, 'tools/list', {}, 1001);
+        } else {
+          throw e;
+        }
+      }
       if (response?.tools && Array.isArray(response.tools)) {
         tools = response.tools;
         console.log(`  ✓ Found ${tools.length} tools via tools/list`);
