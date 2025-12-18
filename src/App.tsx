@@ -17,6 +17,7 @@ import { ExtensionToggle } from "./components/Extensions/ExtensionToggle";
 import { ToastCenter } from "./components/Notifications/ToastCenter";
 import { initAutomationUI } from "./testing/automationUi";
 import { testIds } from "./testing/testIds";
+import { notifyError, notifySuccess } from "./utils/notify";
 
 function App() {
   const [dashboardActionButton, setDashboardActionButton] = useState<React.ReactNode>(null);
@@ -24,6 +25,7 @@ function App() {
   const [workbookActionButton, setWorkbookActionButton] = useState<React.ReactNode>(null);
   const [chatActionButton, setChatActionButton] = useState<React.ReactNode>(null);
   const [activeContextName, setActiveContextName] = useState<string | null>(null);
+  const [contextScopeMode, setContextScopeMode] = useState<"all" | "context">("context");
   const { openDocuments, closeDocument } = useDocumentStore();
   const {
     sidebarWidth,
@@ -78,6 +80,47 @@ function App() {
       window.removeEventListener("context:changed", onChanged as any);
     };
   }, []);
+
+  // Context scoping mode (All vs Scoped) – keep in App so headers can always reflect state.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const modeRes = await window.electronAPI?.contextScope?.getMode?.();
+        const mode = modeRes?.mode;
+        if (!cancelled && (mode === "all" || mode === "context")) setContextScopeMode(mode);
+      } catch {
+        // ignore (leave default)
+      }
+    };
+    load();
+
+    const onScoping = (e: Event) => {
+      const ce = e as CustomEvent<any>;
+      const mode = ce?.detail?.mode;
+      if (mode === "all" || mode === "context") setContextScopeMode(mode);
+    };
+    window.addEventListener("context:scoping", onScoping as any);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("context:scoping", onScoping as any);
+    };
+  }, []);
+
+  const toggleContextScoping = useCallback(async () => {
+    const next = contextScopeMode === "context" ? "all" : "context";
+    try {
+      await window.electronAPI?.contextScope?.setMode?.(next);
+      setContextScopeMode(next);
+      window.dispatchEvent(new CustomEvent("context:scoping", { detail: { mode: next } }));
+      notifySuccess(
+        next === "all" ? "Context scoping disabled (All workbooks)" : "Context scoping enabled",
+        "Contexts",
+      );
+    } catch {
+      notifyError("Failed to change scoping mode", "Contexts");
+    }
+  }, [contextScopeMode]);
 
   const jumpToContexts = useCallback(() => {
     // Ensure we're in the Insight (file) workbench where Contexts exist.
@@ -172,12 +215,33 @@ function App() {
                 title="Contexts"
                 isCollapsed={isContextsCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("contexts")}
+                headerAccessory={
+                  <button
+                    type="button"
+                    onClick={toggleContextScoping}
+                    className={`flex items-center rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                      contextScopeMode === "all"
+                        ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                    title={
+                      contextScopeMode === "all"
+                        ? "Scoping: All workbooks (click to enable context scoping)"
+                        : "Scoping: Active context only (click to disable)"
+                    }
+                    aria-label="Toggle context scoping"
+                    data-testid={testIds.contexts.scopeToggle}
+                  >
+                    {contextScopeMode === "all" ? "ALL" : "SCOPED"}
+                  </button>
+                }
                 actionButton={contextsActionButton}
                 testId={testIds.sidebar.headers.contexts}
               >
                 <ContextsView
                   onActionButton={setContextsActionButton}
                   onActiveContextChanged={handleActiveContextChanged}
+                  scopeMode={contextScopeMode}
                 />
               </CollapsibleView>
             </div>
@@ -187,6 +251,26 @@ function App() {
                 title="Contexts"
                 isCollapsed={isContextsCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("contexts")}
+                headerAccessory={
+                  <button
+                    type="button"
+                    onClick={toggleContextScoping}
+                    className={`flex items-center rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                      contextScopeMode === "all"
+                        ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                    title={
+                      contextScopeMode === "all"
+                        ? "Scoping: All workbooks (click to enable context scoping)"
+                        : "Scoping: Active context only (click to disable)"
+                    }
+                    aria-label="Toggle context scoping"
+                    data-testid={testIds.contexts.scopeToggle}
+                  >
+                    {contextScopeMode === "all" ? "ALL" : "SCOPED"}
+                  </button>
+                }
                 actionButton={contextsActionButton}
                 testId={testIds.sidebar.headers.contexts}
               >
@@ -297,20 +381,46 @@ function App() {
         <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
           <div className="min-w-0">
             <h1 className="text-sm font-semibold text-gray-700">insightLM-LT</h1>
-            {activeContextName && (
-              <button
-                type="button"
-                className="mt-0.5 w-full truncate text-left text-[10px] text-gray-500 hover:text-gray-700"
-                onClick={jumpToContexts}
-                title="Jump to Contexts"
-                data-testid={testIds.sidebar.activeContextJump}
-              >
-                Active context:{" "}
-                <span className="font-medium text-gray-700">{activeContextName}</span>
-              </button>
-            )}
+            <button
+              type="button"
+              className="mt-0.5 w-full truncate text-left text-[10px] text-gray-500 hover:text-gray-700"
+              onClick={jumpToContexts}
+              title="Jump to Contexts"
+              data-testid={testIds.sidebar.activeContextJump}
+            >
+              <span data-testid={testIds.sidebar.scopeText}>
+                Scope:{" "}
+                <span className="font-medium text-gray-700">
+                  {contextScopeMode === "all"
+                    ? "All workbooks"
+                    : activeContextName
+                      ? activeContextName
+                      : "Active context"}
+                </span>
+              </span>
+            </button>
           </div>
-          <ExtensionToggle />
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className={`flex items-center rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                contextScopeMode === "all"
+                  ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+              onClick={toggleContextScoping}
+              title={
+                contextScopeMode === "all"
+                  ? "Scoping: All workbooks (click to enable context scoping)"
+                  : "Scoping: Active context only (click to disable)"
+              }
+              aria-label="Toggle context scoping"
+              data-testid={testIds.sidebar.scopeIndicator}
+            >
+              {contextScopeMode === "all" ? "ALL" : "SCOPED"}
+            </button>
+            <ExtensionToggle />
+          </div>
         </div>
         <div className="flex flex-1 flex-col overflow-hidden">
           {renderWorkbenchContent()}

@@ -129,6 +129,21 @@ async function waitForGone(evaluate, selector, timeoutMs = 20000) {
   return false;
 }
 
+async function waitForTextContains(evaluate, selector, needle, timeoutMs = 20000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const text = await evaluate(`
+      (() => {
+        const el = document.querySelector(${jsString(selector)});
+        return el ? String(el.innerText || el.textContent || "") : null;
+      })()
+    `);
+    if (typeof text === "string" && text.includes(String(needle))) return true;
+    await sleep(150);
+  }
+  return false;
+}
+
 async function clickSelector(evaluate, selector) {
   const ok = await evaluate(`
     (() => {
@@ -219,13 +234,73 @@ async function run() {
       }
     }
 
-    // Expand Contexts and toggle scoping All ↔ Scoped.
-    await ensureExpanded(evaluate, "sidebar-contexts-header");
+    // Context scoping: indicator must be visible in BOTH the main header and the Contexts section header,
+    // even when Contexts is collapsed.
+    await waitForSelector(evaluate, 'button[data-testid="sidebar-scope-indicator"]', 20000);
+    await waitForSelector(evaluate, '[data-testid="sidebar-scope-text"]', 20000);
     await waitForSelector(evaluate, 'button[data-testid="contexts-scope-toggle"]', 20000);
+
+    // Collapse Contexts to prove the header accessory stays visible.
+    const isContextsExpanded = await evaluate(
+      `document.querySelector('button[data-testid="sidebar-contexts-header"]')?.getAttribute("aria-expanded") === "true"`,
+    );
+    if (isContextsExpanded) await clickSelector(evaluate, 'button[data-testid="sidebar-contexts-header"]');
+
+    // Capture initial indicator label, toggle once via Contexts header accessory,
+    // and assert the main header text reflects the selected mode.
+    const before = await evaluate(`
+      (() => {
+        const b = document.querySelector('button[data-testid="contexts-scope-toggle"]');
+        return b ? (b.innerText || "").trim() : null;
+      })()
+    `);
+    if (!before) fail("Missing contexts scope toggle label text");
+
     await clickSelector(evaluate, 'button[data-testid="contexts-scope-toggle"]');
-    await sleep(250);
-    await clickSelector(evaluate, 'button[data-testid="contexts-scope-toggle"]');
-    console.log("✅ Toggled context scoping All ↔ Scoped");
+
+    const flipped = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 20000) {
+        const now = await evaluate(`
+          (() => {
+            const b = document.querySelector('button[data-testid="contexts-scope-toggle"]');
+            return b ? (b.innerText || "").trim() : null;
+          })()
+        `);
+        if (now && now !== before) return now;
+        await sleep(150);
+      }
+      return null;
+    })();
+    if (!flipped) fail("Context scoping toggle did not flip label in time");
+
+    // Main header scope text should clearly state "All workbooks" when in ALL mode.
+    if (String(flipped).toUpperCase().includes("ALL")) {
+      const ok = await waitForTextContains(evaluate, '[data-testid="sidebar-scope-text"]', "All workbooks", 20000);
+      if (!ok) fail('Main header did not show "All workbooks" after switching to ALL');
+    }
+
+    // Toggle back via the MAIN header indicator and assert the Contexts header accessory matches.
+    await clickSelector(evaluate, 'button[data-testid="sidebar-scope-indicator"]');
+    const backOk = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 20000) {
+        const now = await evaluate(`
+          (() => {
+            const a = document.querySelector('button[data-testid="contexts-scope-toggle"]');
+            const b = document.querySelector('button[data-testid="sidebar-scope-indicator"]');
+            const la = a ? (a.innerText || "").trim() : null;
+            const lb = b ? (b.innerText || "").trim() : null;
+            return la && lb ? la === lb : false;
+          })()
+        `);
+        if (now) return true;
+        await sleep(150);
+      }
+      return false;
+    })();
+    if (!backOk) fail("Main header scope indicator did not stay in sync with Contexts header toggle");
+    console.log("✅ Verified scoping indicator is always visible + toggles stay in sync (main + contexts header)");
 
     // Expand Workbooks and create a workbook.
     await ensureExpanded(evaluate, "sidebar-workbooks-header");

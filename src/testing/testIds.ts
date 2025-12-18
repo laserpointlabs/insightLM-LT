@@ -14,6 +14,8 @@ export const testIds = {
       chat: "sidebar-chat-header",
     },
     activeContextJump: "sidebar-active-context-jump",
+    scopeIndicator: "sidebar-scope-indicator",
+    scopeText: "sidebar-scope-text",
   },
   contexts: {
     create: "contexts-create",

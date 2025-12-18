@@ -18,6 +18,14 @@ When the app is not in the “Insight Workbench / File” workbench, the stacked
 - **Workbooks header**: `button[data-testid="sidebar-workbooks-header"]`
 - **Chat header**: `button[data-testid="sidebar-chat-header"]`
 
+### Sidebar scope / scoping indicators (always visible)
+
+These show the current Context scoping mode in a way that is visible even when the Contexts panel is collapsed.
+
+- **Main header scoping button (ALL/SCOPED)**: `button[data-testid="sidebar-scope-indicator"]`
+- **Main header scope text ("Scope: All workbooks" / "Scope: <context>")**: `[data-testid="sidebar-scope-text"]`
+- **Contexts header scoping button (ALL/SCOPED)**: `button[data-testid="contexts-scope-toggle"]`
+
 ### Contexts panel selectors
 
 - **Create context button**: `button[data-testid="contexts-create"]`
@@ -106,3 +114,9 @@ The smoke covers:
 - Toggle scoping **All ↔ Scoped**
 - Create workbook → create markdown → rename → create folder → move doc into folder
 - Send chat message
+
+### How smoke testing works (and how to extend it safely)
+
+For a deeper guide on how we build deterministic, automation-centric smoke coverage (including `npm run test:automation:prod` and anti-flake patterns), see:
+
+- `docs/Automation/AUTOMATION_SMOKE_TESTING.md`

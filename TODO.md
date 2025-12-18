@@ -38,7 +38,7 @@ This file is the single source of truth for roadmap planning.
 - [x] Make active context indicator clickable (quick jump to Contexts)
 
 ### Chat (core)
-- [ ] Rename chat to iDA (INtegrated Digital Assistant) (or DAS Digital Assistant System... lets think)
+- [ ] Rename chat to iDA (Integrated Digital Assistant) (or DAS Digital Assistant System... lets think)
 - [ ] Add small UX hint when no workbooks are scoped (link to Contexts to fix)
 - [ ] Add deterministic chat history scaffolding (even if minimal in 1.0)
 - [ ] Tabbed and stored chats where chat context is first class (we can discuss need and complexity)

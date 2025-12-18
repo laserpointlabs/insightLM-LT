@@ -342,6 +342,17 @@ This runs all three phases in sequence and provides a comprehensive summary.
 - Integration tests: `npm run test:integration`
 - RAG tests: `npm run test:rag`
 
+### UI Automation Smoke Tests (CDP, selector-only)
+
+We maintain a **UI-level smoke** that drives the Electron renderer via **Chrome DevTools Protocol (CDP)** using stable `data-testid` selectors.
+
+- **Fast dev smoke (requires running app w/ CDP)**: `npm run test:automation:smoke`
+- **Recommended (build + launch prod renderer + run smoke)**: `npm run test:automation:prod`
+
+Docs:
+- Stable selectors: `docs/Automation/ELECTRON_MCP_UI_AUTOMATION.md`
+- How/why we build automation-centric smoke coverage: `docs/Automation/AUTOMATION_SMOKE_TESTING.md`
+
 ## Performance Testing
 
 ### Test Large Files
