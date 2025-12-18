@@ -90,10 +90,12 @@ export class WorkbookService {
     }
 
     const toPosix = (p: string) => p.replace(/\\/g, "/");
+    const toDocPathPosix = (absOrRel: string) => toPosix(absOrRel).replace(/^\.\//, "");
 
     // Drop any document entries whose backing file is missing to prevent stale ("legacy") data
     // from showing up in the UI or downstream systems.
     const existingDocs: any[] = [];
+    const existingDocPaths = new Set<string>();
 
     for (const doc of metadata.documents) {
       if (!doc || typeof doc !== "object") continue;
@@ -112,7 +114,7 @@ export class WorkbookService {
       if (typeof doc.path === "string") {
         const original = doc.path;
         // Canonicalize slashes and remove leading "./"
-        doc.path = toPosix(doc.path).replace(/^\.\//, "");
+        doc.path = toDocPathPosix(doc.path);
         if (doc.path !== original) changed = true;
 
         // Ensure path is under documents/
@@ -167,6 +169,7 @@ export class WorkbookService {
             }
             // Keep this document entry (file exists)
             existingDocs.push(doc);
+            existingDocPaths.add(posixPath);
           } else {
             changed = true;
           }
@@ -179,6 +182,74 @@ export class WorkbookService {
     if (existingDocs.length !== metadata.documents.length) {
       metadata.documents = existingDocs;
       changed = true;
+    }
+
+    // Reconcile: add any files that exist on disk under `documents/` but are missing from workbook.json.
+    // This ensures notebook-generated artifacts (e.g., results/*.json) appear in the UI even if they were
+    // created out-of-band by the Jupyter kernel.
+    try {
+      const docsDir = path.join(workbookPath, "documents");
+      if (fs.existsSync(docsDir)) {
+        const discovered: string[] = [];
+        const walk = (absDir: string, relFromDocs: string) => {
+          const entries = fs.readdirSync(absDir, { withFileTypes: true });
+          for (const ent of entries) {
+            const abs = path.join(absDir, ent.name);
+            const rel = relFromDocs ? `${relFromDocs}/${ent.name}` : ent.name;
+            if (ent.isDirectory()) {
+              walk(abs, rel);
+            } else if (ent.isFile()) {
+              // Store as documents/<rel> in posix form
+              discovered.push(toDocPathPosix(`documents/${rel}`));
+            }
+          }
+        };
+        walk(docsDir, "");
+
+        const nowIso = new Date().toISOString();
+        for (const p of discovered) {
+          if (!p.startsWith("documents/")) continue;
+          if (existingDocPaths.has(p)) continue;
+
+          const filename = path.posix.basename(p);
+          // Best-effort timestamps from filesystem
+          let addedAt = nowIso;
+          let modifiedAt: string | undefined = undefined;
+          let size: number | undefined = undefined;
+          try {
+            const abs = path.join(workbookPath, ...p.split("/"));
+            if (fs.existsSync(abs)) {
+              const st = fs.statSync(abs);
+              if (st.isFile()) {
+                // Use mtime for modifiedAt; for addedAt we keep "now" to avoid platform-specific birthtime quirks.
+                modifiedAt = st.mtime.toISOString();
+                size = st.size;
+              }
+            }
+          } catch {
+            // ignore
+          }
+
+          const ext = filename ? path.extname(filename).toLowerCase().replace(/^\./, "") : "";
+          const parts = p.split("/").filter(Boolean);
+          const folderName = parts.length >= 3 && parts[0] === "documents" ? parts[1] : undefined;
+
+          metadata.documents.push({
+            docId: uuidv4(),
+            filename,
+            path: p,
+            addedAt,
+            folder: folderName,
+            fileType: ext,
+            modifiedAt,
+            size,
+          });
+          existingDocPaths.add(p);
+          changed = true;
+        }
+      }
+    } catch {
+      // fail-soft: never block workbook load
     }
 
     if (changed) {

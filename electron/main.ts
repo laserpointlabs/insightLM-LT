@@ -10,6 +10,7 @@ import { ConfigService } from "./services/configService";
 import { MCPService, MCPServerConfig } from "./services/mcpService";
 import { LLMService, LLMMessage } from "./services/llmService";
 import { setupUpdater } from "./updater";
+import { seedDemoWorkbooksIfNeeded } from "./services/demoSeedService";
 
 let mainWindow: BrowserWindow | null = null;
 let mcpService!: MCPService;
@@ -142,6 +143,14 @@ app.whenReady().then(async () => {
   const configService = new ConfigService();
   const appConfig = configService.loadAppConfig();
   const llmConfig = configService.loadLLMConfig();
+
+  // Seed demo workbooks on first run (safe: only when workbooks dir is empty and no seed marker exists).
+  // This powers the out-of-box video/demo experience (includes UAV trade study workbook).
+  try {
+    seedDemoWorkbooksIfNeeded(appConfig.dataDir);
+  } catch (e) {
+    console.warn("[Seed] Demo workbook seed failed (continuing):", e instanceof Error ? e.message : e);
+  }
 
   // Initialize Tool Registry for dynamic tool discovery
   const { ToolRegistry } = require("./services/toolRegistry");

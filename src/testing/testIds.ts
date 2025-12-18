@@ -169,4 +169,22 @@ export const testIds = {
       cancel: "move-doc-cancel",
     },
   },
+  documentViewer: {
+    tabs: "document-tabs",
+    tab: (docId: string) => `document-tab-${docId}`,
+    tabClose: (docId: string) => `document-tab-close-${docId}`,
+    content: "document-viewer-content",
+    saveBar: "document-savebar",
+    saveButton: "document-save",
+  },
+  notebook: {
+    viewer: "notebook-viewer",
+    cell: (index: number) => `notebook-cell-${index}`,
+    runCell: (index: number) => `notebook-cell-run-${index}`,
+    output: (index: number) => `notebook-cell-output-${index}`,
+  },
+  spreadsheet: {
+    viewer: "spreadsheet-viewer",
+    container: "spreadsheet-container",
+  },
 } as const;

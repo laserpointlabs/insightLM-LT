@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { testIds } from '../../testing/testIds';
 
 interface SpreadsheetViewerProps {
   content: string;
@@ -1481,7 +1482,7 @@ export function SpreadsheetViewer({
   }
 
   return (
-    <div className="h-full w-full flex flex-col">
+    <div className="h-full w-full flex flex-col" data-testid={testIds.spreadsheet.viewer}>
       <div className="border-b p-4 bg-gray-50">
         <h2 className="text-xl font-semibold">{spreadsheet.metadata.name}</h2>
         <p className="text-sm text-gray-600">
@@ -1494,6 +1495,7 @@ export function SpreadsheetViewer({
           ref={containerRef}
           className="w-full h-full absolute"
           style={{ width: '100%', height: '100%', left: 0, top: 0 }}
+          data-testid={testIds.spreadsheet.container}
         />
       </div>
     </div>

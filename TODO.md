@@ -133,12 +133,34 @@ This file is the single source of truth for roadmap planning.
 ---
 
 ## Backlog (nice-to-haves / not scheduled)
-- [ ] Right-click in document: “Ask chat to add text/diagram here” (inline authoring helpers)
+- [ ] Right-click in document: “Ask chat to add text/diagram here...” (inline authoring helpers)
 
 ### Chat becomes iDA (Integrated Digital Assisant)
-- [ ] Update Chat area
-- [ ] Add @(Focused Context), /(Commands), Rules
+- [ ] Update chat area with 'iDA' rather than 'Chat'
+- [ ] Add @(Focused Context), /(Commands), Rules, save this is a hidden workbook that can be shown by the user. Allow users to import a central or general workbook of this thype
 - [ ] Add Teams, Agents, Ask, and Plan capabilities
 
 ### Import workbook/dashboard stack
-- [ ] allow a user to import a prebuild workbook and dashboard stack
+- [ ] Allow a user to import a prebuild workbook and dashboard stack
+- [ ] Allow general workbook imports (genernal or specific knowldege for instance an approved or specialized Systems Engineeirng KNowledge Base workbook with example SEP/SEMP, Trade Study, etc.) Allow general workblooks to hide/show imports.  
+
+### iDA (Chat) functionality
+- [ ] Allow a chat thread to be assoicated or linked to workbooks, folders, files, and dashbards, models, data, etc. Any and all objects mentioned and/or created should be linked to capture a knowldedge graph. 
+  - A typical usecase might involve building an ontology model and saving it for use. As the model is created in a particular chat thread the models developement is also captured semantically which is 'real' tracability where rahter than just a link we have a fully develope process documented in the text for the model. 
+
+### Ontology integrations (We need to think more about this and properly lay it out)
+- [ ] Provide ontology capability to the tool, initally allow the user to create .owl files
+- [ ] Provide an ontological understanding and development import workbook with templats for SE, etc.
+- [ ] Understand how we properly emply ontologies in the insightLM ecosystem. Consider the conceptualizer use case. Requirements → Ontology (Compentace Questions, Micro Theory) → Concept Graph → Individuals → Knowledge Graph → Study)
+
+### Notebooks
+- [ ]  Add dot nor @ notation to notebooks to capture datasets, documents, etc. as usable data for the study in the notebook. 
+  - Usecase: typing '.workbook_name/decision_martix.is' or '@.workbook_name/decision_martix.is imports the data into the notebook for use. 
+
+
+  ### UI / Loading enhancments
+- [ ] Add loadng rotator and inform user while waiting of what is happening.
+- [ ] Add pdf, word, and excel import/export 
+
+  ### Git integrations
+  - [ ] Add methods to perform versioning using git

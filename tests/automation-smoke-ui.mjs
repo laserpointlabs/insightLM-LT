@@ -304,6 +304,92 @@ async function run() {
 
     // Expand Workbooks and create a workbook.
     await ensureExpanded(evaluate, "sidebar-workbooks-header");
+
+    // If demo seeding is enabled (fresh install), verify the seeded UAV Trade Study workbook exists.
+    // This is optional so existing dev machines with pre-existing workbooks don't fail the smoke.
+    const seededWorkbookId = "uav-trade-study";
+    const seededWorkbookItem = `div[data-testid="workbooks-item-${seededWorkbookId}"]`;
+    const hasSeeded = await evaluate(`!!document.querySelector(${jsString(seededWorkbookItem)})`);
+    if (hasSeeded) {
+      console.log("✅ Found seeded demo workbook: UAV Trade Study");
+      // Expand the seeded workbook
+      const toggle = `span[data-testid="workbooks-toggle-${seededWorkbookId}"]`;
+      await waitForSelector(evaluate, toggle, 20000);
+      await clickSelector(evaluate, toggle);
+      await sleep(250);
+
+      // Verify trade folder and key docs exist (stable selectors)
+      const folderTid = `div[data-testid="workbooks-folder-${seededWorkbookId}-trade"]`;
+      const decisionSheetPath = encodeURIComponent("documents/trade/decision_matrix.is");
+      const notebookPath = encodeURIComponent("documents/trade/trade_study.ipynb");
+      const recPath = encodeURIComponent("documents/trade/recommendation.md");
+
+      const folderOk = await waitForSelector(evaluate, folderTid, 20000);
+      if (!folderOk) fail("Seeded UAV trade folder did not appear in Workbooks tree");
+
+      // Expand the trade folder so the docs are visible/clickable.
+      await clickSelector(evaluate, folderTid);
+      await sleep(250);
+
+      const sheetTid = `div[data-testid="workbooks-doc-${seededWorkbookId}-${decisionSheetPath}"]`;
+      const nbTid = `div[data-testid="workbooks-doc-${seededWorkbookId}-${notebookPath}"]`;
+      const recTid = `div[data-testid="workbooks-doc-${seededWorkbookId}-${recPath}"]`;
+
+      const sheetOk = await waitForSelector(evaluate, sheetTid, 20000);
+      const nbOk = await waitForSelector(evaluate, nbTid, 20000);
+      const recOk = await waitForSelector(evaluate, recTid, 20000);
+      if (!sheetOk || !nbOk || !recOk) fail("Seeded UAV trade study docs did not appear under trade folder");
+      console.log("✅ Verified seeded UAV trade study artifacts exist");
+
+      // Open the seeded spreadsheet and ensure the spreadsheet viewer mounts.
+      await clickSelector(evaluate, sheetTid);
+      await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="is"]', 20000);
+      await waitForSelector(evaluate, 'div[data-testid="spreadsheet-viewer"]', 20000);
+      console.log("✅ Opened decision_matrix.is (spreadsheet viewer mounted)");
+
+      // Open the seeded notebook, run the first code cell, and save.
+      await clickSelector(evaluate, nbTid);
+      await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="ipynb"]', 20000);
+      await waitForSelector(evaluate, 'div[data-testid="notebook-viewer"]', 20000);
+      // Seeded notebook has: cell 0 markdown, cell 1 code.
+      await waitForSelector(evaluate, 'button[data-testid="notebook-cell-run-1"]', 20000);
+      await clickSelector(evaluate, 'button[data-testid="notebook-cell-run-1"]');
+      // Wait for output to appear (stream output)
+      const outputOk = await (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 20000) {
+          const txt = await evaluate(`
+            (() => {
+              const el = document.querySelector('div[data-testid="notebook-cell-output-1"]');
+              return el ? (el.innerText || "") : "";
+            })()
+          `);
+          if (txt && (String(txt).includes("Top recommendation:") || String(txt).includes("Ready:"))) return true;
+          await sleep(150);
+        }
+        return false;
+      })();
+      if (!outputOk) fail("Notebook cell did not produce expected output");
+      // Save notebook (ensures outputs persist in file)
+      await waitForSelector(evaluate, 'button[data-testid="document-save"]', 20000);
+      await clickSelector(evaluate, 'button[data-testid="document-save"]');
+      console.log("✅ Ran notebook cell + saved notebook");
+
+      // Re-open notebook to confirm output persisted (reloads content from disk)
+      await clickSelector(evaluate, `div[data-testid="workbooks-doc-${seededWorkbookId}-${notebookPath}"]`);
+      await waitForSelector(evaluate, 'div[data-testid="notebook-cell-output-1"]', 20000);
+      const persisted = await evaluate(`
+        (() => {
+          const el = document.querySelector('div[data-testid="notebook-cell-output-1"]');
+          return el ? (el.innerText || "") : "";
+        })()
+      `);
+      if (!String(persisted || "").includes("Top recommendation:")) fail("Notebook output was not persisted after save/reopen");
+      console.log("✅ Verified notebook output persisted after save");
+    } else {
+      console.log("ℹ️ Seeded UAV Trade Study workbook not present (skipping seeded-demo assertions)");
+    }
+
     await clickSelector(evaluate, 'button[data-testid="workbooks-create"]');
     await waitForSelector(evaluate, 'input[data-testid="input-dialog-input"]', 20000);
     const wbName = `Auto Smoke WB ${Date.now()}`;

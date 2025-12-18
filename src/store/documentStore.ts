@@ -86,13 +86,51 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     );
 
     if (existing) {
-      // Just update the existing document and make it active
+      // Update existing document metadata and make it active.
+      // Important: if the document is already open and the caller did not provide new content,
+      // re-read from disk (unless there are unsaved changes) so notebook-generated outputs
+      // like `trade/results/summary.json` show up immediately without a manual refresh.
       set((state) => ({
         openDocuments: state.openDocuments.map((d) =>
           d.id === existing.id ? { ...d, ...doc } : d,
         ),
         lastOpenedDocId: existing.id,
       }));
+
+      // Only auto-reload when:
+      // - content was not explicitly provided by caller
+      // - no unsaved changes (avoid stomping edits)
+      // - not in edit mode
+      if (
+        doc.content === undefined &&
+        !get().hasUnsavedChanges(existing.id) &&
+        !get().isEditing(existing.id)
+      ) {
+        const docKey = `${doc.workbookId}:${doc.path}`;
+        // Mark as loading (best-effort)
+        set((state) => ({
+          loadingDocuments: new Set(state.loadingDocuments).add(docKey),
+        }));
+
+        try {
+          const content = await window.electronAPI.file.read(doc.workbookId!, doc.path!);
+          const newLoadingSet = new Set(get().loadingDocuments);
+          newLoadingSet.delete(docKey);
+          set((state) => ({
+            openDocuments: state.openDocuments.map((d) =>
+              d.id === existing.id ? { ...d, content } : d,
+            ),
+            loadingDocuments: newLoadingSet,
+          }));
+        } catch (error) {
+          console.warn("Failed to reload open document:", error);
+          const newLoadingSet = new Set(get().loadingDocuments);
+          newLoadingSet.delete(docKey);
+          set(() => ({
+            loadingDocuments: newLoadingSet,
+          }));
+        }
+      }
       return;
     }
 

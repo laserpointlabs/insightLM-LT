@@ -7,6 +7,7 @@ import { DashboardViewer } from "./DashboardViewer";
 import { useDocumentStore } from "../../store/documentStore";
 import { extensionRegistry } from "../../services/extensionRegistry";
 import { notifyError, notifySuccess } from "../../utils/notify";
+import { testIds } from "../../testing/testIds";
 
 // Component to handle async component loading
 function AsyncComponentLoader({ componentPromise, props }: { componentPromise: Promise<any>, props: any }) {
@@ -269,7 +270,10 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
   return (
     <div className="flex h-full flex-col">
       {documents.length > 0 && (
-        <div className="flex overflow-x-auto border-b border-gray-200 bg-gray-50">
+        <div
+          className="flex overflow-x-auto border-b border-gray-200 bg-gray-50"
+          data-testid={testIds.documentViewer.tabs}
+        >
           {documents.map((doc) => (
             <div
               key={doc.id}
@@ -279,6 +283,7 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
                   : "hover:bg-gray-100"
               }`}
               onClick={() => setActiveDocId(doc.id)}
+              data-testid={testIds.documentViewer.tab(doc.id)}
             >
               <span className="text-sm">
                 {doc.filename}
@@ -292,6 +297,7 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
                   onClose(doc.id);
                 }}
                 className="text-gray-400 hover:text-gray-600"
+                data-testid={testIds.documentViewer.tabClose(doc.id)}
               >
                 ×
               </button>
@@ -300,17 +306,29 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
         </div>
       )}
       {activeDoc && activeDoc.type !== "dashboard" && isEditableFileType(getFileExtension(activeDoc.filename)) && hasUnsaved && (
-        <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2">
+        <div
+          className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2"
+          data-testid={testIds.documentViewer.saveBar}
+        >
           <span className="text-xs text-orange-500">Unsaved changes</span>
           <button
             onClick={handleSave}
             className="ml-auto rounded bg-green-500 px-3 py-1 text-sm text-white hover:bg-green-600"
+            data-testid={testIds.documentViewer.saveButton}
           >
             Save (Ctrl+S)
           </button>
         </div>
       )}
-      <div className="flex-1 overflow-auto">{renderDocument()}</div>
+      <div
+        className="flex-1 overflow-auto"
+        data-testid={testIds.documentViewer.content}
+        data-active-doc-id={activeDocId || ""}
+        data-active-filename={activeDoc?.filename || ""}
+        data-active-ext={activeDoc?.filename ? getFileExtension(activeDoc.filename) : ""}
+      >
+        {renderDocument()}
+      </div>
     </div>
   );
 }

@@ -12,6 +12,12 @@
     "mcp-servers/**/*",
     "package.json"
   ],
+  "extraResources": [
+    {
+      "from": "data/trade_study_example",
+      "to": "demo/trade_study_example"
+    }
+  ],
   "win": {
     "target": "nsis",
     "icon": "build/icon.ico"
