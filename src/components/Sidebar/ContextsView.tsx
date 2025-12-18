@@ -163,7 +163,9 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
           {scopeMode === "all" ? "All" : "Scoped"}
         </button>
         <button
-          onClick={() => {
+          onClick={async () => {
+            // Ensure workbook list is up-to-date (workbooks may have been created in this session).
+            await loadWorkbooks();
             const selected = new Set<string>();
             setEditor({
               isOpen: true,

@@ -1,3 +1,4 @@
-provider: "openai"
-apiKey: "${OPENAI_API_KEY}"
-model: "gpt-4o"
+provider: ollama
+REDACTED
+model: granite3.2:8b
+baseUrl: https://lmapi.laserpointlabs.com

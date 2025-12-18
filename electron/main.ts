@@ -6,6 +6,8 @@ import { setupWorkbookIPC } from "./ipc/workbooks";
 import { setupFileIPC } from "./ipc/files";
 import { setupArchiveIPC } from "./ipc/archive";
 import { setupDashboardIPC } from "./ipc/dashboards";
+import { setupChatIPC } from "./ipc/chat";
+import { setupConfigIPC } from "./ipc/config";
 import { ConfigService } from "./services/configService";
 import { MCPService, MCPServerConfig } from "./services/mcpService";
 import { LLMService, LLMMessage } from "./services/llmService";
@@ -297,6 +299,16 @@ app.whenReady().then(async () => {
   setupFileIPC(ragIndexService); // Pass RAG service for auto-indexing
   setupArchiveIPC(configService);
   setupDashboardIPC(configService);
+  setupConfigIPC(configService, llmService);
+  // Chat persistence IPC (single-thread-per-context)
+  try {
+    const { ChatService } = require("./services/chatService");
+    const chatService = new ChatService();
+    chatService.initialize(appConfig.dataDir);
+    setupChatIPC(chatService);
+  } catch (e) {
+    console.warn("Chat IPC setup failed:", e);
+  }
 
   // LLM IPC handlers
   ipcMain.handle("llm:chat", async (_, messages: any[]) => {
@@ -305,6 +317,15 @@ app.whenReady().then(async () => {
     } catch (error) {
       console.error("Error in LLM chat:", error);
       throw error;
+    }
+  });
+
+  ipcMain.handle("llm:listModels", async () => {
+    try {
+      return { models: await llmService.listModels() };
+    } catch (error) {
+      // Fail-soft: return structured error so UI can render deterministic message.
+      return { models: [], error: error instanceof Error ? error.message : "Failed to list models" };
     }
   });
 

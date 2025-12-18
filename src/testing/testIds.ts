@@ -37,6 +37,34 @@ export const testIds = {
     newChat: "chat-new",
     history: "chat-history",
     settings: "chat-settings",
+    message: (messageId: string) =>
+      `chat-message-${encodeURIComponent(String(messageId || ""))}`,
+    emptyState: {
+      container: "chat-empty-state",
+      message: "chat-empty-state-message",
+      jumpToContexts: "chat-empty-state-jump-contexts",
+      loading: "chat-context-loading",
+    },
+    tabs: {
+      panelChat: "chat-panel-chat",
+      panelHistory: "chat-panel-history",
+      panelSettings: "chat-panel-settings",
+    },
+    llmConfig: {
+      provider: "chat-llm-provider",
+      model: "chat-llm-model",
+      modelSelect: "chat-llm-model-select",
+      refreshModels: "chat-llm-refresh-models",
+      apiKey: "chat-llm-apikey",
+      baseUrl: "chat-llm-baseurl",
+      save: "chat-llm-save",
+      status: "chat-llm-status",
+    },
+    mentions: {
+      menu: "chat-mention-menu",
+      item: (kind: string, id: string) =>
+        `chat-mention-item-${kind}-${encodeURIComponent(String(id || ""))}`,
+    },
   },
   toast: {
     center: "toast-center",

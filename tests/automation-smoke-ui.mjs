@@ -142,6 +142,21 @@ async function clickSelector(evaluate, selector) {
   if (!ok) throw new Error(`Could not click selector: ${selector}`);
 }
 
+async function ensureContextScopingMode(evaluate, desired /* "all" | "context" */) {
+  const btn = 'button[data-testid="contexts-scope-toggle"]';
+  const ok = await waitForSelector(evaluate, btn, 20000);
+  if (!ok) throw new Error(`Missing context scoping toggle: ${btn}`);
+  const wantLabel = desired === "all" ? "All" : "Scoped";
+  const start = Date.now();
+  while (Date.now() - start < 8000) {
+    const label = await evaluate(`(document.querySelector(${jsString(btn)})?.innerText || "").trim()`);
+    if (String(label) === wantLabel) return;
+    await clickSelector(evaluate, btn);
+    await sleep(250);
+  }
+  throw new Error(`Could not set context scoping to ${wantLabel}`);
+}
+
 async function setInputValue(evaluate, selector, value) {
   const ok = await evaluate(`
     (() => {
@@ -227,6 +242,10 @@ async function run() {
     await clickSelector(evaluate, 'button[data-testid="contexts-scope-toggle"]');
     console.log("✅ Toggled context scoping All ↔ Scoped");
 
+    // Force deterministic mode for the rest of the smoke: Scoped (context).
+    await ensureContextScopingMode(evaluate, "context");
+    console.log("✅ Ensured context scoping is Scoped");
+
     // Expand Workbooks and create a workbook.
     await ensureExpanded(evaluate, "sidebar-workbooks-header");
     await clickSelector(evaluate, 'button[data-testid="workbooks-create"]');
@@ -274,6 +293,46 @@ async function run() {
       fail("Could not discover created workbook id in UI (workbook may not have been created or list did not refresh)");
     }
     console.log(`✅ Created workbook "${wbName}" (${workbookId})`);
+
+    // Create + activate a context that contains this workbook (so Chat is in-scope deterministically).
+    await ensureExpanded(evaluate, "sidebar-contexts-header");
+    await clickSelector(evaluate, 'button[data-testid="contexts-create"]');
+    await waitForSelector(evaluate, 'input[data-testid="contexts-modal-name"]', 20000);
+    const ctxName = `Auto Smoke Ctx ${Date.now()}`;
+    await setInputValue(evaluate, 'input[data-testid="contexts-modal-name"]', ctxName);
+    const wbCheckbox = `input[data-testid="contexts-modal-workbook-checkbox"][data-workbook-id="${workbookId}"]`;
+    const hasWbCheckbox = await waitForSelector(evaluate, wbCheckbox, 20000);
+    if (!hasWbCheckbox) fail("Contexts create modal did not include the newly created workbook checkbox");
+    await clickSelector(evaluate, wbCheckbox);
+    await clickSelector(evaluate, 'button[data-testid="contexts-modal-save"]');
+
+    // Discover the created context id by matching rendered card text.
+    const contextId = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 20000) {
+        const id = await evaluate(`
+          (() => {
+            const items = Array.from(document.querySelectorAll('[data-testid^="contexts-item-"]'));
+            const hit = items.find(el => (el.innerText || "").includes(${jsString(ctxName)}));
+            if (!hit) return null;
+            const tid = hit.getAttribute("data-testid") || "";
+            return tid.startsWith("contexts-item-") ? tid.slice("contexts-item-".length) : null;
+          })()
+        `);
+        if (id) return id;
+        await sleep(150);
+      }
+      return null;
+    })();
+    if (!contextId) fail("Could not discover created context id in UI");
+
+    // Activate it.
+    const activateSel = `button[data-testid="contexts-activate-${contextId}"]`;
+    const activateOk = await waitForSelector(evaluate, activateSel, 20000);
+    if (!activateOk) fail("Created context did not render an Activate button");
+    await clickSelector(evaluate, activateSel);
+    await sleep(300);
+    console.log(`✅ Created + activated context "${ctxName}" (${contextId})`);
 
     // Expand workbook row.
     await clickSelector(evaluate, `span[data-testid="workbooks-toggle-${workbookId}"]`);
@@ -344,6 +403,31 @@ async function run() {
     // Expand Chat and send message.
     await ensureExpanded(evaluate, "sidebar-chat-header");
     await waitForSelector(evaluate, 'input[data-testid="chat-input"]', 20000);
+
+    // Sanity: Chat @ mention menu opens and inserts a workbook:// reference.
+    await clickSelector(evaluate, 'input[data-testid="chat-input"]');
+    await setInputValue(evaluate, 'input[data-testid="chat-input"]', '@');
+    const chatMenuOk = await waitForSelector(evaluate, 'div[data-testid="chat-mention-menu"]', 20000);
+    if (!chatMenuOk) fail("Chat @ mention menu did not appear");
+    const chatItemOk = await waitForSelector(evaluate, 'button[data-testid^="chat-mention-item-"]', 30000);
+    if (!chatItemOk) fail("Chat @ mention menu appeared but no items were available");
+    const firstChatMention = await evaluate(`
+      (() => {
+        const btn = document.querySelector('button[data-testid^="chat-mention-item-"]');
+        return btn ? btn.getAttribute("data-testid") : null;
+      })()
+    `);
+    if (!firstChatMention) fail("Chat @ mention menu opened but had no items");
+    await clickSelector(evaluate, `button[data-testid="${firstChatMention}"]`);
+    const hasWbRefInChat = await evaluate(`
+      (() => {
+        const el = document.querySelector('input[data-testid="chat-input"]');
+        return !!el && (el.value || "").includes("workbook://");
+      })()
+    `);
+    if (!hasWbRefInChat) fail("Selecting a chat @ mention did not insert a workbook:// reference");
+    console.log("✅ Chat @ mention inserts workbook:// reference");
+
     const msg = `smoke ping ${Date.now()}`;
     await setInputValue(evaluate, 'input[data-testid="chat-input"]', msg);
     await clickSelector(evaluate, 'button[data-testid="chat-send"]');
@@ -365,6 +449,32 @@ async function run() {
     })();
     if (!userMsgOk) fail("Chat message was not rendered in UI");
     console.log("✅ Sent chat message");
+
+    // Now delete the active context (this clears active context) and verify Chat shows deterministic empty-state.
+    await ensureExpanded(evaluate, "sidebar-contexts-header");
+    await clickSelector(evaluate, `button[data-testid="contexts-delete-${contextId}"]`);
+    await waitForSelector(evaluate, 'button[data-testid="confirm-dialog-confirm"]', 20000);
+    await clickSelector(evaluate, 'button[data-testid="confirm-dialog-confirm"]');
+    await sleep(300);
+
+    await ensureExpanded(evaluate, "sidebar-chat-header");
+    const emptyOk = await waitForSelector(evaluate, 'div[data-testid="chat-empty-state"]', 20000);
+    if (!emptyOk) fail("Chat did not show scoped-context empty state after active context was cleared");
+    await clickSelector(evaluate, 'button[data-testid="chat-empty-state-jump-contexts"]');
+    await ensureExpanded(evaluate, "sidebar-contexts-header");
+    console.log("✅ Chat empty-state + jump-to-contexts works when no active context");
+
+    // Restore an active context so downstream dashboard flows have in-scope workbooks.
+    const firstActivateAny = await evaluate(`
+      (() => {
+        const btn = document.querySelector('button[data-testid^="contexts-activate-"]');
+        return btn ? btn.getAttribute("data-testid") : null;
+      })()
+    `);
+    if (!firstActivateAny) fail("No remaining context available to activate for dashboard steps");
+    await clickSelector(evaluate, `button[data-testid="${firstActivateAny}"]`);
+    await sleep(300);
+    console.log("✅ Restored active context for dashboard steps");
 
     // Dashboards: create a dashboard and add a query (automation-safe selectors).
     await ensureExpanded(evaluate, "sidebar-dashboards-header");

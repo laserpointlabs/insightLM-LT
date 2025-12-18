@@ -99,6 +99,22 @@ try {
 
   llm: {
     chat: (messages: any[]) => ipcRenderer.invoke("llm:chat", messages),
+    listModels: () => ipcRenderer.invoke("llm:listModels"),
+  },
+
+  // Chat persistence (single-thread per active context)
+  chat: {
+    getThread: (contextId: string) => ipcRenderer.invoke("chat:getThread", contextId),
+    append: (params: { contextId: string; role: "user" | "assistant"; content: string }) =>
+      ipcRenderer.invoke("chat:append", params),
+    clear: (contextId: string) => ipcRenderer.invoke("chat:clear", contextId),
+  },
+
+  // Config editing (YAML-backed)
+  config: {
+    get: () => ipcRenderer.invoke("config:get"),
+    updateApp: (updates: any) => ipcRenderer.invoke("config:updateApp", updates),
+    updateLLM: (updates: any) => ipcRenderer.invoke("config:updateLLM", updates),
   },
 
   mcp: {

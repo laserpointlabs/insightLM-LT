@@ -265,7 +265,7 @@ function App() {
               actionButton={chatActionButton}
               testId={testIds.sidebar.headers.chat}
             >
-              <Chat onActionButton={setChatActionButton} />
+              <Chat onActionButton={setChatActionButton} onJumpToContexts={jumpToContexts} />
             </CollapsibleView>
           </div>
         </div>

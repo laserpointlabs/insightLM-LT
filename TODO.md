@@ -44,7 +44,10 @@ This file is the single source of truth for roadmap planning.
 - [ ] Tabbed and stored chats where chat context is first class (we can discuss need and complexity)
 - [ ] config.yaml for llm source (ollama, openai, asksage) [Critical for genernal testing]
 - [ ] @commands for specific context calls to worbooks, folders, and docs [Nice have and carries over to the dash boards]
-
+- [ ] Chats are first class citizens and remain in context with the scopeing
+- [ ] When asking a question that is out of scope the response should be somthing like "I dont know that..." per best practice.
+- [ ] API key management (env.os first, then others)
+  
 ### Dashboards (MVP)
 - [x] Ensure tile formatting always returns valid JSON (even for “no data found”)
 - [x] Add “Explain / View Sources” affordance per tile (stable testIds + automation-safe UI)
@@ -128,17 +131,24 @@ This file is the single source of truth for roadmap planning.
 
 ### Containerization / portability
 - [ ] Multi-build with containers → portable distribution
- 
- 
+  
 ---
 
-## Backlog (nice-to-haves / not scheduled)
+### Backlog (nice-to-haves / not scheduled)
 - [ ] Right-click in document: “Ask chat to add text/diagram here” (inline authoring helpers)
 
 ### Chat becomes iDA (Integrated Digital Assisant)
 - [ ] Update Chat area
 - [ ] Add @(Focused Context), /(Commands), Rules
 - [ ] Add Teams, Agents, Ask, and Plan capabilities
+- [ ] Allow chat view to move to full 'other' side of the workspace
+
 
 ### Import workbook/dashboard stack
 - [ ] allow a user to import a prebuild workbook and dashboard stack
+
+
+### MCP Servers
+- [ ] Investigate trade study mcp server
+- [ ] Investigate MCDA mcp server
+- [ ] Others? 

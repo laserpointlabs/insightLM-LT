@@ -59,6 +59,11 @@ export class ConfigService {
   private appConfig: AppConfig | null = null;
   private llmConfig: LLMConfig | null = null;
 
+  clearCache() {
+    this.appConfig = null;
+    this.llmConfig = null;
+  }
+
   loadAppConfig(): AppConfig {
     if (this.appConfig) return this.appConfig;
 
@@ -107,5 +112,31 @@ export class ConfigService {
       };
       return this.llmConfig;
     }
+  }
+
+  saveAppConfig(config: AppConfig): void {
+    const configPath = path.join(getConfigDir(), "app.yaml");
+    const toWrite: AppConfig = {
+      dataDir: config.dataDir,
+      llmProvider: config.llmProvider,
+    };
+    fs.writeFileSync(configPath, yaml.dump(toWrite, { lineWidth: 120 }), "utf-8");
+    this.clearCache();
+  }
+
+  saveLLMConfig(config: LLMConfig): void {
+    const configPath = path.join(getConfigDir(), "llm.yaml");
+    const toWrite: LLMConfig = {
+      provider: config.provider,
+      REDACTED
+      model: config.model,
+      baseUrl: config.baseUrl,
+    };
+    // Drop undefined keys for a clean yaml file.
+    Object.keys(toWrite).forEach((k) => {
+      if ((toWrite as any)[k] === undefined) delete (toWrite as any)[k];
+    });
+    fs.writeFileSync(configPath, yaml.dump(toWrite, { lineWidth: 120 }), "utf-8");
+    this.clearCache();
   }
 }

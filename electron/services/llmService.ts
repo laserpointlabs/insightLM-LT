@@ -87,6 +87,103 @@ export class LLMService {
   }
 
   /**
+   * Live-update the LLM provider config (used by Settings UI).
+   * This is intentionally fail-soft: callers can validate separately.
+   */
+  setConfig(next: LLMConfig) {
+    this.config = next;
+  }
+
+  getConfig(): LLMConfig {
+    return this.config;
+  }
+
+  async listModels(): Promise<Array<{ id: string; label?: string }>> {
+    const provider = this.config.provider;
+    if (provider === "openai") {
+      if (!this.config.apiKey) throw new Error("OpenAI apiKey is not configured");
+      const res = await fetch("https://api.openai.com/v1/models", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${this.config.apiKey}` },
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`OpenAI models error: ${res.status} ${res.statusText} - ${text}`);
+      const json = JSON.parse(text);
+      const data = Array.isArray(json?.data) ? json.data : [];
+      const models = data
+        .map((m: any) => ({ id: String(m?.id || "").trim() }))
+        .filter((m: any) => m.id);
+      models.sort((a: any, b: any) => a.id.localeCompare(b.id));
+      return models;
+    }
+
+    if (provider === "claude") {
+      if (!this.config.apiKey) throw new Error("Claude apiKey is not configured");
+      const res = await fetch("https://api.anthropic.com/v1/models", {
+        method: "GET",
+        headers: {
+          "x-api-key": this.config.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Claude models error: ${res.status} ${res.statusText} - ${text}`);
+      const json = JSON.parse(text);
+      const data = Array.isArray(json?.data) ? json.data : [];
+      const models = data
+        .map((m: any) => ({
+          id: String(m?.id || "").trim(),
+          label: typeof m?.display_name === "string" ? m.display_name : undefined,
+        }))
+        .filter((m: any) => m.id);
+      models.sort((a: any, b: any) => a.id.localeCompare(b.id));
+      return models;
+    }
+
+    // ollama + gateways (including lmsvr)
+    const baseUrl = this.config.baseUrl || "http://localhost:11434";
+    const headers: Record<string, string> = {};
+    if (this.config.apiKey && String(this.config.apiKey).trim()) {
+      headers.Authorization = `Bearer ${String(this.config.apiKey).trim()}`;
+    }
+
+    // Try lmsvr gateway first: /api/models
+    const tryUrls = [`${baseUrl.replace(/\/+$/, "")}/api/models`, `${baseUrl.replace(/\/+$/, "")}/api/tags`];
+    let lastErr: any = null;
+    for (const url of tryUrls) {
+      try {
+        const res = await fetch(url, { method: "GET", headers });
+        const text = await res.text();
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} - ${text}`);
+        const json = JSON.parse(text);
+
+        // lmsvr may return { models: [...] } or { data: [...] }
+        const arr =
+          (Array.isArray(json?.models) && json.models) ||
+          (Array.isArray(json?.data) && json.data) ||
+          [];
+        const models = arr
+          .map((m: any) => {
+            if (typeof m === "string") return { id: m.trim() };
+            // ollama tags returns { models: [{ name }] }
+            if (typeof m?.name === "string") return { id: m.name.trim() };
+            if (typeof m?.id === "string") return { id: m.id.trim() };
+            if (typeof m?.model === "string") return { id: m.model.trim() };
+            return { id: "" };
+          })
+          .filter((m: any) => m.id);
+
+        models.sort((a: any, b: any) => a.id.localeCompare(b.id));
+        return models;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    throw lastErr instanceof Error ? lastErr : new Error("Failed to list Ollama models");
+  }
+
+  /**
    * Register core tools through ToolRegistry (for consistency with MCP tools)
    */
   private registerCoreTools() {
@@ -204,17 +301,28 @@ export class LLMService {
       ? messages
       : [systemMessage, ...messages];
 
+    // Lightweight @refs / workbook:// references:
+    // If the user explicitly references workbook://... paths, preload those files (fail-soft)
+    // and inject their contents as an additional system message for grounding + citations.
+    const refSystem = await this.buildExplicitWorkbookRefsSystemMessage(messagesWithSystem);
+    const finalMessages =
+      refSystem && messagesWithSystem[0]?.role === "system"
+        ? [messagesWithSystem[0], refSystem, ...messagesWithSystem.slice(1)]
+        : refSystem
+          ? [refSystem, ...messagesWithSystem]
+          : messagesWithSystem;
+
     let response: string;
     try {
       switch (this.config.provider) {
         case "openai":
-          response = await this.chatWithToolsOpenAI(messagesWithSystem);
+          response = await this.chatWithToolsOpenAI(finalMessages);
           break;
         case "claude":
-          response = await this.chatWithToolsClaude(messagesWithSystem);
+          response = await this.chatWithToolsClaude(finalMessages);
           break;
         case "ollama":
-          response = await this.chatWithToolsOllama(messagesWithSystem);
+          response = await this.chatWithToolsOllama(finalMessages);
           break;
         default:
           throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
@@ -235,6 +343,98 @@ export class LLMService {
     }
 
     return response;
+  }
+
+  private parseWorkbookRefs(text: string): Array<{ workbookId: string; filePath: string; raw: string }> {
+    const out: Array<{ workbookId: string; filePath: string; raw: string }> = [];
+    const re = /workbook:\/\/([^\s/]+)\/([^\s]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(String(text || ""))) !== null) {
+      const raw = m[0];
+      const workbookId = String(m[1] || "").trim();
+      let tail = String(m[2] || "").trim();
+      // Trim common trailing punctuation.
+      tail = tail.replace(/[)\],.]+$/g, "");
+      if (!workbookId || !tail) continue;
+
+      const filePath = tail
+        .split("/")
+        .map((part) => {
+          try {
+            return decodeURIComponent(part);
+          } catch {
+            return part;
+          }
+        })
+        .join("/");
+
+      out.push({ workbookId, filePath, raw });
+    }
+    return out;
+  }
+
+  private async buildExplicitWorkbookRefsSystemMessage(messages: LLMMessage[]): Promise<LLMMessage | null> {
+    // Only consider the most recent user message (keeps prompt size predictable/deterministic).
+    const lastUser = [...messages].reverse().find((m) => m.role === "user" && typeof m.content === "string");
+    if (!lastUser?.content) return null;
+
+    const refs = this.parseWorkbookRefs(lastUser.content);
+    if (refs.length === 0) return null;
+
+    const scope = await this.getActiveContextScope();
+    const isInScope = (workbookId: string) => !scope.workbookIds || scope.workbookIds.has(workbookId);
+
+    const seen = new Set<string>();
+    const blocks: string[] = [];
+    for (const ref of refs.slice(0, 5)) {
+      const key = `${ref.workbookId}:${ref.filePath}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      if (!isInScope(ref.workbookId)) {
+        blocks.push(
+          `- ${ref.raw}\n  (Out of active Context scope; content not loaded.)`,
+        );
+        continue;
+      }
+
+      try {
+        const content = await this.fileService.readDocument(ref.workbookId, ref.filePath);
+        const trimmed = String(content || "");
+        const cap = trimmed.length > 12000 ? trimmed.slice(0, 12000) + "\n\n[...truncated...]" : trimmed;
+
+        // Track for citations in the response footer.
+        try {
+          const wb = await this.workbookService.getWorkbook(ref.workbookId);
+          const filename = ref.filePath.split("/").pop() || ref.filePath;
+          this.filesReadInCurrentChat.push({
+            workbookId: ref.workbookId,
+            workbookName: wb?.name || ref.workbookId,
+            filePath: ref.filePath,
+            filename,
+          });
+        } catch {
+          // ignore
+        }
+
+        blocks.push(
+          `- ${ref.raw}\n\nFile content:\n${cap}`,
+        );
+      } catch (e) {
+        blocks.push(
+          `- ${ref.raw}\n  (Failed to load: ${e instanceof Error ? e.message : "unknown error"})`,
+        );
+      }
+    }
+
+    if (blocks.length === 0) return null;
+
+    return {
+      role: "system",
+      content:
+        `User provided explicit workbook references. Use the loaded file contents below as grounding when answering.\n\n` +
+        blocks.join("\n\n---\n\n"),
+    };
   }
 
   /**
@@ -784,11 +984,18 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     // For Ollama, we'll use a prompt-based approach to detect tool needs
     const enhancedPrompt = `${this.getSystemPrompt()}\n\nUser: ${lastMessage.content}\n\nThink step by step. If you need to read a file, list workbooks, or create a file, respond with JSON in this format: {"tool": "tool_name", "args": {...}}. Otherwise, respond normally.`;
 
+    const ollamaHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    // Support Ollama API gateways that require auth (e.g., lmsvr).
+    // If apiKey is configured, send it as a Bearer token.
+    if (this.config.apiKey && String(this.config.apiKey).trim()) {
+      ollamaHeaders.Authorization = `Bearer ${String(this.config.apiKey).trim()}`;
+    }
+
     const response = await fetch(`${baseUrl}/api/generate`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: ollamaHeaders,
       body: JSON.stringify({
         model: this.config.model,
         prompt: enhancedPrompt,
@@ -828,7 +1035,7 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
 
         const finalResponse = await fetch(`${baseUrl}/api/generate`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: ollamaHeaders,
           body: JSON.stringify({
             model: this.config.model,
             prompt: messages.map((m) => `${m.role}: ${m.content}`).join("\n"),
