@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2025-12-19 - Hotfix: `.is` / viewer crash hardening (no more white screen)
+
+#### Fixed
+
+- **DocumentViewer crash containment**
+  - Added a viewer-level error boundary so a bad viewer render cannot white-screen the whole app.
+  - Error UI is deterministic and allows the user to retry or close the affected tab.
+
+- **NotebookViewer robustness**
+  - Hardened notebook parsing/normalization to tolerate missing/invalid fields (e.g., missing `cells` or non-string `source`) without throwing.
+  - Prevents `Cannot read properties of undefined (reading 'length')`-style crashes observed when opening problematic documents.
+
+#### Testing
+
+- Verified via **prod-renderer CDP smoke** (`npm run test:automation:prod`) including opening a seeded `.is` sheet (`decision_matrix.is`) and confirming the spreadsheet viewer mounts.
+
 ### 2025-12-18 - Chat MVP (Scoped + Deterministic + Testable)
 
 #### Added
