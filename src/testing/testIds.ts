@@ -30,6 +30,7 @@ export const testIds = {
     edit: (contextId: string) => `contexts-edit-${contextId}`,
     activate: (contextId: string) => `contexts-activate-${contextId}`,
     delete: (contextId: string) => `contexts-delete-${contextId}`,
+    quickWorkbook: (workbookId: string) => `contexts-quick-workbook-${encodeURIComponent(String(workbookId || ""))}`,
   },
   chat: {
     input: "chat-input",
@@ -41,6 +42,8 @@ export const testIds = {
     contextChip: "chat-context-chip",
     contextMenu: "chat-context-menu",
     contextItem: (contextId: string) => `chat-context-item-${encodeURIComponent(String(contextId || ""))}`,
+    contextQuickWorkbook: (workbookId: string) =>
+      `chat-context-quick-workbook-${encodeURIComponent(String(workbookId || ""))}`,
     scopeChip: "chat-scope-chip",
     activity: {
       container: "chat-activity",

@@ -186,9 +186,10 @@ This file is the single source of truth for roadmap planning.
 - [x] Auto close the chat view when we pop-out to the tabbed view
 - [ ] Workbooks listed natrually to context so a user can just select them without create a spcial context view of just a single workbook. This can also be a general list in the context chip.
 
- - [ ] Add automationState.workbooks mapping (name → id/path) to enable deterministic Workbooks UI automation using existing testIds.
- - [ ] Improved handling of the views and collapsed stated to preved overlaping edge of screen
+ - [x] Add automationState.workbooks mapping (name → id/path) to enable deterministic Workbooks UI automation using existing testIds.
+ - [ ] Improved handling of the views open/collapsed stated to prevent overlaping edge of screen
  - [ ] Remove the workds Context: and Scope: from the chat text area chips.
+ - [ ] Context chip is showing context way above the actual chip... it shuold be just above the chip. 
 
  
 ## Other fixes and bugs for later
@@ -208,12 +209,13 @@ This file is the single source of truth for roadmap planning.
 - [ ] Manually configure dahboard grid size
 - [ ] Vari the icon for file types.
 - [ ] Allow user to view and modify chat settings when no context is set.
-- [ ] Spreadsheets are opening white sometimes, not sure what the trigger is but I can fix by reloading the the app under view reload. ) [Working right now - 12/19/2025]
+- [ ] Spreadsheets are opening white sometimes, not sure what the trigger is but I can fix by reloading the the app under view reload. [Working right now - 12/19/2025]
 - [ ] Filter Workbooks view such that as the user types the search Worbkooks/Folders are filtertered out but still show contents so if I have a workbook "Test" Show and I start Te.. show the workbook and any files in the workbook that may be te.. also 
 - [ ] Save state of sheet items (cell hight/width, font, etc.)
 - [ ] IMprove document tab calaibltity (drag order, rename, .etc)
 - [ ] file context modal (save as... → pdf, word, excel)
 - [ ] Double click view to collas views below and expand view fully
+- [ ] Quickworkbooks should highlihgt the selected context workbook in hte contextx view... or add an (actvive) indicaotor.
 
 
 ### Major features
@@ -227,3 +229,6 @@ This file is the single source of truth for roadmap planning.
 - [ ] Add AI type chip for Teams/Agent/Ask/Plan
 - [ ] Add ability to apply a teaming effort to working a solution in the chat
 - [ ] Devlope a methdd to create, test, and optimze a team of agents that can better anwser questions as SMEs (need leanring kits)
+
+
+- [ ] Decoupling checks after every commit? or branch merge?

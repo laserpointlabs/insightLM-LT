@@ -301,6 +301,24 @@ export class LLMService {
         },
       },
       {
+        // Back-compat alias: some models will try "read_workbook" when asked to inspect a workbook.
+        // This returns a workbook's structure (folders + documents) so the model can count/locate files.
+        name: "read_workbook",
+        description:
+          "Read a workbook's structure (folders + documents). Provide id (workbook id). Use this to count documents or discover file paths.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description:
+                "Workbook ID (directory name, e.g., 'ac1000-main-project', NOT a UUID).",
+            },
+          },
+          required: ["id"],
+        },
+      },
+      {
         name: "list_workbooks",
         description:
           "List all available workbooks and their documents. Use this to see what workbooks exist.",
@@ -870,6 +888,28 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
       !scope.workbookIds || scope.workbookIds.has(workbookId);
 
     switch (toolName) {
+        case "read_workbook": {
+          const workbookId = String(args?.id || "").trim();
+          if (!workbookId) return "Error: Missing workbook id";
+          const wb = await this.workbookService.getWorkbook(workbookId);
+          if (!wb) return `Error: Workbook not found (${workbookId})`;
+          const out = {
+            id: (wb as any).id,
+            name: (wb as any).name,
+            archived: !!(wb as any).archived,
+            folders: Array.isArray((wb as any).folders) ? (wb as any).folders : [],
+            documents: Array.isArray((wb as any).documents)
+              ? (wb as any).documents
+                  .filter((d: any) => !d?.archived)
+                  .map((d: any) => ({
+                    filename: d.filename,
+                    path: d.path,
+                    folder: d.folder ?? null,
+                  }))
+              : [],
+          };
+          return JSON.stringify(out, null, 2);
+        }
         case "read_workbook_file":
           try {
             console.log(`[LLM] read_workbook_file called with:`);
@@ -1212,10 +1252,17 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     // Ollama doesn't support function calling natively, so we'll use a simpler approach
     // Parse the response for tool calls or use a wrapper
     const baseUrl = this.config.baseUrl || "http://localhost:11434";
-    const lastMessage = messages[messages.length - 1];
+    const TOOL_INSTRUCTIONS = `\n\nIMPORTANT TOOL RULES:\n- If you need a tool, respond with ONLY ONE valid JSON object and nothing else:\n  {"tool": "tool_name", "args": {...}}\n- Do NOT output multiple JSON objects.\n- Do NOT wrap JSON in markdown fences.\n- After you receive a Tool result, respond with your FINAL answer following the original system instructions (often requires JSON with required fields like "value").`;
 
-    // For Ollama, we'll use a prompt-based approach to detect tool needs
-    const enhancedPrompt = `${this.getSystemPrompt()}\n\nUser: ${lastMessage.content}\n\nIf you need to use a tool, respond with ONLY valid JSON (no markdown fences, no extra text) in this format: {"tool": "tool_name", "args": {...}}.\nIf you do NOT need a tool, respond normally.`;
+    // Preserve caller-provided system prompts (e.g., Dashboard tile schemas) by using the full message history.
+    const buildPrompt = (msgs: LLMMessage[]) =>
+      msgs
+        .map((m) => {
+          const role = String(m.role || "user").toUpperCase();
+          const content = String(m.content || "");
+          return `${role}: ${content}`;
+        })
+        .join("\n\n");
 
     const ollamaHeaders: Record<string, string> = {
       "Content-Type": "application/json",
@@ -1231,7 +1278,7 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
       headers: ollamaHeaders,
       body: JSON.stringify({
         model: this.config.model,
-        prompt: enhancedPrompt,
+        prompt: buildPrompt(messages) + TOOL_INSTRUCTIONS,
         stream: false,
         options: {
           // Lower temperature makes tool-call formatting significantly more reliable on smaller local models.
@@ -1259,7 +1306,7 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
         });
         messages.push({
           role: "user",
-          content: `Tool result: ${result}. Please provide your final answer.`,
+          content: `Tool result for ${toolCall.name}: ${result}\n\nNow provide your FINAL answer.`,
         });
 
         const finalResponse = await fetch(`${baseUrl}/api/generate`, {
@@ -1267,7 +1314,7 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           headers: ollamaHeaders,
           body: JSON.stringify({
             model: this.config.model,
-            prompt: messages.map((m) => `${m.role}: ${m.content}`).join("\n"),
+            prompt: buildPrompt(messages),
             stream: false,
             options: {
               temperature: 0.3,

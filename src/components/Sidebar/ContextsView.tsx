@@ -58,6 +58,7 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
   });
 
   const canUseMCP = !!window.electronAPI?.mcp?.call;
+  const QUICK_WB_PREFIX = "[WB] ";
 
   const loadWorkbooks = useCallback(async () => {
     if (!window.electronAPI?.workbook) return;
@@ -109,6 +110,93 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
       setLoading(false);
     }
   }, [canUseMCP]);
+
+  // NOTE: These must be defined AFTER loadContexts to avoid TDZ ("Cannot access before initialization").
+  const isQuickWorkbookContext = useCallback((ctx: any): boolean => {
+    try {
+      if (!ctx) return false;
+      const name = String(ctx?.name || "");
+      const wbIds = Array.isArray(ctx?.workbook_ids) ? ctx.workbook_ids : [];
+      const folders = ctx?.folders;
+      const foldersEmpty = folders == null || (Array.isArray(folders) && folders.length === 0);
+      return name.startsWith(QUICK_WB_PREFIX) && wbIds.length === 1 && foldersEmpty;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const ensureQuickWorkbookContextActive = useCallback(
+    async (workbook: { id: string; name: string }) => {
+      if (!window.electronAPI?.mcp?.call) {
+        notifyError("MCP unavailable", "Contexts");
+        return;
+      }
+
+      const workbookId = String(workbook?.id || "");
+      const workbookName = String(workbook?.name || workbookId);
+      if (!workbookId) return;
+
+      try {
+        // Keep demos deterministic: ensure scoped mode when picking a workbook as a context.
+        try {
+          await window.electronAPI?.contextScope?.setMode?.("context");
+          setScopeMode("context");
+          window.dispatchEvent(new CustomEvent("context:scoping", { detail: { mode: "context" } }));
+        } catch {
+          // ignore
+        }
+
+        const listRes = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+          name: "list_contexts",
+          arguments: {},
+        });
+        const contextsList: ContextSummary[] = Array.isArray(listRes?.contexts) ? listRes.contexts : [];
+
+        // Find existing quick context for this workbook
+        const existing = contextsList.find(
+          (c: any) =>
+            String(c?.name || "").startsWith(QUICK_WB_PREFIX) &&
+            Array.isArray(c?.workbook_ids) &&
+            c.workbook_ids.length === 1 &&
+            String(c.workbook_ids[0]) === workbookId &&
+            (c.folders == null || (Array.isArray(c.folders) && c.folders.length === 0)),
+        );
+
+        let ctxId: string | null = null;
+        const desiredName = `${QUICK_WB_PREFIX}${workbookName}`;
+
+        if (existing?.id) {
+          ctxId = String(existing.id);
+          // Keep name in sync with workbook name
+          await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "update_context",
+            arguments: { context_id: ctxId, updates: { name: desiredName, workbook_ids: [workbookId], folders: null } },
+          });
+        } else {
+          const created = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "create_context",
+            arguments: { name: desiredName, workbook_ids: [workbookId], folders: null },
+          });
+          ctxId = created?.id ? String(created.id) : null;
+        }
+
+        if (ctxId) {
+          await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "activate_context",
+            arguments: { context_id: ctxId },
+          });
+        }
+
+        await loadContexts();
+        onActiveContextChanged?.();
+        window.dispatchEvent(new CustomEvent("context:changed"));
+        notifySuccess(`Activated ${workbookName}`, "Contexts");
+      } catch (e) {
+        notifyError(e instanceof Error ? e.message : "Failed to activate workbook", "Contexts");
+      }
+    },
+    [onActiveContextChanged, loadContexts],
+  );
 
   useEffect(() => {
     loadWorkbooks();
@@ -218,6 +306,18 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
     return m;
   }, [workbooks]);
 
+  const quickWorkbooks = useMemo(() => {
+    const arr = workbooks.filter((w) => !w.archived);
+    arr.sort((a, b) => String(a.name).localeCompare(String(b.name)) || String(a.id).localeCompare(String(b.id)));
+    return arr;
+  }, [workbooks]);
+
+  const visibleContexts = useMemo(() => {
+    // Hide auto-created single-workbook contexts from the main list to reduce clutter;
+    // they are accessible through "Quick: Workbooks".
+    return contexts.filter((c) => !isQuickWorkbookContext(c));
+  }, [contexts, isQuickWorkbookContext]);
+
   const openEdit = async (ctx: ContextSummary) => {
     setEditor({
       isOpen: true,
@@ -315,11 +415,36 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
         {loading && <div className="text-sm text-gray-500">Loading...</div>}
         {error && <div className="text-sm text-red-500">{error}</div>}
 
-        {contexts.length === 0 && !loading && (
+        {/* Quick single-workbook activation (no manual context creation needed) */}
+        {quickWorkbooks.length > 0 && (
+          <div className="mb-2 rounded border border-gray-200 bg-white p-2">
+            <div className="mb-1 text-xs font-semibold text-gray-800">Quick: Workbooks</div>
+            <div className="flex flex-col gap-1">
+              {quickWorkbooks.slice(0, 12).map((wb) => (
+                <button
+                  key={wb.id}
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-gray-50"
+                  onClick={() => ensureQuickWorkbookContextActive({ id: wb.id, name: wb.name })}
+                  title={`Activate workbook "${wb.name}"`}
+                  data-testid={testIds.contexts.quickWorkbook(wb.id)}
+                >
+                  <span className="truncate">{wb.name}</span>
+                  <span className="shrink-0 text-[10px] text-gray-400">Workbook</span>
+                </button>
+              ))}
+              {quickWorkbooks.length > 12 && (
+                <div className="px-2 text-[10px] text-gray-400">+ {quickWorkbooks.length - 12} more…</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {visibleContexts.length === 0 && !loading && (
           <div className="mt-4 text-sm text-gray-500">No contexts yet.</div>
         )}
 
-        {contexts.map((ctx) => {
+        {visibleContexts.map((ctx) => {
           const isActive = ctx.id === activeContextId;
           return (
             <div

@@ -49,14 +49,18 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     open: boolean;
     activeId: string | null;
     activeName: string | null;
+    activeWorkbookIds: string[];
     contexts: Array<{ id: string; name: string }>;
+    quickWorkbooks: Array<{ id: string; name: string }>;
     error: string | null;
   }>({
     loading: false,
     open: false,
     activeId: null,
     activeName: null,
+    activeWorkbookIds: [],
     contexts: [],
+    quickWorkbooks: [],
     error: null,
   });
   const [scopeChipMode, setScopeChipMode] = useState<"all" | "context">("context");
@@ -199,7 +203,9 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         loading: false,
         activeId: null,
         activeName: null,
+        activeWorkbookIds: [],
         contexts: [],
+        quickWorkbooks: [],
         error: "MCP unavailable",
       }));
       return;
@@ -207,9 +213,10 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     ctxRefreshInFlightRef.current = true;
     setContextPicker((p) => ({ ...p, loading: true, error: null }));
     try {
-      const [listRes, activeRes] = await Promise.all([
+      const [listRes, activeRes, allWb] = await Promise.all([
         window.electronAPI.mcp.call("context-manager", "tools/call", { name: "list_contexts", arguments: {} }),
         window.electronAPI.mcp.call("context-manager", "tools/call", { name: "get_active_context", arguments: {} }),
+        window.electronAPI?.workbook?.getAll ? window.electronAPI.workbook.getAll() : Promise.resolve([]),
       ]);
       const contextsRaw = Array.isArray(listRes?.contexts) ? listRes.contexts : [];
       const contexts = contextsRaw
@@ -218,7 +225,28 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
       contexts.sort((a: any, b: any) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
       const activeId = activeRes?.active?.id ? String(activeRes.active.id) : null;
       const activeName = activeRes?.active?.name ? String(activeRes.active.name) : null;
-      setContextPicker((p) => ({ ...p, loading: false, contexts, activeId, activeName, error: null }));
+
+      const activeWbIds: string[] = Array.isArray(activeRes?.active?.workbook_ids)
+        ? activeRes.active.workbook_ids.map((x: any) => String(x)).filter(Boolean)
+        : [];
+
+      const wbs = Array.isArray(allWb) ? allWb : [];
+      const quickWorkbooks = wbs
+        .filter((w: any) => !w?.archived)
+        .map((w: any) => ({ id: String(w?.id || ""), name: String(w?.name || w?.id || "") }))
+        .filter((w: any) => w.id && w.name);
+      quickWorkbooks.sort((a: any, b: any) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+
+      setContextPicker((p) => ({
+        ...p,
+        loading: false,
+        contexts,
+        activeId,
+        activeName,
+        activeWorkbookIds: activeWbIds,
+        quickWorkbooks,
+        error: null,
+      }));
     } catch (e) {
       setContextPicker((p) => ({
         ...p,
@@ -226,12 +254,79 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         contexts: [],
         activeId: null,
         activeName: null,
+        activeWorkbookIds: [],
+        quickWorkbooks: [],
         error: e instanceof Error ? e.message : "Failed to load contexts",
       }));
     } finally {
       ctxRefreshInFlightRef.current = false;
     }
   }, []);
+
+  const QUICK_WB_PREFIX = "[WB] ";
+  const activateQuickWorkbook = useCallback(
+    async (wb: { id: string; name: string }) => {
+      try {
+        if (!window.electronAPI?.mcp?.call) return;
+        const workbookId = String(wb?.id || "");
+        const workbookName = String(wb?.name || workbookId);
+        if (!workbookId) return;
+
+        // Ensure scoped mode for deterministic demos
+        try {
+          await window.electronAPI?.contextScope?.setMode?.("context");
+          setScopeChipMode("context");
+          window.dispatchEvent(new CustomEvent("context:scoping"));
+        } catch {
+          // ignore
+        }
+
+        const listRes = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+          name: "list_contexts",
+          arguments: {},
+        });
+        const contextsList: any[] = Array.isArray(listRes?.contexts) ? listRes.contexts : [];
+        const existing = contextsList.find(
+          (c: any) =>
+            String(c?.name || "").startsWith(QUICK_WB_PREFIX) &&
+            Array.isArray(c?.workbook_ids) &&
+            c.workbook_ids.length === 1 &&
+            String(c.workbook_ids[0]) === workbookId &&
+            (c.folders == null || (Array.isArray(c.folders) && c.folders.length === 0)),
+        );
+
+        let ctxId: string | null = null;
+        const desiredName = `${QUICK_WB_PREFIX}${workbookName}`;
+        if (existing?.id) {
+          ctxId = String(existing.id);
+          await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "update_context",
+            arguments: { context_id: ctxId, updates: { name: desiredName, workbook_ids: [workbookId], folders: null } },
+          });
+        } else {
+          const created = await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "create_context",
+            arguments: { name: desiredName, workbook_ids: [workbookId], folders: null },
+          });
+          ctxId = created?.id ? String(created.id) : null;
+        }
+
+        if (ctxId) {
+          await window.electronAPI.mcp.call("context-manager", "tools/call", {
+            name: "activate_context",
+            arguments: { context_id: ctxId },
+          });
+        }
+
+        setContextPicker((p) => ({ ...p, open: false }));
+        window.dispatchEvent(new CustomEvent("context:changed"));
+        refreshContextPicker();
+      } catch (e) {
+        notifyError(e instanceof Error ? e.message : "Failed to activate workbook", "Chat");
+      }
+    },
+    [refreshContextPicker],
+  );
 
   const refreshScopeChipMode = useCallback(async () => {
     const now = Date.now();
@@ -650,8 +745,8 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
       const assistantMsg = appendedAssistant?.message as PersistedChatMessage | undefined;
       if (assistantMsg) {
         setMessages((prev) => [...prev, assistantMsg].sort((a, b) => a.seq - b.seq));
-      }
-    } catch (error) {
+        }
+      } catch (error) {
       setStreaming(null);
       activeRequestIdRef.current = null;
       const ctxId2 = contextStatus.activeContextId;
@@ -670,9 +765,9 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
           // ignore
         }
       }
-    } finally {
-      setLoading(false);
-    }
+      } finally {
+        setLoading(false);
+      }
   };
 
   const renderedMessages = useMemo(() => messages, [messages]);
@@ -1096,10 +1191,10 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
           <>
             <div data-testid={testIds.chat.tabs.panelChat}>
               {renderedMessages.length === 0 && !streaming && (
-                <div className="mt-4 text-center text-sm text-gray-500">
-                  Start a conversation about your workbooks
-                </div>
-              )}
+          <div className="mt-4 text-center text-sm text-gray-500">
+            Start a conversation about your workbooks
+          </div>
+        )}
               <div className="space-y-3">
                 {renderedMessages.map((msg, idx) => {
                   const isUser = msg.role === "user";
@@ -1113,12 +1208,12 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                       data-chat-message-id={msg.id}
                     >
                       <div className="w-full max-w-[85%]">
-                        <ChatMessage role={msg.role} content={msg.content} />
+            <ChatMessage role={msg.role} content={msg.content} />
                         {!isUser &&
                           msg?.meta?.activity &&
                           Array.isArray(msg.meta.activity) &&
                           renderActivityBlock(msg.meta.activity, true)}
-                      </div>
+          </div>
                     </div>
                   );
                 })}
@@ -1282,7 +1377,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
 
               <div className="mt-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <button
+          <button
                     ref={contextChipRef}
                     type="button"
                     className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] text-gray-800 hover:bg-gray-100 disabled:opacity-50"
@@ -1351,6 +1446,43 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                         Refresh
                       </button>
                     </div>
+
+                    {contextPicker.quickWorkbooks.length > 0 && (
+                      <div className="border-b border-gray-100 px-1 py-1">
+                        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                          Quick: Workbooks
+                        </div>
+                        {contextPicker.quickWorkbooks.slice(0, 10).map((wb) => {
+                          const isActiveSingle =
+                            Array.isArray(contextPicker.activeWorkbookIds) &&
+                            contextPicker.activeWorkbookIds.length === 1 &&
+                            contextPicker.activeWorkbookIds[0] === wb.id;
+                          return (
+                            <button
+                              key={wb.id}
+                              type="button"
+                              className={`block w-full px-3 py-2 text-left text-xs hover:bg-gray-50 ${
+                                isActiveSingle ? "bg-gray-50 font-semibold" : ""
+                              }`}
+                              data-testid={testIds.chat.contextQuickWorkbook(wb.id)}
+                              title={`Activate ${wb.name}`}
+                              onClick={() => activateQuickWorkbook(wb)}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate">{wb.name}</span>
+                                {isActiveSingle && <span className="text-[10px] text-gray-500">Active</span>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {contextPicker.quickWorkbooks.length > 10 && (
+                          <div className="px-3 py-1 text-[10px] text-gray-400">
+                            + {contextPicker.quickWorkbooks.length - 10} more…
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {contextPicker.contexts.length === 0 ? (
                       <div className="px-3 py-2 text-xs text-gray-500">
                         {contextPicker.loading ? "Loading…" : contextPicker.error ? `Error: ${contextPicker.error}` : "No contexts found"}
@@ -1411,12 +1543,12 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                     ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                     : "bg-blue-600 text-white hover:bg-blue-700"
                 }`}
-                aria-label="Send"
+            aria-label="Send"
                 title="Send (Ctrl/Cmd+Enter)"
-                data-testid={testIds.chat.send}
-              >
+            data-testid={testIds.chat.send}
+          >
                 <SendIcon className="h-4 w-4" />
-              </button>
+          </button>
             </div>
           </div>
         </div>
