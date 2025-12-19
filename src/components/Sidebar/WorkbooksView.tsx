@@ -440,6 +440,19 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     }
   }, [loadWorkbooks, setError]);
 
+  // Refresh workbooks when native Demos menu loads data (or other out-of-band updates occur).
+  useEffect(() => {
+    const handler = () => {
+      loadWorkbooks();
+    };
+    window.addEventListener("workbooks:changed", handler as any);
+    window.addEventListener("demos:changed", handler as any);
+    return () => {
+      window.removeEventListener("workbooks:changed", handler as any);
+      window.removeEventListener("demos:changed", handler as any);
+    };
+  }, [loadWorkbooks]);
+
   useEffect(() => {
     const update = () => {
       setForceVisibleControls(document.body?.dataset?.automationMode === "true");

@@ -139,6 +139,17 @@ try {
     setMode: (mode: "all" | "context") => ipcRenderer.invoke("context:scoping:setMode", mode),
   },
 
+  // Demos (native menu + programmatic)
+  demos: {
+    load: (demoId: "ac1000" | "trade-study") => ipcRenderer.invoke("demos:load", demoId),
+    resetDevData: () => ipcRenderer.invoke("demos:resetDevData"),
+    onChanged: (cb: (payload: any) => void) => {
+      const handler = (_evt: any, payload: any) => cb(payload);
+      ipcRenderer.on("demos:changed", handler);
+      return () => ipcRenderer.removeListener("demos:changed", handler);
+    },
+  },
+
   // Extension lifecycle controls
   extensions: {
     setEnabled: (extensionId: string, enabled: boolean, server?: {
@@ -158,6 +169,38 @@ try {
     unregisterTools: (serverName: string) => ipcRenderer.invoke("debug:unregisterTools", serverName),
   },
 });
+
+  // Also fan demo changes into DOM events so React components can refresh without explicit wiring.
+  ipcRenderer.on("demos:changed", (_evt, payload) => {
+    // NOTE: electron TS build doesn't include DOM libs; use globalThis + runtime guards.
+    const w: any = globalThis as any;
+    if (!w || typeof w.dispatchEvent !== "function") return;
+
+    try {
+      if (typeof w.CustomEvent === "function") {
+        w.dispatchEvent(new w.CustomEvent("demos:changed", { detail: payload }));
+      } else if (typeof w.Event === "function") {
+        w.dispatchEvent(new w.Event("demos:changed"));
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      if (typeof w.Event === "function") w.dispatchEvent(new w.Event("workbooks:changed"));
+    } catch {
+      // ignore
+    }
+    try {
+      if (typeof w.Event === "function") w.dispatchEvent(new w.Event("context:changed"));
+    } catch {
+      // ignore
+    }
+    try {
+      if (typeof w.Event === "function") w.dispatchEvent(new w.Event("context:scoping"));
+    } catch {
+      // ignore
+    }
+  });
 
   console.log("Preload script loaded successfully");
 } catch (error) {

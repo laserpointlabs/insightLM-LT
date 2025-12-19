@@ -103,6 +103,12 @@ export interface ElectronAPI {
     getMode: () => Promise<{ mode: "all" | "context" }>;
     setMode: (mode: "all" | "context") => Promise<{ mode: "all" | "context" }>;
   };
+
+  demos?: {
+    load: (demoId: "ac1000" | "trade-study") => Promise<{ demoId: string; workbookId: string; contextId: string | null }>;
+    resetDevData: () => Promise<{ ok: true }>;
+    onChanged?: (cb: (payload: any) => void) => () => void;
+  };
 }
 
 declare global {

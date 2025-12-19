@@ -42,9 +42,9 @@ This file is the single source of truth for roadmap planning.
 - [x] Add small UX hint when no workbooks are scoped (link to Contexts to fix) — deterministic Chat empty-state + jump-to-contexts
 - [x] Add deterministic chat history scaffolding (even if minimal in 1.0) — persisted single-thread per Context
 - [x] config.yaml for llm source (ollama, openai, asksage) [Critical for genernal testing] — `config/app.yaml` + `config/llm.yaml` + in-app Settings tab + model listing
-- [/] @commands for specific context calls to worbooks, folders, and docs [Nice have and carries over to the dash boards] — lightweight `@` refs inserting `workbook://...` + citations. (@ commands are opening off of the bottom of the screen)
+- [x] @commands for specific context calls to worbooks, folders, and docs [Nice have and carries over to the dash boards] — lightweight `@` refs inserting `workbook://...` + citations. (@ commands are opening off of the bottom of the screen)
 - [x] Chats are first class citizens and remain in context with the scopeing — tools are scoped to active Context workbooks when Scoped mode is enabled
-- [ ] Tabbed and stored chats where chat context is first class (we can discuss need and complexity)
+- [?] (Think about not tabbing) Tabbed and stored chats where chat context is first class (we can discuss need and complexity)
 - [ ] When asking a question that is out of scope the response should be somthing like "I dont know that..." per best practice.
 - [ ] API key management (env.os first, then others)
   
@@ -67,6 +67,8 @@ This file is the single source of truth for roadmap planning.
 ### Corrections/Bugs
 - [ ] When saving a tab, after the save the last tab in the list is broght forward, not the saved or current working tab
 
+- [ ] Add load demo to top tool bar to load AC-1000 and related workbooks and the example trade study demo workbooks. 
+- [ ] Add clean up Clean up smoke test artifacts
 ---
 
 ## 1.1 — “Scale & safety”
@@ -138,7 +140,7 @@ This file is the single source of truth for roadmap planning.
 - [ ] Right-click in document: “Ask chat to add text/diagram here” (inline authoring helpers)
 
 ### Chat becomes iDA (Integrated Digital Assisant)
-- [ ] Update Chat area
+- [x] Update Chat Area
 - [x] Add @(Focused Context), 
 - [ ] Add actions and command /Commands
 - [ ] Add /CreateRule (store the rules)
@@ -151,7 +153,6 @@ This file is the single source of truth for roadmap planning.
 ### Import workbook/dashboard stack
 - [ ] allow a user to import a prebuild workbook and dashboard stack
 
-
 ### MCP Servers
 - [ ] Investigate trade study mcp server
 - [ ] Investigate MCDA mcp server
@@ -159,8 +160,6 @@ This file is the single source of truth for roadmap planning.
 
 ### CDNs
 - [ ] download all necessary cdns at inital build, we dont what to need the internet
-
-
 
 
 ### Quick Fixes and Bugs
@@ -172,7 +171,7 @@ This file is the single source of truth for roadmap planning.
 - [x] Improve scope indicator in chat area
   - [x] add a quick switch switch combobo
 - [x] Show full name of files not ellipsis in @
-- [ ] fix startup left trim of the views area (looks like dashbard pushes the view left)
+- [ ] fix startup left trim of the views area (looks like dashbard pushes the view left) [ looks like an artiface of the automatied:prod testing]
 - [x] Show selected object as a chip and highlighted for clearity
   - [x] Trim chip to just the object name
   - [x] Add chip inline in prompt text
@@ -197,23 +196,17 @@ This file is the single source of truth for roadmap planning.
 - [ ] Manually configure dahboard grid size
 - [ ] Vari the icon for file types.
 - [ ] Allow user to view and modify chat settings when no context is set.
+- [ ] Spreadsheets are opening white sometimes, not sure what the trigger is but I can fix by reloading the the app under view reload. ) [Working right now - 12/19/2025]
+- [ ] Filter Workbooks view such that as the user types the search Worbkooks/Folders are filtertered out but still show contents so if I have a workbook "Test" Show and I start Te.. show the workbook and any files in the workbook that may be te.. also 
+- [ ] Save state of sheet items (cell hight/width, font, etc.)
+- [ ] IMprove document tab calaibltity (drag order, rename, .etc)
+- [ ] file context modal (save as... → pdf, word, excel)
+- [ ] Double click view to collas views below and expand view fully
 
 
+### Major features
 - [ ] Git integration
 - [ ] Active tab priority and general addition
-- [ ]  Traning Paks: Add extension like traning for knowledge that has been curated and tested users can purchase and recieve testing data (like the old days with anasys :)
-
-- [ ] Spreadsheets are opening white sometimes, not sure what the trigger is but I can fix by reloading the the app under view reload. ) [Working right now - 12/19/2025]
-
-
-- [ ] Filter Workbooks view such that as the user types the search Worbkooks/Folders are filtertered out but still show contents so if I have a workbook "Test" Show and I start Te.. show the workbook and any files in the workbook that may be te.. also 
-
-
-- [ ] Save state of sheet items (cell hight/width, font, etc.)
-
-
-- IMprove document tab calaibltity (drag order, rename, .etc)
-
-- [ ] file context modal (save as... → pdf, word, excel)
-
-- [ ] Double click view to collas views below and expand view fully
+- [ ] Traning Paks: Add extension like traning for knowledge that has been curated and tested users can purchase and recieve testing data (like the old days with anasys :)
+- [ ] Add 'Planning and Teaming' mcp
+- [ ] Extension packages (Group extensions in a package for sale)
