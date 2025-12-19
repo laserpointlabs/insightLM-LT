@@ -115,19 +115,37 @@ export function ContextsView({ onActionButton, onActiveContextChanged }: Context
     loadContexts();
   }, [loadWorkbooks, loadContexts]);
 
-  useEffect(() => {
-    const loadScopeMode = async () => {
-      try {
-        const modeRes = await window.electronAPI?.contextScope?.getMode?.();
-        if (modeRes?.mode === "all" || modeRes?.mode === "context") {
-          setScopeMode(modeRes.mode);
-        }
-      } catch {
-        // ignore
+  const refreshScopeMode = useCallback(async () => {
+    try {
+      const modeRes = await window.electronAPI?.contextScope?.getMode?.();
+      if (modeRes?.mode === "all" || modeRes?.mode === "context") {
+        setScopeMode(modeRes.mode);
       }
-    };
-    loadScopeMode();
+    } catch {
+      // ignore
+    }
   }, []);
+
+  useEffect(() => {
+    refreshScopeMode();
+  }, [refreshScopeMode]);
+
+  // Keep Contexts panel synced with other UI controls (e.g. Chat chips).
+  useEffect(() => {
+    const onChanged = () => {
+      loadContexts();
+    };
+    const onScoping = () => {
+      refreshScopeMode();
+    };
+
+    window.addEventListener("context:changed", onChanged as any);
+    window.addEventListener("context:scoping", onScoping as any);
+    return () => {
+      window.removeEventListener("context:changed", onChanged as any);
+      window.removeEventListener("context:scoping", onScoping as any);
+    };
+  }, [loadContexts, refreshScopeMode]);
 
   useEffect(() => {
     if (!onActionButton) return;

@@ -192,3 +192,14 @@ This file is the single source of truth for roadmap planning.
 - [ ] Clean up smoke testing worbooks and Dashboards
 - [ ] Allow AI access to application context (currnet tabs, chat modes, chat data and chat(s), open workbenchs, loaded extensions, etc. )
 - [x] Add workbook search
+- [ ] Add selection from document or sheet to chat wiht mete-data.
+- [ ] Make AI aware of date and time. 
+- [ ] Manually adjust size of dashboard card
+- [ ] Manually configure dahboard grid size
+- [ ] Vari the icon for file types.
+- [ ] Allow user to view and modify chat settings when no context is set.
+
+
+- [ ] Git integration
+- [ ] Active tab priority and general addition
+- [ ]  Traning Paks: Add extension like traning for knowledge that has been curated and tested users can purchase and recieve testing data (like the old days with anasys :)
