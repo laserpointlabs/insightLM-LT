@@ -72,6 +72,30 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       return;
     }
 
+    // Handle chat documents ("pop out" Chat to a main tab)
+    if (doc.type === "chat") {
+      const key = (doc as any).chatKey || "main";
+      const existing = get().openDocuments.find((d: any) => d.type === "chat" && d.chatKey === key);
+      if (existing) {
+        set(() => ({ lastOpenedDocId: existing.id }));
+        return;
+      }
+
+      const tempDoc: OpenDocument = {
+        ...doc,
+        id: `doc-${nextDocId++}`,
+        type: "chat",
+        filename: doc.filename || "Chat",
+        content: "",
+      } as any;
+
+      set((state) => ({
+        openDocuments: [...state.openDocuments, tempDoc],
+        lastOpenedDocId: tempDoc.id,
+      }));
+      return;
+    }
+
     // Handle config documents (raw YAML editors, etc.)
     if (doc.type === "config" && doc.configKey) {
       const existing = get().openDocuments.find(

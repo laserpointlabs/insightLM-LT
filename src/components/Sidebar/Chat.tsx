@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ChatMessage } from "./ChatMessage";
-import { AddIcon, HistoryIcon, GearIcon, SendIcon } from "../Icons";
+import { AddIcon, HistoryIcon, GearIcon, SendIcon, PopOutIcon } from "../Icons";
 import { testIds } from "../../testing/testIds";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import { MentionItem, MentionTextInput } from "../MentionTextInput";
@@ -232,10 +232,24 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
           >
             <GearIcon className="h-4 w-4" />
           </button>
+          <button
+            onClick={() => {
+              openDocument({
+                type: "chat",
+                chatKey: "main",
+                filename: "Chat",
+              } as any);
+            }}
+            className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+            title="Pop out Chat to a tab"
+            data-testid={testIds.chat.popout}
+          >
+            <PopOutIcon className="h-4 w-4" />
+          </button>
         </div>
       );
     }
-  }, [onActionButton, handleNewChat, handleShowHistory, handleShowSettings]);
+  }, [onActionButton, handleNewChat, handleShowHistory, handleShowSettings, openDocument]);
 
   useEffect(() => {
     loadContextStatus();

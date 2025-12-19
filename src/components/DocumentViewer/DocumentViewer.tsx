@@ -4,6 +4,7 @@ import { CSVViewer } from "./CSVViewer";
 import { PDFViewer } from "./PDFViewer";
 import { TextViewer } from "./TextViewer";
 import { DashboardViewer } from "./DashboardViewer";
+import { Chat } from "../Sidebar/Chat";
 import { useDocumentStore } from "../../store/documentStore";
 import { extensionRegistry } from "../../services/extensionRegistry";
 import { notifyError, notifySuccess } from "../../utils/notify";
@@ -42,17 +43,19 @@ export interface OpenDocument {
   path?: string; // Optional for dashboards
   filename: string;
   content?: string;
-  type?: "document" | "dashboard" | "config"; // Document type
+  type?: "document" | "dashboard" | "config" | "chat"; // Document type
   dashboardId?: string; // For dashboard documents
   configKey?: "llm"; // For config documents
+  chatKey?: "main"; // For chat documents
 }
 
 interface DocumentViewerProps {
   documents: OpenDocument[];
   onClose: (id: string) => void;
+  onJumpToContexts?: () => void;
 }
 
-export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
+export function DocumentViewer({ documents, onClose, onJumpToContexts }: DocumentViewerProps) {
   const [activeDocId, setActiveDocId] = useState<string | null>(
     documents.length > 0 ? documents[0].id : null,
   );
@@ -167,6 +170,15 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
       return (
         <div className="flex h-full items-center justify-center text-gray-500">
           No document selected
+        </div>
+      );
+    }
+
+    // Chat "pop out" tab
+    if (activeDoc.type === "chat") {
+      return (
+        <div className="h-full">
+          <Chat onJumpToContexts={onJumpToContexts} />
         </div>
       );
     }

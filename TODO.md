@@ -164,7 +164,7 @@ This file is the single source of truth for roadmap planning.
 - [x] save llm.cfg to users appdata
   - [x] Allow user to edit llm.comfig in a new tab to edit entire yaml and to easily add new providers.
 - [ ] Show tool useage reporting and thinking as small or simple reporting in the chat area
-- [ ] Allow user to move chat area to tab for chat first working add pop-out icon
+- [x] Allow user to move chat area to tab for chat first working add pop-out icon
 - [ ] Improve scope indicator in chat area
   - [ ] add a quick switch switch combobox to the chat header
 - [x] Show full name of files not ellipsis in @
@@ -174,7 +174,15 @@ This file is the single source of truth for roadmap planning.
   - [x] Add chip inline in prompt text
   - [x] Fix blank spaces after inline chip isertion
 
+- [ ] Add toggle on Chat settings button, open/close
+
+
 
 ## Other fixes and bugs for later
 - [ ] change move icon to ↓↑ in 
 - [ ] Add loadng rotator and reports to user when  at windows loading phase
+- [ ] Add split for chat tab and other tabs so use can reivew and chat at the same time
+- [ ] Animate the 'Thinking...' indicator in the chat
+- [ ] Fix the double sources
+  - [ ] Improve the visual apeal of the sources
+- [ ] Add split to tabs area to allow side by side viewer of mutliple tabs

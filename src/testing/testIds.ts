@@ -37,6 +37,7 @@ export const testIds = {
     newChat: "chat-new",
     history: "chat-history",
     settings: "chat-settings",
+    popout: "chat-popout",
     message: (messageId: string) =>
       `chat-message-${encodeURIComponent(String(messageId || ""))}`,
     emptyState: {

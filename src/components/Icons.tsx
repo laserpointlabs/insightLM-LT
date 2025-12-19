@@ -239,3 +239,23 @@ export function SendIcon({ className = "h-4 w-4" }: { className?: string }) {
     </svg>
   );
 }
+
+export function PopOutIcon({ className = "h-4 w-4" }: { className?: string }) {
+  // "Open in new" style icon.
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6 3H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V10" />
+      <path d="M9 3h4v4" />
+      <path d="M13 3L7.5 8.5" />
+    </svg>
+  );
+}

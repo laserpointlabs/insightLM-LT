@@ -329,7 +329,7 @@ function App() {
       {/* Main Content Area */}
       <div className="flex-1 bg-white">
         {openDocuments.length > 0 ? (
-          <DocumentViewer documents={openDocuments} onClose={closeDocument} />
+          <DocumentViewer documents={openDocuments} onClose={closeDocument} onJumpToContexts={jumpToContexts} />
         ) : (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-gray-400">Click a document to view it</p>
