@@ -229,6 +229,8 @@ export const testIds = {
     tab: (docId: string) => `document-tab-${docId}`,
     tabClose: (docId: string) => `document-tab-close-${docId}`,
     content: "document-viewer-content",
+    error: "document-viewer-error",
+    errorClose: "document-viewer-error-close",
     saveBar: "document-savebar",
     saveButton: "document-save",
   },

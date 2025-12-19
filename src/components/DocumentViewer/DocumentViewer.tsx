@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { CSVViewer } from "./CSVViewer";
 import { PDFViewer } from "./PDFViewer";
@@ -11,6 +11,56 @@ import { notifyError, notifySuccess } from "../../utils/notify";
 import { testIds } from "../../testing/testIds";
 import { getFileTypeIcon } from "../../utils/fileTypeIcon";
 import { ChatIcon, DashboardIcon } from "../Icons";
+
+class ViewerErrorBoundary extends React.Component<
+  { filename?: string; onCloseCurrent?: () => void; children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("DocumentViewer: Uncaught viewer error", error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-4" data-testid={testIds.documentViewer.error}>
+          <div className="text-sm font-semibold text-red-600">Failed to render document</div>
+          <div className="mt-1 text-xs text-gray-600">{this.props.filename || "Unknown file"}</div>
+          <pre className="mt-2 max-h-40 overflow-auto rounded bg-gray-50 p-2 text-xs text-gray-800">
+            {String(this.state.error?.message || this.state.error)}
+          </pre>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded bg-gray-900 px-3 py-1 text-xs text-white hover:bg-black"
+              onClick={() => this.setState({ error: null })}
+            >
+              Retry
+            </button>
+            {this.props.onCloseCurrent && (
+              <button
+                type="button"
+                className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                data-testid={testIds.documentViewer.errorClose}
+                onClick={() => this.props.onCloseCurrent?.()}
+              >
+                Close tab
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children as any;
+  }
+}
 
 // Component to handle async component loading
 function AsyncComponentLoader({ componentPromise, props }: { componentPromise: Promise<any>, props: any }) {
@@ -356,7 +406,13 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
         data-active-filename={activeDoc?.filename || ""}
         data-active-ext={activeDoc?.filename ? getFileExtension(activeDoc.filename) : ""}
       >
-        {renderDocument()}
+        <ViewerErrorBoundary
+          key={activeDocId || "none"}
+          filename={activeDoc?.filename}
+          onCloseCurrent={activeDocId ? () => onClose(activeDocId) : undefined}
+        >
+          {renderDocument()}
+        </ViewerErrorBoundary>
       </div>
     </div>
   );

@@ -12,6 +12,43 @@ interface NotebookViewerProps {
   onContentChange?: (content: string) => void;
 }
 
+function normalizeNotebookSource(src: any): string {
+  if (typeof src === "string") return src;
+  if (Array.isArray(src)) return src.map((s) => (s == null ? "" : String(s))).join("");
+  if (src == null) return "";
+  return String(src);
+}
+
+function normalizeNotebook(parsed: any): NotebookDocument {
+  const obj: any = parsed && typeof parsed === "object" ? parsed : {};
+  const rawCells: any[] = Array.isArray(obj.cells) ? obj.cells : [];
+  const normalizedCells: NotebookCell[] = rawCells.map((c: any) => {
+    const cell: any = c && typeof c === "object" ? c : {};
+    const cellType: "code" | "markdown" = cell.cell_type === "code" ? "code" : "markdown";
+    const source = normalizeNotebookSource(cell.source);
+
+    return {
+      cell_type: cellType,
+      source,
+      metadata: (cell.metadata && typeof cell.metadata === "object") ? cell.metadata : {},
+      outputs: cellType === "code" ? (Array.isArray(cell.outputs) ? cell.outputs : []) : undefined,
+      execution_count: cellType === "code" ? (cell.execution_count ?? null) : undefined,
+    } as NotebookCell;
+  });
+
+  const metadata = (obj.metadata && typeof obj.metadata === "object") ? obj.metadata : {};
+  const kernelspec = (metadata as any).kernelspec && typeof (metadata as any).kernelspec === "object"
+    ? (metadata as any).kernelspec
+    : { name: "python3", display_name: "Python 3", language: "python" };
+
+  return {
+    cells: normalizedCells,
+    metadata: { ...metadata, kernelspec },
+    nbformat: typeof obj.nbformat === "number" ? obj.nbformat : 4,
+    nbformat_minor: typeof obj.nbformat_minor === "number" ? obj.nbformat_minor : 2,
+  } as NotebookDocument;
+}
+
 export function NotebookViewer({ content, filename, workbookId, path, onContentChange }: NotebookViewerProps) {
   console.log('NotebookViewer: Component rendered with props:', { content: content.substring(0, 100) + '...', filename, workbookId, path });
 
@@ -27,8 +64,9 @@ export function NotebookViewer({ content, filename, workbookId, path, onContentC
     console.log('NotebookViewer: Parsing notebook content, length:', content.length);
     try {
       const parsed = JSON.parse(content);
-      console.log('NotebookViewer: Successfully parsed notebook with', parsed.cells?.length || 0, 'cells');
-      setNotebook(parsed);
+      const normalized = normalizeNotebook(parsed);
+      console.log('NotebookViewer: Successfully parsed notebook with', normalized.cells?.length || 0, 'cells');
+      setNotebook(normalized);
     } catch (error) {
       console.error('NotebookViewer: Failed to parse notebook:', error);
       console.log('NotebookViewer: Content preview:', content.substring(0, 200));
@@ -36,7 +74,7 @@ export function NotebookViewer({ content, filename, workbookId, path, onContentC
       setNotebook({
         cells: [{
           cell_type: 'markdown',
-          source: '# Error Loading Notebook\n\nFailed to parse notebook content.',
+          source: '# Error Loading Notebook\n\nFailed to parse notebook content.\n\nIf you expected a spreadsheet, make sure the file ends with `.is` and that the Spreadsheet extension is enabled.',
           metadata: {}
         }],
         metadata: {
