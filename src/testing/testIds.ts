@@ -42,6 +42,11 @@ export const testIds = {
     contextMenu: "chat-context-menu",
     contextItem: (contextId: string) => `chat-context-item-${encodeURIComponent(String(contextId || ""))}`,
     scopeChip: "chat-scope-chip",
+    activity: {
+      container: "chat-activity",
+      item: (stepId: string) => `chat-activity-item-${encodeURIComponent(String(stepId || ""))}`,
+      toggle: "chat-activity-toggle",
+    },
     message: (messageId: string) =>
       `chat-message-${encodeURIComponent(String(messageId || ""))}`,
     emptyState: {

@@ -8,6 +8,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   seq: number;
+  meta?: Record<string, any>;
 }
 
 export interface ChatSession {
@@ -77,7 +78,7 @@ export class ChatService {
     sessionId: string,
     role: "user" | "assistant",
     content: string,
-    meta?: { workbookId?: string; contextId?: string },
+    meta?: { workbookId?: string; contextId?: string; messageMeta?: Record<string, any> },
   ): ChatMessage {
     const session = this.getOrCreateSession(sessionId, meta);
     const msg: ChatMessage = {
@@ -86,6 +87,7 @@ export class ChatService {
       role,
       content,
       timestamp: new Date().toISOString(),
+      meta: meta?.messageMeta,
     };
     session.nextSeq += 1;
     session.updatedAt = new Date().toISOString();
@@ -130,6 +132,7 @@ export class ChatService {
         role: m?.role === "assistant" || m?.role === "system" ? m.role : "user",
         content: typeof m?.content === "string" ? m.content : String(m?.content ?? ""),
         timestamp,
+        meta: m?.meta && typeof m.meta === "object" ? m.meta : undefined,
       } as ChatMessage;
     });
 

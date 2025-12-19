@@ -39,6 +39,29 @@ export interface ToolDefinition {
   };
 }
 
+export type LLMActivityEvent =
+  | { kind: "thinking"; requestId: string; ts: number; message?: string }
+  | {
+      kind: "tool_start";
+      requestId: string;
+      ts: number;
+      stepId: string;
+      toolName: string;
+      serverName: string;
+      argsSummary?: string;
+    }
+  | {
+      kind: "tool_end";
+      requestId: string;
+      ts: number;
+      stepId: string;
+      toolName: string;
+      serverName: string;
+      ok: boolean;
+      durationMs?: number;
+      error?: string;
+    };
+
 export class LLMService {
   private config: LLMConfig;
   private workbookService: WorkbookService;
@@ -49,6 +72,8 @@ export class LLMService {
   private toolProviderRegistry?: ToolProviderRegistry;
   private availableTools: ToolDefinition[] = [];
   private filesReadInCurrentChat: Array<{ workbookId: string; workbookName: string; filePath: string; filename: string }> = [];
+  private activityCtx: null | { requestId: string; emit: (evt: LLMActivityEvent) => void } = null;
+  private toolStartTimes: Map<string, number> = new Map();
 
   /**
    * Cached active context scope for the current request / tool execution burst.
@@ -96,6 +121,73 @@ export class LLMService {
 
   getConfig(): LLMConfig {
     return this.config;
+  }
+
+  /**
+   * Attach a short-lived activity emitter for the duration of a single chat request.
+   * Fail-soft: activity is optional and should never break chat.
+   */
+  private async withActivity<T>(
+    requestId: string | undefined,
+    emit: ((evt: LLMActivityEvent) => void) | undefined,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (!requestId || !emit) return await fn();
+    const prev = this.activityCtx;
+    this.activityCtx = { requestId, emit };
+    try {
+      return await fn();
+    } finally {
+      this.activityCtx = prev;
+      this.toolStartTimes.clear();
+    }
+  }
+
+  // NOTE: intentionally loose typing to avoid union excess-property headaches in TS builds.
+  // This is internal-only and must remain fail-soft.
+  private emitActivity(evt: any) {
+    const ctx = this.activityCtx;
+    if (!ctx) return;
+    try {
+      ctx.emit({
+        ...(evt || {}),
+        requestId: ctx.requestId,
+        ts: typeof evt?.ts === "number" ? evt.ts : Date.now(),
+      } as LLMActivityEvent);
+    } catch {
+      // ignore
+    }
+  }
+
+  private safeArgsSummary(args: Record<string, any>): string | undefined {
+    try {
+      const redacted: Record<string, any> = {};
+      for (const [k, v] of Object.entries(args || {})) {
+        const key = String(k);
+        const lower = key.toLowerCase();
+        if (lower.includes("key") || lower.includes("token") || lower.includes("password")) {
+          redacted[key] = "[redacted]";
+          continue;
+        }
+        if (typeof v === "string") {
+          redacted[key] = v.length > 200 ? v.slice(0, 200) + "…" : v;
+          continue;
+        }
+        if (Array.isArray(v)) {
+          redacted[key] = v.length > 10 ? [...v.slice(0, 10), `…(+${v.length - 10})`] : v;
+          continue;
+        }
+        if (typeof v === "object" && v) {
+          redacted[key] = "[object]";
+          continue;
+        }
+        redacted[key] = v;
+      }
+      const text = JSON.stringify(redacted);
+      return text.length > 280 ? text.slice(0, 280) + "…" : text;
+    } catch {
+      return undefined;
+    }
   }
 
   async listModels(): Promise<Array<{ id: string; label?: string }>> {
@@ -283,66 +375,70 @@ export class LLMService {
 
   async chat(
     messages: LLMMessage[],
-    options?: { ignoreContextScope?: boolean },
+    options?: { ignoreContextScope?: boolean; requestId?: string; emitActivity?: (evt: LLMActivityEvent) => void },
   ): Promise<string> {
-    // Reset files read tracker for new chat request
-    this.filesReadInCurrentChat = [];
-    // Reset cached context scope per chat request (so active context changes apply immediately)
-    this.cachedContextScope = null;
-    this.disableContextScopingForRequest = !!options?.ignoreContextScope;
+    return this.withActivity(options?.requestId, options?.emitActivity, async () => {
+      this.emitActivity({ kind: "thinking", message: "Thinking…" });
 
-    // Add system message with tool definitions if not present
-    const systemMessage: LLMMessage = {
-      role: "system",
-      content: this.getSystemPrompt(),
-    };
+      // Reset files read tracker for new chat request
+      this.filesReadInCurrentChat = [];
+      // Reset cached context scope per chat request (so active context changes apply immediately)
+      this.cachedContextScope = null;
+      this.disableContextScopingForRequest = !!options?.ignoreContextScope;
 
-    const messagesWithSystem = messages.some((m) => m.role === "system")
-      ? messages
-      : [systemMessage, ...messages];
+      // Add system message with tool definitions if not present
+      const systemMessage: LLMMessage = {
+        role: "system",
+        content: this.getSystemPrompt(),
+      };
 
-    // Lightweight @refs / workbook:// references:
-    // If the user explicitly references workbook://... paths, preload those files (fail-soft)
-    // and inject their contents as an additional system message for grounding + citations.
-    const refSystem = await this.buildExplicitWorkbookRefsSystemMessage(messagesWithSystem);
-    const finalMessages =
-      refSystem && messagesWithSystem[0]?.role === "system"
-        ? [messagesWithSystem[0], refSystem, ...messagesWithSystem.slice(1)]
-        : refSystem
-          ? [refSystem, ...messagesWithSystem]
-          : messagesWithSystem;
+      const messagesWithSystem = messages.some((m) => m.role === "system")
+        ? messages
+        : [systemMessage, ...messages];
 
-    let response: string;
-    try {
-      switch (this.config.provider) {
-        case "openai":
-          response = await this.chatWithToolsOpenAI(finalMessages);
-          break;
-        case "claude":
-          response = await this.chatWithToolsClaude(finalMessages);
-          break;
-        case "ollama":
-          response = await this.chatWithToolsOllama(finalMessages);
-          break;
-        default:
-          throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
+      // Lightweight @refs / workbook:// references:
+      // If the user explicitly references workbook://... paths, preload those files (fail-soft)
+      // and inject their contents as an additional system message for grounding + citations.
+      const refSystem = await this.buildExplicitWorkbookRefsSystemMessage(messagesWithSystem);
+      const finalMessages =
+        refSystem && messagesWithSystem[0]?.role === "system"
+          ? [messagesWithSystem[0], refSystem, ...messagesWithSystem.slice(1)]
+          : refSystem
+            ? [refSystem, ...messagesWithSystem]
+            : messagesWithSystem;
+
+      let response: string;
+      try {
+        switch (this.config.provider) {
+          case "openai":
+            response = await this.chatWithToolsOpenAI(finalMessages);
+            break;
+          case "claude":
+            response = await this.chatWithToolsClaude(finalMessages);
+            break;
+          case "ollama":
+            response = await this.chatWithToolsOllama(finalMessages);
+            break;
+          default:
+            throw new Error(`Unsupported LLM provider: ${this.config.provider}`);
+        }
+      } finally {
+        // Ensure per-request override never leaks across calls.
+        this.disableContextScopingForRequest = false;
       }
-    } finally {
-      // Ensure per-request override never leaks across calls.
-      this.disableContextScopingForRequest = false;
-    }
 
-    // Add file references if any files were read
-    if (this.filesReadInCurrentChat.length > 0) {
-      const references = this.filesReadInCurrentChat.map(f => {
-        // URL-encode the file path to handle spaces and special characters
-        const encodedPath = f.filePath.split('/').map(part => encodeURIComponent(part)).join('/');
-        return `📄 [${f.filename}](workbook://${f.workbookId}/${encodedPath})`;
-      }).join('\n\n');
-      response += `\n\n---\n\n**Sources:**\n\n${references}`;
-    }
+      // Add file references if any files were read
+      if (this.filesReadInCurrentChat.length > 0) {
+        const references = this.filesReadInCurrentChat.map(f => {
+          // URL-encode the file path to handle spaces and special characters
+          const encodedPath = f.filePath.split('/').map(part => encodeURIComponent(part)).join('/');
+          return `📄 [${f.filename}](workbook://${f.workbookId}/${encodedPath})`;
+        }).join('\n\n');
+        response += `\n\n---\n\n**Sources:**\n\n${references}`;
+      }
 
-    return response;
+      return response;
+    });
   }
 
   private parseWorkbookRefs(text: string): Array<{ workbookId: string; filePath: string; raw: string }> {
@@ -391,10 +487,31 @@ export class LLMService {
       if (seen.has(key)) continue;
       seen.add(key);
 
+      // Report explicit ref loading as an "action" in the activity stream (not a model tool-call).
+      const stepId = `ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      this.toolStartTimes.set(stepId, Date.now());
+      this.emitActivity({
+        kind: "tool_start",
+        stepId,
+        toolName: "load_workbook_ref",
+        serverName: "core",
+        argsSummary: this.safeArgsSummary({ workbookId: ref.workbookId, filePath: ref.filePath }),
+      });
+
       if (!isInScope(ref.workbookId)) {
         blocks.push(
           `- ${ref.raw}\n  (Out of active Context scope; content not loaded.)`,
         );
+        const start = this.toolStartTimes.get(stepId) || Date.now();
+        this.emitActivity({
+          kind: "tool_end",
+          stepId,
+          toolName: "load_workbook_ref",
+          serverName: "core",
+          ok: false,
+          durationMs: Date.now() - start,
+          error: "Out of active Context scope",
+        });
         continue;
       }
 
@@ -420,10 +537,29 @@ export class LLMService {
         blocks.push(
           `- ${ref.raw}\n\nFile content:\n${cap}`,
         );
+        const start = this.toolStartTimes.get(stepId) || Date.now();
+        this.emitActivity({
+          kind: "tool_end",
+          stepId,
+          toolName: "load_workbook_ref",
+          serverName: "core",
+          ok: true,
+          durationMs: Date.now() - start,
+        });
       } catch (e) {
         blocks.push(
           `- ${ref.raw}\n  (Failed to load: ${e instanceof Error ? e.message : "unknown error"})`,
         );
+        const start = this.toolStartTimes.get(stepId) || Date.now();
+        this.emitActivity({
+          kind: "tool_end",
+          stepId,
+          toolName: "load_workbook_ref",
+          serverName: "core",
+          ok: false,
+          durationMs: Date.now() - start,
+          error: e instanceof Error ? e.message : "Failed to load",
+        });
       }
     }
 
@@ -511,12 +647,22 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     toolName: string,
     args: Record<string, any>,
   ): Promise<string> {
+    const stepId = `tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     try {
       const serverName = this.toolRegistry.getToolServer(toolName);
 
       if (!serverName) {
         return `Unknown tool: ${toolName}`;
       }
+
+      this.toolStartTimes.set(stepId, Date.now());
+      this.emitActivity({
+        kind: "tool_start",
+        stepId,
+        toolName,
+        serverName,
+        argsSummary: this.safeArgsSummary(args),
+      });
 
       // Load active context scope once per tool execution burst.
       // This is used to scope core list/search tools and (when supported) to scope RAG search/list tools.
@@ -534,7 +680,17 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
 
       // Core tools are executed internally
       if (serverName === "core") {
-        return this.executeCoreTool(toolName, args);
+        const out = await this.executeCoreTool(toolName, args);
+        const start = this.toolStartTimes.get(stepId) || Date.now();
+        this.emitActivity({
+          kind: "tool_end",
+          stepId,
+          toolName,
+          serverName,
+          ok: true,
+          durationMs: Date.now() - start,
+        });
+        return out;
       }
 
       // Use ToolProviderRegistry for tool execution (Phase 3 abstraction)
@@ -559,9 +715,30 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
             // Parse RAG response to track sources
             this.trackFilesFromRAGResponse(content);
             // Add explicit instructions for using read_workbook_file with RAG results
-            return content + 
+            const final =
+              content +
               `\n\n[IMPORTANT: When you need to read a file from the search results above, use read_workbook_file with the exact Workbook ID and Path shown. For example, if you see "Workbook ID: ac1000-main-project" and "Path: documents/spreadsheet-2025-12-12T19-46-01.is", call read_workbook_file(workbookId="ac1000-main-project", filePath="documents/spreadsheet-2025-12-12T19-46-01.is"). The workbook ID is the directory name, not a UUID.]`;
+            const start = this.toolStartTimes.get(stepId) || Date.now();
+            this.emitActivity({
+              kind: "tool_end",
+              stepId,
+              toolName,
+              serverName,
+              ok: true,
+              durationMs: Date.now() - start,
+            });
+            return final;
           }
+
+          const start = this.toolStartTimes.get(stepId) || Date.now();
+          this.emitActivity({
+            kind: "tool_end",
+            stepId,
+            toolName,
+            serverName,
+            ok: true,
+            durationMs: Date.now() - start,
+          });
           
           // Handle different response formats
           if (result?.result) {
@@ -578,6 +755,16 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           // Tool execution failed
           const errorMsg = result.error?.message || 'Unknown execution error';
           console.error(`[LLM] Error executing tool ${toolName}:`, errorMsg);
+          const start = this.toolStartTimes.get(stepId) || Date.now();
+          this.emitActivity({
+            kind: "tool_end",
+            stepId,
+            toolName,
+            serverName,
+            ok: false,
+            durationMs: Date.now() - start,
+            error: errorMsg,
+          });
           return `Error executing ${toolName}: ${errorMsg}`;
         }
       } else if (this.mcpService) {
@@ -597,9 +784,30 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
             // Parse RAG response to track sources
             this.trackFilesFromRAGResponse(content);
             // Add explicit instructions for using read_workbook_file with RAG results
-            return content +
+            const final =
+              content +
               `\n\n[IMPORTANT: When you need to read a file from the search results above, use read_workbook_file with the exact Workbook ID and Path shown. For example, if you see "Workbook ID: ac1000-main-project" and "Path: documents/spreadsheet-2025-12-12T19-46-01.is", call read_workbook_file(workbookId="ac1000-main-project", filePath="documents/spreadsheet-2025-12-12T19-46-01.is"). The workbook ID is the directory name, not a UUID.]`;
+            const start = this.toolStartTimes.get(stepId) || Date.now();
+            this.emitActivity({
+              kind: "tool_end",
+              stepId,
+              toolName,
+              serverName,
+              ok: true,
+              durationMs: Date.now() - start,
+            });
+            return final;
           }
+
+          const start = this.toolStartTimes.get(stepId) || Date.now();
+          this.emitActivity({
+            kind: "tool_end",
+            stepId,
+            toolName,
+            serverName,
+            ok: true,
+            durationMs: Date.now() - start,
+          });
 
           // Handle different response formats
           if (result?.result) {
@@ -615,12 +823,37 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           console.error(`[LLM] Error executing MCP tool ${toolName}:`, errorMsg);
+          const start = this.toolStartTimes.get(stepId) || Date.now();
+          this.emitActivity({
+            kind: "tool_end",
+            stepId,
+            toolName,
+            serverName,
+            ok: false,
+            durationMs: Date.now() - start,
+            error: errorMsg,
+          });
           return `Error executing ${toolName}: ${errorMsg}`;
         }
       }
 
       return `Error: No tool execution mechanism available for ${toolName}`;
     } catch (error) {
+      try {
+        const serverName = this.toolRegistry.getToolServer(toolName) || "unknown";
+        const start = this.toolStartTimes.get(stepId) || Date.now();
+        this.emitActivity({
+          kind: "tool_end",
+          stepId,
+          toolName,
+          serverName,
+          ok: false,
+          durationMs: Date.now() - start,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } catch {
+        // ignore
+      }
       return `Error executing ${toolName}: ${error instanceof Error ? error.message : String(error)}`;
     }
   }

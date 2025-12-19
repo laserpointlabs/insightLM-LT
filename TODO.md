@@ -178,6 +178,10 @@ This file is the single source of truth for roadmap planning.
   - [x] Add chip inline in prompt text
   - [x] Fix blank spaces after inline chip isertion
 - [x] Add toggle on Chat settings button, open/close
+- [ ] Spreadsheets are opening white sometimes, not sure what the trigger is but I can fix by reloading the the app under view reload. 
+
+
+- [ ] add search to workbooks header
 
 
 
@@ -189,3 +193,4 @@ This file is the single source of truth for roadmap planning.
 - [ ] Fix the double sources
   - [ ] Improve the visual appeal of the sources
 - [ ] Add split to tabs area to allow side by side viewer of mutliple tabs
+- [ ] Clean up smoke testing worbooks and Dashboards

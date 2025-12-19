@@ -17,17 +17,18 @@ export function setupChatIPC(chatService: ChatService) {
 
   ipcMain.handle(
     "chat:append",
-    async (_evt, params: { contextId: string; role: "user" | "assistant"; content: string }) => {
+    async (_evt, params: { contextId: string; role: "user" | "assistant"; content: string; meta?: any }) => {
       const contextId = String(params?.contextId || "");
       const role = params?.role;
       const content = String(params?.content || "");
+      const messageMeta = params?.meta && typeof params.meta === "object" ? params.meta : undefined;
       const sessionId = toSessionId(contextId);
 
       if (role !== "user" && role !== "assistant") {
         throw new Error("Invalid chat role");
       }
 
-      const msg = chatService.appendMessage(sessionId, role, content, { contextId });
+      const msg = chatService.appendMessage(sessionId, role, content, { contextId, messageMeta });
       return { message: msg };
     },
   );
@@ -40,4 +41,3 @@ export function setupChatIPC(chatService: ChatService) {
     return { sessionId: session.id, contextId, messages: session.messages || [] };
   });
 }
-

@@ -311,9 +311,20 @@ app.whenReady().then(async () => {
   }
 
   // LLM IPC handlers
-  ipcMain.handle("llm:chat", async (_, messages: any[]) => {
+  // NOTE: second param is optional requestId for renderer-side activity correlation.
+  ipcMain.handle("llm:chat", async (evt, messages: any[], requestId?: string) => {
     try {
-      return await llmService.chat(messages);
+      const rid = typeof requestId === "string" && requestId.trim() ? requestId.trim() : undefined;
+      return await llmService.chat(messages, {
+        requestId: rid,
+        emitActivity: (activityEvt) => {
+          try {
+            evt.sender.send("llm:activity", activityEvt);
+          } catch {
+            // ignore
+          }
+        },
+      });
     } catch (error) {
       console.error("Error in LLM chat:", error);
       throw error;

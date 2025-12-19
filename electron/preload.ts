@@ -98,14 +98,19 @@ try {
   },
 
   llm: {
-    chat: (messages: any[]) => ipcRenderer.invoke("llm:chat", messages),
+    chat: (messages: any[], requestId?: string) => ipcRenderer.invoke("llm:chat", messages, requestId),
     listModels: () => ipcRenderer.invoke("llm:listModels"),
+    onActivity: (cb: (evt: any) => void) => {
+      const handler = (_evt: any, payload: any) => cb(payload);
+      ipcRenderer.on("llm:activity", handler);
+      return () => ipcRenderer.removeListener("llm:activity", handler);
+    },
   },
 
   // Chat persistence (single-thread per active context)
   chat: {
     getThread: (contextId: string) => ipcRenderer.invoke("chat:getThread", contextId),
-    append: (params: { contextId: string; role: "user" | "assistant"; content: string }) =>
+    append: (params: { contextId: string; role: "user" | "assistant"; content: string; meta?: any }) =>
       ipcRenderer.invoke("chat:append", params),
     clear: (contextId: string) => ipcRenderer.invoke("chat:clear", contextId),
   },

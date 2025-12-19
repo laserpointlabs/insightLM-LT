@@ -77,13 +77,15 @@ export interface ElectronAPI {
         role: "user" | "assistant" | "system";
         content: string;
       }>,
+      requestId?: string,
     ) => Promise<string>;
     listModels?: () => Promise<{ models: Array<{ id: string; label?: string }>; error?: string }>;
+    onActivity?: (cb: (evt: any) => void) => () => void;
   };
 
   chat?: {
     getThread: (contextId: string) => Promise<{ sessionId: string; contextId: string; messages: any[] }>;
-    append: (params: { contextId: string; role: "user" | "assistant"; content: string }) => Promise<{ message: any }>;
+    append: (params: { contextId: string; role: "user" | "assistant"; content: string; meta?: any }) => Promise<{ message: any }>;
     clear: (contextId: string) => Promise<{ sessionId: string; contextId: string; messages: any[] }>;
   };
 

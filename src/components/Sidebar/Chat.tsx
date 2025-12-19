@@ -13,6 +13,7 @@ type PersistedChatMessage = {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  meta?: any;
 };
 
 interface ChatProps {
@@ -28,7 +29,17 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState<null | { status: "waiting" | "streaming"; text: string }>(null);
+  const [activity, setActivity] = useState<
+    Array<{ stepId: string; text: string; status: "running" | "ok" | "error"; ts: number; detail?: string }>
+  >([]);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const activeRequestIdRef = useRef<string | null>(null);
+  const unsubscribeActivityRef = useRef<null | (() => void)>(null);
+  const activityRef = useRef<
+    Array<{ stepId: string; text: string; status: "running" | "ok" | "error"; ts: number; detail?: string }>
+  >([]);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const { openDocument } = useDocumentStore();
 
   const [contextPicker, setContextPicker] = useState<{
@@ -74,10 +85,25 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     return id;
   }, []);
 
-  // Scroll to bottom as messages or streaming text updates.
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    // Prefer scrolling the sentinel into view; fall back to forcing the scroll container.
+    try {
+      endRef.current?.scrollIntoView({ block: "end", behavior });
+    } catch {
+      // ignore
+    }
+    try {
+      const el = chatScrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Keep the chat pinned to bottom while messages/streaming/activity update (demo-friendly).
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, streaming?.text, activeTab]);
+    scrollToBottom("auto");
+  }, [messages.length, streaming?.text, streaming?.status, activity.length, activeTab, scrollToBottom]);
   const [contextStatus, setContextStatus] = useState<{
     loading: boolean;
     scopeMode: "all" | "context";
@@ -419,6 +445,116 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     };
   }, [loadMentionItems]);
 
+  useEffect(() => {
+    // Subscribe once; we filter by activeRequestIdRef.
+    if (!window.electronAPI?.llm?.onActivity) return;
+    if (unsubscribeActivityRef.current) return;
+    unsubscribeActivityRef.current = window.electronAPI.llm.onActivity((evt: any) => {
+      try {
+        const rid = activeRequestIdRef.current;
+        if (!rid || !evt || evt.requestId !== rid) return;
+
+        if (evt.kind === "thinking") {
+          setActivity((prev) => [
+            ...prev,
+            { stepId: `thinking-${evt.ts || Date.now()}`, text: evt.message || "Thinking…", status: "running", ts: evt.ts || Date.now() },
+          ]);
+          return;
+        }
+        if (evt.kind === "tool_start") {
+          const args = evt.argsSummary ? ` ${evt.argsSummary}` : "";
+          setActivity((prev) => [
+            ...prev,
+            {
+              stepId: String(evt.stepId),
+              text: `Using ${evt.toolName}`,
+              status: "running",
+              ts: evt.ts || Date.now(),
+              detail: `${evt.serverName}${args ? ` · ${args}` : ""}`,
+            },
+          ]);
+          return;
+        }
+        if (evt.kind === "tool_end") {
+          setActivity((prev) =>
+            prev.map((it) => {
+              if (it.stepId !== String(evt.stepId)) return it;
+              const dur = typeof evt.durationMs === "number" ? `${Math.max(0, Math.round(evt.durationMs))}ms` : undefined;
+              const suffix = evt.ok ? (dur ? ` ✓ (${dur})` : " ✓") : (dur ? ` ✕ (${dur})` : " ✕");
+              const detail = evt.ok ? it.detail : `${it.detail || ""}${it.detail ? " · " : ""}${String(evt.error || "Tool failed")}`;
+              return { ...it, text: `${it.text}${suffix}`, status: evt.ok ? "ok" : "error", detail };
+            }),
+          );
+        }
+
+        // Ensure the newest activity is visible during execution without requiring manual scroll.
+        // Use rAF so it runs after the DOM updates.
+        try {
+          requestAnimationFrame(() => scrollToBottom("auto"));
+        } catch {
+          // ignore
+        }
+      } catch {
+        // ignore
+      }
+    });
+    return () => {
+      try {
+        unsubscribeActivityRef.current?.();
+      } catch {
+        // ignore
+      }
+      unsubscribeActivityRef.current = null;
+    };
+  }, [scrollToBottom]);
+
+  useEffect(() => {
+    activityRef.current = activity;
+  }, [activity]);
+
+  const renderActivityBlock = useCallback(
+    (
+      items: Array<{ stepId: string; text: string; status: "running" | "ok" | "error"; ts: number; detail?: string }>,
+      defaultOpen: boolean,
+    ) => {
+      if (!items || items.length === 0) return null;
+      return (
+        <div className="mt-1 rounded-lg border border-gray-200 bg-white px-2 py-1" data-testid={testIds.chat.activity.container}>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 text-left text-[11px] text-gray-600"
+            onClick={() => setActivityOpen((v) => (defaultOpen ? !v : !v))}
+            data-testid={testIds.chat.activity.toggle}
+          >
+            <span className="font-semibold">Activity</span>
+            <span className="text-gray-500">{(activityOpen || defaultOpen) ? "Hide" : "Show"}</span>
+          </button>
+          {(activityOpen || defaultOpen ? items : items).map((a) => (
+            <div
+              key={a.stepId}
+              className="mt-1 text-[11px] text-gray-600"
+              data-testid={testIds.chat.activity.item(a.stepId)}
+              title={a.detail || a.text}
+            >
+              <div className="flex items-start gap-2">
+                <span
+                  className={`mt-[2px] inline-block h-1.5 w-1.5 rounded-full ${
+                    a.status === "running" ? "bg-blue-500" : a.status === "ok" ? "bg-green-500" : "bg-red-500"
+                  }`}
+                />
+                <div className="min-w-0">
+                  <div className="whitespace-pre-wrap">{a.text}</div>
+                  {a.detail && <div className="whitespace-pre-wrap text-gray-400">{a.detail}</div>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    },
+    [activityOpen],
+  );
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
@@ -432,6 +568,8 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     if (!ctxId) return;
 
     setLoading(true);
+    setActivity([]);
+    setActivityOpen(false);
 
     try {
       // Persist + render user message first (deterministic ordering via backend seq).
@@ -470,7 +608,9 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
 
       // Show a placeholder assistant bubble immediately (while waiting on the LLM).
       setStreaming({ status: "waiting", text: "" });
-      const response = await window.electronAPI.llm.chat(historyForLLM);
+      const requestId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      activeRequestIdRef.current = requestId;
+      const response = await window.electronAPI.llm.chat(historyForLLM, requestId);
 
       // Stream the response into the UI (typewriter) to improve perceived latency.
       // This remains deterministic/testable and works even when provider/tool-calling isn't stream-capable.
@@ -485,11 +625,15 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         await new Promise<void>((r) => setTimeout(r, 16));
       }
       setStreaming(null);
+      activeRequestIdRef.current = null;
 
       const appendedAssistant = await window.electronAPI?.chat?.append?.({
         contextId: ctxId,
         role: "assistant",
         content: response,
+        // Persist activity trace with the assistant message (so it stays in the transcript on reload),
+        // but DO NOT include it in the LLM prompt history.
+        meta: activityRef.current?.length ? { activity: activityRef.current } : undefined,
       });
       const assistantMsg = appendedAssistant?.message as PersistedChatMessage | undefined;
       if (assistantMsg) {
@@ -497,6 +641,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
       }
     } catch (error) {
       setStreaming(null);
+      activeRequestIdRef.current = null;
       const ctxId2 = contextStatus.activeContextId;
       if (ctxId2) {
         try {
@@ -716,7 +861,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
+      <div ref={chatScrollRef} className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
         {contextStatus.loading && (
           <div className="mt-4 text-center text-sm text-gray-500" data-testid={testIds.chat.emptyState.loading}>
             {emptyMessage}
@@ -957,6 +1102,10 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                     >
                       <div className="w-full max-w-[85%]">
                         <ChatMessage role={msg.role} content={msg.content} />
+                        {!isUser &&
+                          msg?.meta?.activity &&
+                          Array.isArray(msg.meta.activity) &&
+                          renderActivityBlock(msg.meta.activity, true)}
                       </div>
                     </div>
                   );
@@ -976,6 +1125,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                       >
                         {streaming.status === "waiting" && !streaming.text ? "Thinking…" : streaming.text}
                       </div>
+                      {renderActivityBlock(activity, true)}
                     </div>
                   </div>
                 )}
