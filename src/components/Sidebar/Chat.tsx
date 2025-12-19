@@ -6,6 +6,7 @@ import { testIds } from "../../testing/testIds";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import { MentionItem, MentionTextInput } from "../MentionTextInput";
 import { useDocumentStore } from "../../store/documentStore";
+import { useLayoutStore } from "../../store/layoutStore";
 
 type PersistedChatMessage = {
   id: string;
@@ -41,6 +42,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   const endRef = useRef<HTMLDivElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const { openDocument } = useDocumentStore();
+  const { collapsedViews, toggleViewCollapse } = useLayoutStore();
 
   const [contextPicker, setContextPicker] = useState<{
     loading: boolean;
@@ -352,6 +354,16 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                 chatKey: "main",
                 filename: "Chat",
               } as any);
+
+              // UX: if the user pops Chat out into a main tab, collapse the sidebar Chat view
+              // so we don't show duplicate chat UIs at once.
+              try {
+                if (!collapsedViews.has("chat")) {
+                  toggleViewCollapse("chat");
+                }
+              } catch {
+                // ignore
+              }
             }}
             className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
             title="Pop out Chat to a tab"
@@ -362,7 +374,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         </div>
       );
     }
-  }, [onActionButton, handleNewChat, handleShowHistory, handleShowSettings, openDocument]);
+  }, [onActionButton, handleNewChat, handleShowHistory, handleShowSettings, openDocument, collapsedViews, toggleViewCollapse]);
 
   useEffect(() => {
     loadContextStatus();

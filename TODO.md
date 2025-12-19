@@ -183,14 +183,14 @@ This file is the single source of truth for roadmap planning.
 - [x] Store chat tab state
 - [x] When a user selectes a new context auto change to scoped if in the all state.
 - [x] Ensure tabs remain open after refrech
-- [ ] Auto close the chat view when we pop-out to the tabbed view
+- [x] Auto close the chat view when we pop-out to the tabbed view
 - [ ] Workbooks listed natrually to context so a user can just select them without create a spcial context view of just a single workbook. This can also be a general list in the context chip.
 
  - [ ] Add automationState.workbooks mapping (name → id/path) to enable deterministic Workbooks UI automation using existing testIds.
  - [ ] Improved handling of the views and collapsed stated to preved overlaping edge of screen
- - [ ] Remove the workds Context: and Scope: frm
- 
+ - [ ] Remove the workds Context: and Scope: from the chat text area chips.
 
+ 
 ## Other fixes and bugs for later
 - [ ] change move icon to ↓↑ in 
 - [ ] Add loadng rotator and reports to user when  at windows loading phase
@@ -222,3 +222,8 @@ This file is the single source of truth for roadmap planning.
 - [ ] Traning Paks: Add extension like traning for knowledge that has been curated and tested users can purchase and recieve testing data (like the old days with anasys :)
 - [ ] Add 'Planning and Teaming' mcp
 - [ ] Extension packages (Group extensions in a package for sale)
+
+### Teams
+- [ ] Add AI type chip for Teams/Agent/Ask/Plan
+- [ ] Add ability to apply a teaming effort to working a solution in the chat
+- [ ] Devlope a methdd to create, test, and optimze a team of agents that can better anwser questions as SMEs (need leanring kits)
