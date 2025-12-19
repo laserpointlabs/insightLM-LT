@@ -216,7 +216,9 @@ This file is the single source of truth for roadmap planning.
 - [ ] file context modal (save as... → pdf, word, excel)
 - [ ] Double click view to collas views below and expand view fully
 - [ ] Quickworkbooks should highlihgt the selected context workbook in hte contextx view... or add an (actvive) indicaotor.
+- [ ] Add copy/paste (ctrl+c/v/d...) commands to workbooks view. 
 
+- [ ] Maybe the dashboard shold always be scoped by a @ since we are looking to show particuar things, remove it from the all scoping and ask the user to use a '@' but then what if I want a overall count of docs? Do we add an @All scope?
 
 ### Major features
 - [ ] Git integration
