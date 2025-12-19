@@ -12,6 +12,7 @@ import { MoveFolderDialog } from "../MoveFolderDialog";
 import { MoveDocumentDialog } from "../MoveDocumentDialog";
 import { ConflictResolutionDialog, type CollisionResolution } from "../ConflictResolutionDialog";
 import { testIds } from "../../testing/testIds";
+import { setAutomationState } from "../../testing/automationState";
 
 interface WorkbooksViewProps {
   onActionButton?: (button: React.ReactNode) => void;
@@ -217,8 +218,43 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
             : [],
         }));
         setWorkbooks(normalized);
+
+        // Expose deterministic workbooks snapshot for automation:
+        // allows mapping name -> id -> doc.path without fuzzy selectors.
+        try {
+          const cleaned = normalized.map((w: any) => {
+            const id = String(w?.id || "");
+            const name = String(w?.name || id);
+            const folders: string[] = Array.isArray(w?.folders) ? w.folders.map((f: any) => String(f)) : [];
+            const docsRaw: any[] = Array.isArray(w?.documents) ? w.documents : [];
+            const documents = docsRaw
+              .map((d: any) => ({
+                filename: String(d?.filename || ""),
+                path: String(d?.path || ""),
+                archived: !!d?.archived,
+                folder: typeof d?.folder === "string" ? d.folder : undefined,
+                docId: typeof d?.docId === "string" ? d.docId : undefined,
+              }))
+              .filter((d) => d.filename && d.path);
+
+            // Deterministic ordering
+            documents.sort((a, b) => a.path.localeCompare(b.path) || a.filename.localeCompare(b.filename));
+            folders.sort((a, b) => a.localeCompare(b));
+
+            return { id, name, archived: !!w?.archived, folders, documents };
+          });
+          cleaned.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+          setAutomationState({ workbooks: { workbooks: cleaned, updatedAt: Date.now() } });
+        } catch {
+          // ignore
+        }
       } else {
         setWorkbooks([]);
+        try {
+          setAutomationState({ workbooks: { workbooks: [], updatedAt: Date.now() } });
+        } catch {
+          // ignore
+        }
       }
     } catch (err) {
       console.error("Failed to load workbooks:", err);
