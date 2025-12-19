@@ -419,14 +419,10 @@ async function run() {
     `);
     if (!firstChatMention) fail("Chat @ mention menu opened but had no items");
     await clickSelector(evaluate, `button[data-testid="${firstChatMention}"]`);
-    const hasWbRefInChat = await evaluate(`
-      (() => {
-        const el = document.querySelector('textarea[data-testid="chat-input"]');
-        return !!el && (el.value || "").includes("workbook://");
-      })()
-    `);
-    if (!hasWbRefInChat) fail("Selecting a chat @ mention did not insert a workbook:// reference");
-    console.log("✅ Chat @ mention inserts workbook:// reference");
+    // Cursor-style: mention becomes a ref "chip" (not a raw workbook:// string in the textarea).
+    const chipOk = await waitForSelector(evaluate, 'div[data-testid="chat-refs"] [data-testid^="chat-ref-"]', 20000);
+    if (!chipOk) fail("Selecting a chat @ mention did not create a ref chip");
+    console.log("✅ Chat @ mention creates ref chip");
 
     const msg = `smoke ping ${Date.now()}`;
     await setInputValue(evaluate, 'textarea[data-testid="chat-input"]', msg);

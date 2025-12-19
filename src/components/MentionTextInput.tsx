@@ -28,6 +28,23 @@ interface MentionTextInputProps {
   menuTestId?: string;
   itemTestId?: (item: MentionItem) => string;
   /**
+   * Optional callback invoked when a mention item is selected.
+   * Useful for "chip" UX (Cursor-style) where refs are rendered separately from the raw text.
+   */
+  onSelectMention?: (item: MentionItem) => void;
+  /**
+   * Provide a custom replacement string for the selected mention.
+   * This replaces the current "@query" token (from "@" to caret) with the returned string.
+   * Return null to keep the input unchanged.
+   */
+  getMentionReplacementText?: (item: MentionItem) => string | null;
+  /**
+   * Optional inline overlay renderer for advanced UX (e.g., inline chips).
+   * Rendered inside the input container (absolute inset-0).
+   */
+  renderOverlay?: (value: string) => React.ReactNode;
+  overlayClassName?: string;
+  /**
    * Provides the universe of mention items (workbooks/folders/files).
    * The component filters client-side based on the currently typed query after '@'.
    */
@@ -70,6 +87,10 @@ export function MentionTextInput({
   inputTestId,
   menuTestId,
   itemTestId,
+  onSelectMention,
+  getMentionReplacementText,
+  renderOverlay,
+  overlayClassName,
   mentionItems = [],
   onEnterWhenMenuOpen,
   onEnter,
@@ -192,10 +213,22 @@ export function MentionTextInput({
     const caret = el.selectionStart ?? value.length;
     const ms = getMentionQuery(value, caret);
     if (!ms) return;
+    // Inform parent first (allows "chip" UX to capture the selection deterministically).
+    onSelectMention?.(item);
+
     const before = value.slice(0, ms.start);
     const after = value.slice(caret);
-    const inserted = `${before}${item.insertText} ${after}`;
-    const nextCaret = (before + item.insertText + " ").length;
+    const replacement =
+      typeof getMentionReplacementText === "function"
+        ? getMentionReplacementText(item)
+        : item.insertText;
+    if (replacement == null) {
+      setMenuOpen(false);
+      setMentionState(null);
+      return;
+    }
+    const inserted = `${before}${replacement} ${after}`;
+    const nextCaret = (before + replacement + " ").length;
     onChange(inserted);
     // Restore caret after React updates.
     setTimeout(() => {
@@ -212,6 +245,11 @@ export function MentionTextInput({
 
   return (
     <div ref={containerRef} className={`relative ${containerClassName || ""}`}>
+      {renderOverlay && (
+        <div className={`absolute inset-0 ${overlayClassName || ""}`}>
+          {renderOverlay(value)}
+        </div>
+      )}
       {multiline ? (
         <textarea
           ref={inputRef as any}

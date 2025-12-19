@@ -162,9 +162,14 @@ This file is the single source of truth for roadmap planning.
 ### Quick Fixes and Bugs
 - [x] @ - context direction
 - [ ] edit llm.comfig in tab to add providers
-- [ ] Show tool useage and thinking as small or simple reporting in the chat area
+- [ ] Show tool useage reporting and thinking as small or simple reporting in the chat area
 - [ ] Allow user to move chat area to tab for chat first working
 - [x] Move scope indicator to chat area, even switch combobox
 - [x] Show full name of files not ellipsis in @
 - [ ] change move icon to ↓↑ in 
 - [ ] fix startup left trim of the views area
+- [x] Show selected object as a chip and highlighted for clearity
+  - [x] Trim chip to just the object name
+  - [x] Add chip inline in prompt text
+  - [ ] Fix blank spaces after inline chip isertion
+- [ ] Add loadng rotator and reports to user when  at windows loakding phase

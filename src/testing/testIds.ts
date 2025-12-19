@@ -65,6 +65,11 @@ export const testIds = {
       item: (kind: string, id: string) =>
         `chat-mention-item-${kind}-${encodeURIComponent(String(id || ""))}`,
     },
+    refs: {
+      container: "chat-refs",
+      chip: (key: string) => `chat-ref-${encodeURIComponent(String(key || ""))}`,
+      remove: (key: string) => `chat-ref-remove-${encodeURIComponent(String(key || ""))}`,
+    },
     streaming: {
       container: "chat-streaming",
       content: "chat-streaming-content",

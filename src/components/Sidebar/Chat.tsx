@@ -4,6 +4,7 @@ import { AddIcon, HistoryIcon, GearIcon, SendIcon } from "../Icons";
 import { testIds } from "../../testing/testIds";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import { MentionItem, MentionTextInput } from "../MentionTextInput";
+import { useDocumentStore } from "../../store/documentStore";
 
 type PersistedChatMessage = {
   id: string;
@@ -27,6 +28,27 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState<null | { status: "waiting" | "streaming"; text: string }>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const { openDocument } = useDocumentStore();
+
+  // Inline ref tokens:
+  // Keep visible text as "@Name" so caret behaves naturally, and encode a short id in invisible separators
+  // so we can map back to workbook://... on send.
+  const ZW = "\u2063"; // INVISIBLE SEPARATOR
+  const REF_TOKEN_RE = new RegExp(`@([^\\n${ZW}]+)${ZW}([^${ZW}]+)${ZW}`, "g");
+  const refCounterRef = useRef(0);
+  const refIdByInsertTextRef = useRef<Map<string, string>>(new Map());
+  const [refMap, setRefMap] = useState<
+    Record<string, { key: string; displayLabel: string; fullLabel: string; insertText: string; kind: string }>
+  >({});
+
+  const getOrCreateRefId = useCallback((insertText: string) => {
+    const k = String(insertText || "");
+    const existing = refIdByInsertTextRef.current.get(k);
+    if (existing) return existing;
+    const id = `r${++refCounterRef.current}`;
+    refIdByInsertTextRef.current.set(k, id);
+    return id;
+  }, []);
 
   // Scroll to bottom as messages or streaming text updates.
   useEffect(() => {
@@ -54,6 +76,9 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     setActiveTab("chat");
     setMessages([]);
     setInput("");
+    setRefMap({});
+    refIdByInsertTextRef.current = new Map();
+    refCounterRef.current = 0;
   }, [contextStatus.activeContextId]);
 
   const handleShowHistory = useCallback(() => {
@@ -243,8 +268,11 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
-    const userMessage = input.trim();
+    const raw = input.trim();
     setInput("");
+    setRefMap({});
+    refIdByInsertTextRef.current = new Map();
+    refCounterRef.current = 0;
 
     const ctxId = contextStatus.activeContextId;
     if (!ctxId) return;
@@ -253,10 +281,28 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
 
     try {
       // Persist + render user message first (deterministic ordering via backend seq).
+      const seen = new Set<string>();
+      const usedKeys: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = REF_TOKEN_RE.exec(raw)) !== null) {
+        const key = String(m[2] || "");
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        usedKeys.push(key);
+      }
+      const usedRefs = usedKeys.map((k) => refMap[k]).filter(Boolean);
+      const userMessage = raw
+        .replace(REF_TOKEN_RE, (_all, visibleName) => `@${String(visibleName || "").trim()}`)
+        .replace(new RegExp(ZW, "g"), "")
+        .trim();
+      const userMessageWithRefs =
+        usedRefs.length > 0
+          ? `${userMessage}\n\n${usedRefs.map((r) => r.insertText).join("\n")}`
+          : userMessage;
       const appendedUser = await window.electronAPI?.chat?.append?.({
         contextId: ctxId,
         role: "user",
-        content: userMessage,
+        content: userMessageWithRefs,
       });
       const userMsg = appendedUser?.message as PersistedChatMessage | undefined;
       if (userMsg) {
@@ -781,11 +827,121 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                 rows={2}
                 placeholder="Ask about your workbooks… (type @ to reference) — Ctrl/Cmd+Enter to send"
                 containerClassName="w-full"
-                className="w-full resize-none bg-transparent px-2 py-1 pr-10 text-sm leading-5 text-gray-900 placeholder:text-gray-400 focus:outline-none max-h-48 overflow-y-auto"
+                className="w-full resize-none bg-transparent px-2 py-1 pr-10 text-sm leading-5 text-transparent caret-gray-900 placeholder:text-gray-400 focus:outline-none max-h-48 overflow-y-auto"
                 inputTestId={testIds.chat.input}
                 menuTestId={testIds.chat.mentions.menu}
                 itemTestId={(it) => testIds.chat.mentions.item(it.kind, it.id)}
                 mentionItems={mentionItems}
+                getMentionReplacementText={(it) => {
+                  const displayLabel =
+                    it.kind === "file"
+                      ? String(it.label).split("/").pop() || it.label
+                      : it.kind === "folder"
+                        ? String(it.label).split("/").pop() || it.label
+                        : it.label;
+                  const id = getOrCreateRefId(it.insertText || `${it.kind}:${it.id}`);
+                  return `@${displayLabel}${ZW}${id}${ZW}`;
+                }}
+                onSelectMention={(it) => {
+                  const fullLabel = it.label;
+                  const displayLabel =
+                    it.kind === "file"
+                      ? String(it.label).split("/").pop() || it.label
+                      : it.kind === "folder"
+                        ? String(it.label).split("/").pop() || it.label
+                        : it.label;
+                  const id = getOrCreateRefId(it.insertText || `${it.kind}:${it.id}`);
+                  setRefMap((prev) => ({
+                    ...prev,
+                    [id]: { key: id, displayLabel, fullLabel, insertText: it.insertText, kind: it.kind },
+                  }));
+                }}
+                renderOverlay={(val) => {
+                  const parts: React.ReactNode[] = [];
+                  let lastIdx = 0;
+                  const s = String(val || "");
+                  const re = new RegExp(`@([^\\n${ZW}]+)${ZW}([^${ZW}]+)${ZW}`, "g");
+                  let mm: RegExpExecArray | null;
+                  while ((mm = re.exec(s)) !== null) {
+                    const start = mm.index;
+                    const end = start + mm[0].length;
+                    const visible = String(mm[1] || "");
+                    const key = String(mm[2] || "");
+                    if (start > lastIdx) {
+                      parts.push(<span key={`t-${lastIdx}`}>{s.slice(lastIdx, start)}</span>);
+                    }
+                    const r = refMap[key];
+                    if (r) {
+                      const token = mm[0];
+                      parts.push(
+                        <span
+                          key={`c-${key}-${start}`}
+                          className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 align-baseline text-xs text-gray-800 shadow-sm"
+                          data-testid={testIds.chat.refs.chip(key)}
+                          title={`${r.fullLabel}\n${r.insertText}`}
+                        >
+                          <button
+                            type="button"
+                            className="hover:underline"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              const raw2 = r.insertText || "";
+                              if (!raw2.startsWith("workbook://")) return;
+                              const tail = raw2.replace("workbook://", "");
+                              const segs = tail.split("/");
+                              const workbookId = decodeURIComponent(segs[0] || "");
+                              const filePath = segs
+                                .slice(1)
+                                .map((p) => {
+                                  try {
+                                    return decodeURIComponent(p);
+                                  } catch {
+                                    return p;
+                                  }
+                                })
+                                .join("/");
+                              if (!workbookId || !filePath) return;
+                              openDocument({
+                                workbookId,
+                                path: filePath,
+                                filename: filePath.split("/").pop() || filePath,
+                              }).catch(() => {});
+                            }}
+                          >
+                            {r.kind === "workbook" ? "📚" : r.kind === "folder" ? "📁" : "📄"} {r.displayLabel}
+                          </button>
+                          <button
+                            type="button"
+                            className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded hover:bg-gray-200"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              // Remove this token instance from the input (and keep refMap entry in case used elsewhere).
+                              setInput((prev) => prev.replace(token, "").replace(/\s{2,}/g, " "));
+                            }}
+                            aria-label={`Remove ${r.displayLabel}`}
+                            data-testid={testIds.chat.refs.remove(key)}
+                            title="Remove"
+                          >
+                            ×
+                          </button>
+                        </span>,
+                      );
+                    } else {
+                      parts.push(<span key={`u-${key}-${start}`}>@{visible}</span>);
+                    }
+                    lastIdx = end;
+                  }
+                  if (lastIdx < s.length) parts.push(<span key={`t-${lastIdx}`}>{s.slice(lastIdx)}</span>);
+                  return (
+                    <div
+                      className="pointer-events-none whitespace-pre-wrap break-words px-2 py-1 pr-10 text-sm leading-5 text-gray-900"
+                      data-testid={testIds.chat.refs.container}
+                    >
+                      {parts}
+                    </div>
+                  );
+                }}
+                overlayClassName="pointer-events-none"
                 onEnterWhenMenuOpen={() => {}}
                 onEnter={() => handleSend()}
               />
