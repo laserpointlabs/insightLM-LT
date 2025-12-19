@@ -77,7 +77,22 @@ export interface ElectronAPI {
         role: "user" | "assistant" | "system";
         content: string;
       }>,
+      requestId?: string,
     ) => Promise<string>;
+    listModels?: () => Promise<{ models: Array<{ id: string; label?: string }>; error?: string }>;
+    onActivity?: (cb: (evt: any) => void) => () => void;
+  };
+
+  chat?: {
+    getThread: (contextId: string) => Promise<{ sessionId: string; contextId: string; messages: any[] }>;
+    append: (params: { contextId: string; role: "user" | "assistant"; content: string; meta?: any }) => Promise<{ message: any }>;
+    clear: (contextId: string) => Promise<{ sessionId: string; contextId: string; messages: any[] }>;
+  };
+
+  config?: {
+    get: () => Promise<any>;
+    updateApp: (updates: any) => Promise<any>;
+    updateLLM: (updates: any) => Promise<any>;
   };
   mcp: {
     call: (serverName: string, method: string, params?: any) => Promise<any>;
@@ -87,6 +102,12 @@ export interface ElectronAPI {
   contextScope?: {
     getMode: () => Promise<{ mode: "all" | "context" }>;
     setMode: (mode: "all" | "context") => Promise<{ mode: "all" | "context" }>;
+  };
+
+  demos?: {
+    load: (demoId: "ac1000" | "trade-study") => Promise<{ demoId: string; workbookId: string; contextId: string | null }>;
+    resetDevData: () => Promise<{ ok: true }>;
+    onChanged?: (cb: (payload: any) => void) => () => void;
   };
 }
 

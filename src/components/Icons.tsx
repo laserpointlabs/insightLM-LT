@@ -93,6 +93,24 @@ export function MoveIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+export function SearchIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5L14 14" />
+    </svg>
+  );
+}
+
 export function ChevronRightIcon({ className = "h-3 w-3" }: { className?: string }) {
   return (
     <svg
@@ -217,6 +235,84 @@ export function NotebookIcon({ className = "h-4 w-4" }: { className?: string }) 
     >
       <rect x="3" y="2" width="10" height="12" rx="1" />
       <path d="M7 2v12M1 5h2M1 8h2M1 11h2" />
+    </svg>
+  );
+}
+
+export function DashboardIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+      <path d="M5 11V8" />
+      <path d="M8 11V5.5" />
+      <path d="M11 11V7" />
+    </svg>
+  );
+}
+
+export function ChatIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 4.5h10v6H8l-3 2v-2H3v-6z" />
+      <path d="M5 6.5h6" />
+      <path d="M5 8.5h4" />
+    </svg>
+  );
+}
+
+export function SendIcon({ className = "h-4 w-4" }: { className?: string }) {
+  // A minimal "arrow up" send icon (Continue-style).
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M8 3v10" />
+      <path d="M4.8 6.2 8 3l3.2 3.2" />
+    </svg>
+  );
+}
+
+export function PopOutIcon({ className = "h-4 w-4" }: { className?: string }) {
+  // "Open in new" style icon.
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6 3H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V10" />
+      <path d="M9 3h4v4" />
+      <path d="M13 3L7.5 8.5" />
     </svg>
   );
 }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, Menu } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as http from "http";
@@ -6,14 +6,95 @@ import { setupWorkbookIPC } from "./ipc/workbooks";
 import { setupFileIPC } from "./ipc/files";
 import { setupArchiveIPC } from "./ipc/archive";
 import { setupDashboardIPC } from "./ipc/dashboards";
+import { setupChatIPC } from "./ipc/chat";
+import { setupConfigIPC } from "./ipc/config";
+import { setupDemosIPC } from "./ipc/demos";
 import { ConfigService } from "./services/configService";
 import { MCPService, MCPServerConfig } from "./services/mcpService";
 import { LLMService, LLMMessage } from "./services/llmService";
+import { DemoService } from "./services/demoService";
 import { setupUpdater } from "./updater";
 import { seedDemoWorkbooksIfNeeded } from "./services/demoSeedService";
 
 let mainWindow: BrowserWindow | null = null;
 let mcpService!: MCPService;
+let demoService: DemoService | null = null;
+
+function setAppMenu() {
+  const ds = demoService;
+  if (!ds) return;
+
+  const demosSubmenu: any[] = [
+    {
+      label: "AC-1000",
+      click: async () => {
+        try {
+          await ds.loadDemo("ac1000");
+        } catch (e) {
+          dialog.showErrorBox(
+            "Failed to load AC-1000 demo",
+            e instanceof Error ? e.message : "Unknown error",
+          );
+        }
+      },
+    },
+    {
+      label: "Trade Study",
+      click: async () => {
+        try {
+          await ds.loadDemo("trade-study");
+        } catch (e) {
+          dialog.showErrorBox(
+            "Failed to load Trade Study demo",
+            e instanceof Error ? e.message : "Unknown error",
+          );
+        }
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Reset Dev Data…",
+      click: async () => {
+        try {
+          await ds.confirmAndResetDevData();
+        } catch (e) {
+          dialog.showErrorBox(
+            "Failed to reset dev data",
+            e instanceof Error ? e.message : "Unknown error",
+          );
+        }
+      },
+    },
+  ];
+
+  const template: any[] = [];
+  if (process.platform === "darwin") {
+    template.push({
+      label: app.name,
+      submenu: [
+        { role: "about" },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    });
+  }
+
+  template.push({ role: "fileMenu" });
+  template.push({ role: "editMenu" });
+  template.push({ role: "viewMenu" });
+  template.push({ label: "Demos", submenu: demosSubmenu });
+  template.push({ role: "windowMenu" });
+  template.push({ role: "helpMenu" });
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
 
 // Enable remote debugging in development mode (must be before app.whenReady())
 if (process.env.NODE_ENV === "development" || !app.isPackaged) {
@@ -74,6 +155,13 @@ async function createWindow() {
     titleBarStyle: "default",
     show: true, // Show immediately to debug UI issues
   });
+
+  // Top menu (File/Edit/View/Demos)
+  try {
+    setAppMenu();
+  } catch (e) {
+    console.warn("Failed to set app menu:", e);
+  }
 
   // Log when the window is ready
   mainWindow.webContents.once("did-finish-load", () => {
@@ -306,14 +394,44 @@ app.whenReady().then(async () => {
   setupFileIPC(ragIndexService); // Pass RAG service for auto-indexing
   setupArchiveIPC(configService);
   setupDashboardIPC(configService);
+  setupConfigIPC(configService, llmService);
+  // Chat persistence IPC (single-thread-per-context)
+  try {
+    const { ChatService } = require("./services/chatService");
+    const chatService = new ChatService();
+    chatService.initialize(appConfig.dataDir);
+    setupChatIPC(chatService);
+  } catch (e) {
+    console.warn("Chat IPC setup failed:", e);
+  }
 
   // LLM IPC handlers
-  ipcMain.handle("llm:chat", async (_, messages: any[]) => {
+  // NOTE: second param is optional requestId for renderer-side activity correlation.
+  ipcMain.handle("llm:chat", async (evt, messages: any[], requestId?: string) => {
     try {
-      return await llmService.chat(messages);
+      const rid = typeof requestId === "string" && requestId.trim() ? requestId.trim() : undefined;
+      return await llmService.chat(messages, {
+        requestId: rid,
+        emitActivity: (activityEvt) => {
+          try {
+            evt.sender.send("llm:activity", activityEvt);
+          } catch {
+            // ignore
+          }
+        },
+      });
     } catch (error) {
       console.error("Error in LLM chat:", error);
       throw error;
+    }
+  });
+
+  ipcMain.handle("llm:listModels", async () => {
+    try {
+      return { models: await llmService.listModels() };
+    } catch (error) {
+      // Fail-soft: return structured error so UI can render deterministic message.
+      return { models: [], error: error instanceof Error ? error.message : "Failed to list models" };
     }
   });
 
@@ -326,6 +444,24 @@ app.whenReady().then(async () => {
     (global as any).__insightlmDisableContextScoping = mode === "all";
     return { mode: (global as any).__insightlmDisableContextScoping ? "all" : "context" };
   });
+
+  // Demos service + IPC
+  demoService = new DemoService({
+    dataDir: appConfig.dataDir,
+    mcpService,
+    setScopeMode: (mode) => {
+      (global as any).__insightlmDisableContextScoping = mode === "all";
+    },
+    notifyRenderer: (payload) => {
+      try {
+        mainWindow?.webContents?.send("demos:changed", payload);
+      } catch {
+        // ignore
+      }
+    },
+    parentWindow: null,
+  });
+  setupDemosIPC(demoService);
 
   // MCP Dashboard IPC handlers - Uses DashboardQueryService
   ipcMain.handle("mcp:dashboard:query", async (_, question: string, tileType: string = "counter") => {

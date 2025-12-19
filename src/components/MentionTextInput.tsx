@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type MentionKind = "workbook" | "folder" | "file";
 
@@ -15,10 +16,34 @@ interface MentionTextInputProps {
   onChange: (next: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  /**
+   * Applied to the outer container (so parent layouts can flex/size the control).
+   * `className` continues to apply to the input/textarea element for styling.
+   */
+  containerClassName?: string;
   className?: string;
+  multiline?: boolean;
+  rows?: number;
   inputTestId?: string;
   menuTestId?: string;
   itemTestId?: (item: MentionItem) => string;
+  /**
+   * Optional callback invoked when a mention item is selected.
+   * Useful for "chip" UX (Cursor-style) where refs are rendered separately from the raw text.
+   */
+  onSelectMention?: (item: MentionItem) => void;
+  /**
+   * Provide a custom replacement string for the selected mention.
+   * This replaces the current "@query" token (from "@" to caret) with the returned string.
+   * Return null to keep the input unchanged.
+   */
+  getMentionReplacementText?: (item: MentionItem) => string | null;
+  /**
+   * Optional inline overlay renderer for advanced UX (e.g., inline chips).
+   * Rendered inside the input container (absolute inset-0).
+   */
+  renderOverlay?: (value: string) => React.ReactNode;
+  overlayClassName?: string;
   /**
    * Provides the universe of mention items (workbooks/folders/files).
    * The component filters client-side based on the currently typed query after '@'.
@@ -55,18 +80,29 @@ export function MentionTextInput({
   onChange,
   disabled,
   placeholder,
+  containerClassName,
   className,
+  multiline,
+  rows = 3,
   inputTestId,
   menuTestId,
   itemTestId,
+  onSelectMention,
+  getMentionReplacementText,
+  renderOverlay,
+  overlayClassName,
   mentionItems = [],
   onEnterWhenMenuOpen,
   onEnter,
 }: MentionTextInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [mentionState, setMentionState] = useState<{ start: number; query: string } | null>(null);
+  const [menuDirection, setMenuDirection] = useState<"down" | "up">("down");
+  const [menuPos, setMenuPos] = useState<null | { top: number; left: number; width: number }>(null);
 
   const filtered = useMemo(() => {
     if (!mentionState) return [];
@@ -95,6 +131,57 @@ export function MentionTextInput({
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [menuOpen, menuTestId]);
+
+  // Flip the mention menu upward when there isn't enough space below the input.
+  // This is critical for sidebar Chat (composer at bottom) and keeps the menu visible.
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const updatePlacement = () => {
+      const host = containerRef.current;
+      if (!host) return;
+      const rect = host.getBoundingClientRect();
+      const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+      const viewportW = window.innerWidth || document.documentElement.clientWidth || 0;
+
+      const estimatedMenuH = Math.min(
+        256,
+        menuRef.current?.getBoundingClientRect().height || 256,
+      );
+      const margin = 8; // ~mt-1/mb-1 + breathing room
+
+      const spaceBelow = viewportH - rect.bottom;
+      const spaceAbove = rect.top;
+
+      // Prefer opening upward if we'd clip below and there's more room above.
+      const direction =
+        spaceBelow < estimatedMenuH + margin && spaceAbove > spaceBelow ? "up" : "down";
+      setMenuDirection(direction);
+
+      // Position the menu in a portal (fixed) so it isn't clipped by overflow containers
+      // and it layers above headers/other panes.
+      const rawLeft = rect.left;
+      const rawWidth = rect.width;
+      const left = Math.max(4, Math.min(rawLeft, Math.max(4, viewportW - rawWidth - 4)));
+      const top =
+        direction === "down"
+          ? Math.min(viewportH - 4, rect.bottom + 4)
+          : Math.max(4, rect.top - estimatedMenuH - 4);
+      setMenuPos({ top, left, width: rawWidth });
+    };
+
+    // Defer until after menu renders so we can measure its height.
+    const t = window.setTimeout(updatePlacement, 0);
+    window.addEventListener("resize", updatePlacement);
+    // Use capture to catch scrolls in nested scroll containers.
+    window.addEventListener("scroll", updatePlacement, true);
+
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [menuOpen, filtered.length]);
 
   const refreshMentionState = () => {
     const el = inputRef.current;
@@ -126,10 +213,22 @@ export function MentionTextInput({
     const caret = el.selectionStart ?? value.length;
     const ms = getMentionQuery(value, caret);
     if (!ms) return;
+    // Inform parent first (allows "chip" UX to capture the selection deterministically).
+    onSelectMention?.(item);
+
     const before = value.slice(0, ms.start);
     const after = value.slice(caret);
-    const inserted = `${before}${item.insertText} ${after}`;
-    const nextCaret = (before + item.insertText + " ").length;
+    const replacement =
+      typeof getMentionReplacementText === "function"
+        ? getMentionReplacementText(item)
+        : item.insertText;
+    if (replacement == null) {
+      setMenuOpen(false);
+      setMentionState(null);
+      return;
+    }
+    const inserted = `${before}${replacement} ${after}`;
+    const nextCaret = (before + replacement + " ").length;
     onChange(inserted);
     // Restore caret after React updates.
     setTimeout(() => {
@@ -145,87 +244,162 @@ export function MentionTextInput({
   };
 
   return (
-    <div className="relative">
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={(e) => {
-          const next = e.target.value;
-          onChange(next);
-          const caret = (e.target as HTMLInputElement).selectionStart ?? next.length;
-          const ms = getMentionQuery(next, caret);
-          setMentionState(ms);
-          setMenuOpen(!!ms);
-          if (ms) setActiveIndex(0);
-        }}
-        onKeyDown={(e) => {
-          if (!menuOpen) {
-            if (e.key === "Enter") {
-              onEnter?.();
-            }
-            return;
-          }
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setActiveIndex((i) => Math.min(i + 1, Math.max(0, filtered.length - 1)));
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setActiveIndex((i) => Math.max(i - 1, 0));
-          } else if (e.key === "Enter") {
-            e.preventDefault();
-            if (filtered[activeIndex]) insertMention(filtered[activeIndex]);
-            else onEnterWhenMenuOpen?.();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            setMenuOpen(false);
-          }
-        }}
-        onClick={() => setTimeout(refreshMentionState, 0)}
-        onKeyUp={() => setTimeout(refreshMentionState, 0)}
-        disabled={disabled}
-        placeholder={placeholder}
-        className={className}
-        data-testid={inputTestId}
-      />
-
-      {menuOpen && mentionState && (
-        <div
-          className="absolute left-0 top-full z-50 mt-1 w-full max-h-64 overflow-auto rounded border border-gray-200 bg-white shadow-lg"
-          data-testid={menuTestId}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          {filtered.length > 0 ? (
-            filtered.map((it, idx) => (
-              <button
-                type="button"
-                key={`${it.kind}:${it.id}`}
-                className={`block w-full px-3 py-2 text-left text-xs hover:bg-gray-100 ${
-                  idx === activeIndex ? "bg-gray-100" : ""
-                }`}
-                onMouseEnter={() => setActiveIndex(idx)}
-                onClick={(e) => {
-                  e.preventDefault();
-                  insertMention(it);
-                }}
-                data-testid={itemTestId ? itemTestId(it) : undefined}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate">
-                    {it.kind === "workbook" ? "📚" : it.kind === "folder" ? "📁" : "📄"}{" "}
-                    {it.label}
-                  </span>
-                  <span className="font-mono text-[10px] text-gray-400 truncate">{it.insertText}</span>
-                </div>
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-xs text-gray-500">
-              {mentionItems.length === 0 ? "Loading workbooks…" : "No matches"}
-            </div>
-          )}
+    <div ref={containerRef} className={`relative ${containerClassName || ""}`}>
+      {renderOverlay && (
+        <div className={`absolute inset-0 ${overlayClassName || ""}`}>
+          {renderOverlay(value)}
         </div>
       )}
+      {multiline ? (
+        <textarea
+          ref={inputRef as any}
+          value={value}
+          rows={rows}
+          onChange={(e) => {
+            const next = e.target.value;
+            onChange(next);
+            const caret = (e.target as HTMLTextAreaElement).selectionStart ?? next.length;
+            const ms = getMentionQuery(next, caret);
+            setMentionState(ms);
+            setMenuOpen(!!ms);
+            if (ms) setActiveIndex(0);
+          }}
+          onKeyDown={(e) => {
+            if (!menuOpen) {
+              // In multiline mode:
+              // - Enter inserts newline (default browser behavior)
+              // - Ctrl/Cmd+Enter triggers submit
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                onEnter?.();
+              }
+              return;
+            }
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setActiveIndex((i) => Math.min(i + 1, Math.max(0, filtered.length - 1)));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActiveIndex((i) => Math.max(i - 1, 0));
+            } else if (e.key === "Enter") {
+              // In menu: Enter selects mention, prevents newline.
+              e.preventDefault();
+              if (filtered[activeIndex]) insertMention(filtered[activeIndex]);
+              else onEnterWhenMenuOpen?.();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setMenuOpen(false);
+            }
+          }}
+          onClick={() => setTimeout(refreshMentionState, 0)}
+          onKeyUp={() => setTimeout(refreshMentionState, 0)}
+          disabled={disabled}
+          placeholder={placeholder}
+          className={className}
+          data-testid={inputTestId}
+        />
+      ) : (
+        <input
+          ref={inputRef as any}
+          type="text"
+          value={value}
+          onChange={(e) => {
+            const next = e.target.value;
+            onChange(next);
+            const caret = (e.target as HTMLInputElement).selectionStart ?? next.length;
+            const ms = getMentionQuery(next, caret);
+            setMentionState(ms);
+            setMenuOpen(!!ms);
+            if (ms) setActiveIndex(0);
+          }}
+          onKeyDown={(e) => {
+            if (!menuOpen) {
+              if (e.key === "Enter") {
+                onEnter?.();
+              }
+              return;
+            }
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setActiveIndex((i) => Math.min(i + 1, Math.max(0, filtered.length - 1)));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActiveIndex((i) => Math.max(i - 1, 0));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              if (filtered[activeIndex]) insertMention(filtered[activeIndex]);
+              else onEnterWhenMenuOpen?.();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setMenuOpen(false);
+            }
+          }}
+          onClick={() => setTimeout(refreshMentionState, 0)}
+          onKeyUp={() => setTimeout(refreshMentionState, 0)}
+          disabled={disabled}
+          placeholder={placeholder}
+          className={className}
+          data-testid={inputTestId}
+        />
+      )}
+
+      {menuOpen &&
+        mentionState &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="max-h-64 overflow-auto rounded border border-gray-200 bg-white shadow-lg"
+            style={{
+              position: "fixed",
+              top: menuPos?.top ?? 0,
+              left: menuPos?.left ?? 0,
+              width: menuPos?.width ?? 0,
+              zIndex: 10000,
+            }}
+            data-testid={menuTestId}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {filtered.length > 0 ? (
+              filtered.map((it, idx) => (
+                <button
+                  type="button"
+                  key={`${it.kind}:${it.id}`}
+                  className={`block w-full px-3 py-2 text-left text-xs hover:bg-gray-100 ${
+                    idx === activeIndex ? "bg-gray-100" : ""
+                  }`}
+                  onMouseEnter={() => setActiveIndex(idx)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    insertMention(it);
+                  }}
+                  data-testid={itemTestId ? itemTestId(it) : undefined}
+                  title={`${it.label}\n${it.insertText}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="shrink-0">
+                      {it.kind === "workbook" ? "📚" : it.kind === "folder" ? "📁" : "📄"}
+                    </span>
+                    {/* Show the full human-friendly name; wrap instead of truncating. */}
+                    <span className="flex-1 break-words leading-snug">{it.label}</span>
+                    {/* Truncate the raw workbook://... insert text; full value is available on hover via title. */}
+                    <span
+                      className="max-w-[45%] shrink-0 truncate font-mono text-[10px] text-gray-400"
+                      title={it.insertText}
+                    >
+                      {it.insertText}
+                    </span>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-xs text-gray-500">
+                {mentionItems.length === 0 ? "Loading workbooks…" : "No matches"}
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

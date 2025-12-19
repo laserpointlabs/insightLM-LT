@@ -32,6 +32,7 @@ export const testIds = {
     edit: (contextId: string) => `contexts-edit-${contextId}`,
     activate: (contextId: string) => `contexts-activate-${contextId}`,
     delete: (contextId: string) => `contexts-delete-${contextId}`,
+    quickWorkbook: (workbookId: string) => `contexts-quick-workbook-${encodeURIComponent(String(workbookId || ""))}`,
   },
   chat: {
     input: "chat-input",
@@ -39,6 +40,55 @@ export const testIds = {
     newChat: "chat-new",
     history: "chat-history",
     settings: "chat-settings",
+    popout: "chat-popout",
+    contextChip: "chat-context-chip",
+    contextMenu: "chat-context-menu",
+    contextItem: (contextId: string) => `chat-context-item-${encodeURIComponent(String(contextId || ""))}`,
+    contextQuickWorkbook: (workbookId: string) =>
+      `chat-context-quick-workbook-${encodeURIComponent(String(workbookId || ""))}`,
+    scopeChip: "chat-scope-chip",
+    activity: {
+      container: "chat-activity",
+      item: (stepId: string) => `chat-activity-item-${encodeURIComponent(String(stepId || ""))}`,
+      toggle: "chat-activity-toggle",
+    },
+    message: (messageId: string) =>
+      `chat-message-${encodeURIComponent(String(messageId || ""))}`,
+    emptyState: {
+      container: "chat-empty-state",
+      message: "chat-empty-state-message",
+      jumpToContexts: "chat-empty-state-jump-contexts",
+      loading: "chat-context-loading",
+    },
+    tabs: {
+      panelChat: "chat-panel-chat",
+      panelHistory: "chat-panel-history",
+      panelSettings: "chat-panel-settings",
+    },
+    llmConfig: {
+      provider: "chat-llm-provider",
+      model: "chat-llm-model",
+      modelSelect: "chat-llm-model-select",
+      refreshModels: "chat-llm-refresh-models",
+      apiKey: "chat-llm-apikey",
+      baseUrl: "chat-llm-baseurl",
+      save: "chat-llm-save",
+      status: "chat-llm-status",
+    },
+    mentions: {
+      menu: "chat-mention-menu",
+      item: (kind: string, id: string) =>
+        `chat-mention-item-${kind}-${encodeURIComponent(String(id || ""))}`,
+    },
+    refs: {
+      container: "chat-refs",
+      chip: (key: string) => `chat-ref-${encodeURIComponent(String(key || ""))}`,
+      remove: (key: string) => `chat-ref-remove-${encodeURIComponent(String(key || ""))}`,
+    },
+    streaming: {
+      container: "chat-streaming",
+      content: "chat-streaming-content",
+    },
   },
   toast: {
     center: "toast-center",
@@ -103,6 +153,11 @@ export const testIds = {
       create: "workbooks-create",
       refresh: "workbooks-refresh",
       collapseAll: "workbooks-collapse-all",
+      search: "workbooks-search",
+    },
+    search: {
+      input: "workbooks-search-input",
+      clear: "workbooks-search-clear",
     },
     item: (workbookId: string) => `workbooks-item-${workbookId}`,
     toggle: (workbookId: string) => `workbooks-toggle-${workbookId}`,

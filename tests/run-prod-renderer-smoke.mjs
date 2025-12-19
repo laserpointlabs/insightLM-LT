@@ -68,7 +68,8 @@ async function main() {
   });
 
   try {
-    const ready = await waitForPort(60000);
+    // On some Windows machines, Electron + extensions + MCP discovery can take >60s before CDP responds.
+    const ready = await waitForPort(120000);
     if (!ready) {
       console.error(`❌ CDP did not come up on ${CDP_HOST}:${CDP_PORT} in time.`);
       process.exit(1);
@@ -89,5 +90,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-
-

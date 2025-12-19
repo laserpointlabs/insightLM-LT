@@ -12,6 +12,7 @@ interface CollapsibleViewProps {
    */
   headerAccessory?: ReactNode;
   actionButton?: ReactNode;
+  collapsedActionButton?: ReactNode;
   testId?: string;
 }
 
@@ -22,6 +23,7 @@ export function CollapsibleView({
   children,
   headerAccessory,
   actionButton,
+  collapsedActionButton,
   testId,
 }: CollapsibleViewProps) {
   return (
@@ -39,10 +41,10 @@ export function CollapsibleView({
           />
           {title}
         </button>
-        {(headerAccessory || (!isCollapsed && actionButton)) && (
-          <div className="flex items-center gap-1">
+        {(headerAccessory || actionButton || collapsedActionButton) && (
+          <div className="flex items-center gap-0.5">
             {headerAccessory}
-            {!isCollapsed && actionButton}
+            {!isCollapsed ? actionButton : collapsedActionButton}
           </div>
         )}
       </div>

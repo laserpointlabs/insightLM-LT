@@ -4,10 +4,28 @@ export type AutomationContextSummary = {
   workbook_ids: string[];
 };
 
+export type AutomationWorkbookSummary = {
+  id: string;
+  name: string;
+  archived?: boolean;
+  folders?: string[];
+  documents: Array<{
+    filename: string;
+    path: string;
+    archived?: boolean;
+    folder?: string;
+    docId?: string;
+  }>;
+};
+
 export type AutomationState = {
   contexts?: {
     activeContextId: string | null;
     contexts: AutomationContextSummary[];
+    updatedAt: number;
+  };
+  workbooks?: {
+    workbooks: AutomationWorkbookSummary[];
     updatedAt: number;
   };
   ui?: {

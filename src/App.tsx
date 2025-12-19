@@ -18,6 +18,7 @@ import { ToastCenter } from "./components/Notifications/ToastCenter";
 import { initAutomationUI } from "./testing/automationUi";
 import { testIds } from "./testing/testIds";
 import { notifyError, notifySuccess } from "./utils/notify";
+import { SearchIcon } from "./components/Icons";
 
 function App() {
   const [dashboardActionButton, setDashboardActionButton] = useState<React.ReactNode>(null);
@@ -26,7 +27,7 @@ function App() {
   const [chatActionButton, setChatActionButton] = useState<React.ReactNode>(null);
   const [activeContextName, setActiveContextName] = useState<string | null>(null);
   const [contextScopeMode, setContextScopeMode] = useState<"all" | "context">("context");
-  const { openDocuments, closeDocument } = useDocumentStore();
+  const { openDocuments, closeDocument, openDocument } = useDocumentStore();
   const {
     sidebarWidth,
     viewHeights,
@@ -49,6 +50,49 @@ function App() {
     extensionRegistry.register(jupyterExtensionManifest);
     extensionRegistry.register(spreadsheetExtensionManifest);
   }, []);
+
+  // Restore "popped out" Chat tab after renderer refresh (Vite reload / Ctrl+R).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("insightlm.openTabs.v1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      for (const t of parsed) {
+        const type = String(t?.type || "");
+        if (type === "chat") {
+          const chatKey = String(t?.chatKey || "main").trim() || "main";
+          const filename = String(t?.filename || "Chat").trim() || "Chat";
+          openDocument({ type: "chat", chatKey, filename } as any).catch(() => {});
+          continue;
+        }
+        if (type === "document") {
+          const workbookId = String(t?.workbookId || "").trim();
+          const p = String(t?.path || "").trim();
+          if (!workbookId || !p) continue;
+          const filename = String(t?.filename || p.split("/").pop() || p).trim() || (p.split("/").pop() || p);
+          openDocument({ workbookId, path: p, filename } as any).catch(() => {});
+          continue;
+        }
+        if (type === "dashboard") {
+          const dashboardId = String(t?.dashboardId || "").trim();
+          if (!dashboardId) continue;
+          const filename = String(t?.filename || "Dashboard").trim() || "Dashboard";
+          openDocument({ type: "dashboard", dashboardId, filename } as any).catch(() => {});
+          continue;
+        }
+        if (type === "config") {
+          const configKey = String(t?.configKey || "").trim();
+          if (!configKey) continue;
+          const filename = String(t?.filename || "config").trim() || "config";
+          openDocument({ type: "config", configKey, filename } as any).catch(() => {});
+          continue;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [openDocument]);
 
   // Lightweight automation mode: bots can force-show hover-only controls via `window.__insightlmAutomationUI.setMode(true)`.
   useEffect(() => {
@@ -151,6 +195,45 @@ function App() {
       const isContextsCollapsed = collapsedViews.has("contexts");
       const isWorkbooksCollapsed = collapsedViews.has("workbooks");
       const isChatCollapsed = collapsedViews.has("chat");
+
+      const focusWorkbooksSearch = async () => {
+        // Persist intent so WorkbooksView can focus even if it mounts after we dispatch.
+        (window as any).__insightlmFocusWorkbooksSearch = true;
+        try {
+          window.dispatchEvent(new CustomEvent("workbooks:focusSearch"));
+        } catch {
+          // ignore
+        }
+      };
+      const openWorkbooksAndFocusSearch = async () => {
+        if (isWorkbooksCollapsed) {
+          toggleViewCollapse("workbooks");
+          // Give React a beat to mount the view.
+          setTimeout(() => {
+            focusWorkbooksSearch().catch(() => {});
+          }, 0);
+        } else {
+          focusWorkbooksSearch().catch(() => {});
+        }
+      };
+
+      const workbooksSearchButton = (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openWorkbooksAndFocusSearch().catch(() => {});
+          }}
+          className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+          title="Search workbooks"
+          data-testid={testIds.workbooks.header.search}
+        >
+          <SearchIcon className="h-4 w-4" />
+        </button>
+      );
+
+      const workbooksHeaderActions = workbookActionButton;
 
       return (
         <div className="flex h-full flex-col">
@@ -306,7 +389,8 @@ function App() {
                 title="Workbooks"
                 isCollapsed={isWorkbooksCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("workbooks")}
-                actionButton={workbookActionButton}
+                actionButton={workbooksHeaderActions}
+                collapsedActionButton={workbooksSearchButton}
                 testId={testIds.sidebar.headers.workbooks}
               >
                 <WorkbooksView onActionButton={setWorkbookActionButton} />
@@ -318,7 +402,8 @@ function App() {
                 title="Workbooks"
                 isCollapsed={isWorkbooksCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("workbooks")}
-                actionButton={workbookActionButton}
+                actionButton={workbooksHeaderActions}
+                collapsedActionButton={workbooksSearchButton}
                 testId={testIds.sidebar.headers.workbooks}
               >
                 <div />
@@ -349,7 +434,7 @@ function App() {
               actionButton={chatActionButton}
               testId={testIds.sidebar.headers.chat}
             >
-              <Chat onActionButton={setChatActionButton} />
+              <Chat onActionButton={setChatActionButton} onJumpToContexts={jumpToContexts} />
             </CollapsibleView>
           </div>
         </div>
@@ -439,7 +524,7 @@ function App() {
       {/* Main Content Area */}
       <div className="flex-1 bg-white">
         {openDocuments.length > 0 ? (
-          <DocumentViewer documents={openDocuments} onClose={closeDocument} />
+          <DocumentViewer documents={openDocuments} onClose={closeDocument} onJumpToContexts={jumpToContexts} />
         ) : (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-gray-400">Click a document to view it</p>

@@ -98,7 +98,30 @@ try {
   },
 
   llm: {
-    chat: (messages: any[]) => ipcRenderer.invoke("llm:chat", messages),
+    chat: (messages: any[], requestId?: string) => ipcRenderer.invoke("llm:chat", messages, requestId),
+    listModels: () => ipcRenderer.invoke("llm:listModels"),
+    onActivity: (cb: (evt: any) => void) => {
+      const handler = (_evt: any, payload: any) => cb(payload);
+      ipcRenderer.on("llm:activity", handler);
+      return () => ipcRenderer.removeListener("llm:activity", handler);
+    },
+  },
+
+  // Chat persistence (single-thread per active context)
+  chat: {
+    getThread: (contextId: string) => ipcRenderer.invoke("chat:getThread", contextId),
+    append: (params: { contextId: string; role: "user" | "assistant"; content: string; meta?: any }) =>
+      ipcRenderer.invoke("chat:append", params),
+    clear: (contextId: string) => ipcRenderer.invoke("chat:clear", contextId),
+  },
+
+  // Config editing (YAML-backed)
+  config: {
+    get: () => ipcRenderer.invoke("config:get"),
+    updateApp: (updates: any) => ipcRenderer.invoke("config:updateApp", updates),
+    updateLLM: (updates: any) => ipcRenderer.invoke("config:updateLLM", updates),
+    getLLMRaw: () => ipcRenderer.invoke("config:getLLMRaw"),
+    saveLLMRaw: (rawYaml: string) => ipcRenderer.invoke("config:saveLLMRaw", rawYaml),
   },
 
   mcp: {
@@ -114,6 +137,17 @@ try {
   contextScope: {
     getMode: () => ipcRenderer.invoke("context:scoping:getMode"),
     setMode: (mode: "all" | "context") => ipcRenderer.invoke("context:scoping:setMode", mode),
+  },
+
+  // Demos (native menu + programmatic)
+  demos: {
+    load: (demoId: "ac1000" | "trade-study") => ipcRenderer.invoke("demos:load", demoId),
+    resetDevData: () => ipcRenderer.invoke("demos:resetDevData"),
+    onChanged: (cb: (payload: any) => void) => {
+      const handler = (_evt: any, payload: any) => cb(payload);
+      ipcRenderer.on("demos:changed", handler);
+      return () => ipcRenderer.removeListener("demos:changed", handler);
+    },
   },
 
   // Extension lifecycle controls
@@ -135,6 +169,38 @@ try {
     unregisterTools: (serverName: string) => ipcRenderer.invoke("debug:unregisterTools", serverName),
   },
 });
+
+  // Also fan demo changes into DOM events so React components can refresh without explicit wiring.
+  ipcRenderer.on("demos:changed", (_evt, payload) => {
+    // NOTE: electron TS build doesn't include DOM libs; use globalThis + runtime guards.
+    const w: any = globalThis as any;
+    if (!w || typeof w.dispatchEvent !== "function") return;
+
+    try {
+      if (typeof w.CustomEvent === "function") {
+        w.dispatchEvent(new w.CustomEvent("demos:changed", { detail: payload }));
+      } else if (typeof w.Event === "function") {
+        w.dispatchEvent(new w.Event("demos:changed"));
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      if (typeof w.Event === "function") w.dispatchEvent(new w.Event("workbooks:changed"));
+    } catch {
+      // ignore
+    }
+    try {
+      if (typeof w.Event === "function") w.dispatchEvent(new w.Event("context:changed"));
+    } catch {
+      // ignore
+    }
+    try {
+      if (typeof w.Event === "function") w.dispatchEvent(new w.Event("context:scoping"));
+    } catch {
+      // ignore
+    }
+  });
 
   console.log("Preload script loaded successfully");
 } catch (error) {

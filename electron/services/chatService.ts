@@ -3,15 +3,20 @@ import * as path from "path";
 import { v4 as uuidv4 } from "uuid";
 
 export interface ChatMessage {
+  id: string;
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: string;
+  seq: number;
+  meta?: Record<string, any>;
 }
 
 export interface ChatSession {
   id: string;
   workbookId?: string; // Optional - link to workbook
+  contextId?: string;
   messages: ChatMessage[];
+  nextSeq: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,7 +40,9 @@ export class ChatService {
     const session: ChatSession = {
       id: uuidv4(),
       workbookId,
+      contextId: undefined,
       messages: [],
+      nextSeq: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -45,20 +52,48 @@ export class ChatService {
     return session;
   }
 
-  saveMessage(sessionId: string, role: "user" | "assistant", content: string): void {
-    const session = this.getSession(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
+  /**
+   * Deterministic (stable) session retrieval by id.
+   * If missing, creates a new session with that id (used for single-thread-per-context chat).
+   */
+  getOrCreateSession(sessionId: string, meta?: { workbookId?: string; contextId?: string }): ChatSession {
+    const existing = this.getSession(sessionId);
+    if (existing) return this.migrateSession(existing);
 
-    session.messages.push({
+    const now = new Date().toISOString();
+    const session: ChatSession = {
+      id: sessionId,
+      workbookId: meta?.workbookId,
+      contextId: meta?.contextId,
+      messages: [],
+      nextSeq: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.saveSession(session);
+    return session;
+  }
+
+  appendMessage(
+    sessionId: string,
+    role: "user" | "assistant",
+    content: string,
+    meta?: { workbookId?: string; contextId?: string; messageMeta?: Record<string, any> },
+  ): ChatMessage {
+    const session = this.getOrCreateSession(sessionId, meta);
+    const msg: ChatMessage = {
+      id: `m${session.nextSeq}`,
+      seq: session.nextSeq,
       role,
       content,
       timestamp: new Date().toISOString(),
-    });
-
+      meta: meta?.messageMeta,
+    };
+    session.nextSeq += 1;
     session.updatedAt = new Date().toISOString();
+    session.messages.push(msg);
     this.saveSession(session);
+    return msg;
   }
 
   getSession(sessionId: string): ChatSession | null {
@@ -69,11 +104,45 @@ export class ChatService {
 
     try {
       const content = fs.readFileSync(sessionPath, "utf-8");
-      return JSON.parse(content) as ChatSession;
+      const parsed = JSON.parse(content) as ChatSession;
+      return this.migrateSession(parsed);
     } catch (error) {
       console.error(`Failed to load session ${sessionId}:`, error);
       return null;
     }
+  }
+
+  private migrateSession(session: ChatSession): ChatSession {
+    // Back-compat for older session files.
+    if (!Array.isArray(session.messages)) session.messages = [];
+    if (typeof (session as any).nextSeq !== "number" || !Number.isFinite((session as any).nextSeq)) {
+      session.nextSeq = 1;
+    }
+
+    // Ensure deterministic seq/id exists per message.
+    let maxSeq = 0;
+    session.messages = session.messages.map((m: any, idx: number) => {
+      const seq = typeof m?.seq === "number" && Number.isFinite(m.seq) ? m.seq : idx + 1;
+      const id = typeof m?.id === "string" && m.id.trim() ? m.id : `m${seq}`;
+      const timestamp = typeof m?.timestamp === "string" ? m.timestamp : new Date().toISOString();
+      maxSeq = Math.max(maxSeq, seq);
+      return {
+        id,
+        seq,
+        role: m?.role === "assistant" || m?.role === "system" ? m.role : "user",
+        content: typeof m?.content === "string" ? m.content : String(m?.content ?? ""),
+        timestamp,
+        meta: m?.meta && typeof m.meta === "object" ? m.meta : undefined,
+      } as ChatMessage;
+    });
+
+    // Keep ordering deterministic.
+    session.messages.sort((a, b) => a.seq - b.seq);
+
+    // Ensure nextSeq is strictly greater than max.
+    if (session.nextSeq <= maxSeq) session.nextSeq = maxSeq + 1;
+
+    return session;
   }
 
   private saveSession(session: ChatSession): void {
@@ -99,7 +168,7 @@ export class ChatService {
         const sessionPath = path.join(this.chatsDir, file);
         try {
           const content = fs.readFileSync(sessionPath, "utf-8");
-          const session = JSON.parse(content) as ChatSession;
+          const session = this.migrateSession(JSON.parse(content) as ChatSession);
           sessions.push(session);
         } catch (error) {
           console.error(`Failed to load session from ${file}:`, error);
@@ -119,19 +188,9 @@ export class ChatService {
       fs.unlinkSync(sessionPath);
     }
   }
+
+  clearSession(sessionId: string): void {
+    // Delete file if exists (used for "New Chat")
+    this.deleteSession(sessionId);
+  }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

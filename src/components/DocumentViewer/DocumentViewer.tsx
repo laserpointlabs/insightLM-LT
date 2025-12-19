@@ -4,10 +4,13 @@ import { CSVViewer } from "./CSVViewer";
 import { PDFViewer } from "./PDFViewer";
 import { TextViewer } from "./TextViewer";
 import { DashboardViewer } from "./DashboardViewer";
+import { Chat } from "../Sidebar/Chat";
 import { useDocumentStore } from "../../store/documentStore";
 import { extensionRegistry } from "../../services/extensionRegistry";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import { testIds } from "../../testing/testIds";
+import { getFileTypeIcon } from "../../utils/fileTypeIcon";
+import { ChatIcon, DashboardIcon } from "../Icons";
 
 // Component to handle async component loading
 function AsyncComponentLoader({ componentPromise, props }: { componentPromise: Promise<any>, props: any }) {
@@ -43,16 +46,19 @@ export interface OpenDocument {
   path?: string; // Optional for dashboards
   filename: string;
   content?: string;
-  type?: "document" | "dashboard"; // Document type
+  type?: "document" | "dashboard" | "config" | "chat"; // Document type
   dashboardId?: string; // For dashboard documents
+  configKey?: "llm"; // For config documents
+  chatKey?: "main"; // For chat documents
 }
 
 interface DocumentViewerProps {
   documents: OpenDocument[];
   onClose: (id: string) => void;
+  onJumpToContexts?: () => void;
 }
 
-export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
+export function DocumentViewer({ documents, onClose, onJumpToContexts }: DocumentViewerProps) {
   const [activeDocId, setActiveDocId] = useState<string | null>(
     documents.length > 0 ? documents[0].id : null,
   );
@@ -97,17 +103,22 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
 
   const handleSave = useCallback(async () => {
     if (!activeDocId || !activeDoc || activeDoc.type === "dashboard") return;
-    if (!activeDoc.workbookId || !activeDoc.path) return;
 
     const unsavedContent = unsavedChanges.get(activeDocId);
     const contentToSave = unsavedContent || activeDoc.content || "";
 
     try {
-      await window.electronAPI.file.write(
-        activeDoc.workbookId,
-        activeDoc.path,
-        contentToSave
-      );
+      if (activeDoc.type === "config" && activeDoc.configKey === "llm") {
+        if (!window.electronAPI?.config?.saveLLMRaw) throw new Error("Config API not available");
+        await window.electronAPI.config.saveLLMRaw(contentToSave);
+      } else {
+        if (!activeDoc.workbookId || !activeDoc.path) return;
+        await window.electronAPI.file.write(
+          activeDoc.workbookId,
+          activeDoc.path,
+          contentToSave
+        );
+      }
       updateDocumentContent(activeDocId, contentToSave);
       clearUnsavedContent(activeDocId);
       notifySuccess("Saved", activeDoc.filename);
@@ -162,6 +173,15 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
       return (
         <div className="flex h-full items-center justify-center text-gray-500">
           No document selected
+        </div>
+      );
+    }
+
+    // Chat "pop out" tab
+    if (activeDoc.type === "chat") {
+      return (
+        <div className="h-full">
+          <Chat onJumpToContexts={onJumpToContexts} />
         </div>
       );
     }
@@ -285,8 +305,17 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
               onClick={() => setActiveDocId(doc.id)}
               data-testid={testIds.documentViewer.tab(doc.id)}
             >
-              <span className="text-sm">
-                {doc.filename}
+              <span className="flex min-w-0 items-center gap-2 text-sm">
+                <span className="shrink-0">
+                  {doc.type === "dashboard" ? (
+                    <DashboardIcon className="h-3 w-3" />
+                  ) : doc.type === "chat" ? (
+                    <ChatIcon className="h-3 w-3" />
+                  ) : (
+                    getFileTypeIcon(doc.filename, { size: "xs" })
+                  )}
+                </span>
+                <span className="min-w-0 truncate">{doc.filename}</span>
                 {hasUnsavedChanges(doc.id) && (
                   <span className="ml-2 text-orange-500">●</span>
                 )}
