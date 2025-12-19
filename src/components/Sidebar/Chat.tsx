@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { ChatMessage } from "./ChatMessage";
 import { AddIcon, HistoryIcon, GearIcon, SendIcon, PopOutIcon } from "../Icons";
 import { testIds } from "../../testing/testIds";
@@ -29,6 +30,29 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   const [streaming, setStreaming] = useState<null | { status: "waiting" | "streaming"; text: string }>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const { openDocument } = useDocumentStore();
+
+  const [contextPicker, setContextPicker] = useState<{
+    loading: boolean;
+    open: boolean;
+    activeId: string | null;
+    activeName: string | null;
+    contexts: Array<{ id: string; name: string }>;
+    error: string | null;
+  }>({
+    loading: false,
+    open: false,
+    activeId: null,
+    activeName: null,
+    contexts: [],
+    error: null,
+  });
+  const [scopeChipMode, setScopeChipMode] = useState<"all" | "context">("context");
+  const contextChipRef = useRef<HTMLButtonElement | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<null | { top: number; left: number; width: number }>(null);
+  const ctxRefreshInFlightRef = useRef(false);
+  const ctxRefreshLastRef = useRef(0);
+  const scopeRefreshInFlightRef = useRef(false);
+  const scopeRefreshLastRef = useRef(0);
 
   // Inline ref tokens:
   // Keep visible text as "@Name" so caret behaves naturally, and encode a short id in invisible separators
@@ -132,6 +156,69 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         activeWorkbookCount: 0,
         error: e instanceof Error ? e.message : "Failed to load context status",
       });
+    }
+  }, []);
+
+  const refreshContextPicker = useCallback(async () => {
+    const now = Date.now();
+    if (ctxRefreshInFlightRef.current) return;
+    // Throttle rapid event storms (e.g., many context:changed dispatches during automation).
+    if (now - ctxRefreshLastRef.current < 750) return;
+    ctxRefreshLastRef.current = now;
+    if (!window.electronAPI?.mcp?.call) {
+      setContextPicker((p) => ({
+        ...p,
+        loading: false,
+        activeId: null,
+        activeName: null,
+        contexts: [],
+        error: "MCP unavailable",
+      }));
+      return;
+    }
+    ctxRefreshInFlightRef.current = true;
+    setContextPicker((p) => ({ ...p, loading: true, error: null }));
+    try {
+      const [listRes, activeRes] = await Promise.all([
+        window.electronAPI.mcp.call("context-manager", "tools/call", { name: "list_contexts", arguments: {} }),
+        window.electronAPI.mcp.call("context-manager", "tools/call", { name: "get_active_context", arguments: {} }),
+      ]);
+      const contextsRaw = Array.isArray(listRes?.contexts) ? listRes.contexts : [];
+      const contexts = contextsRaw
+        .map((c: any) => ({ id: String(c?.id || ""), name: String(c?.name || c?.id || "") }))
+        .filter((c: any) => c.id && c.name);
+      contexts.sort((a: any, b: any) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+      const activeId = activeRes?.active?.id ? String(activeRes.active.id) : null;
+      const activeName = activeRes?.active?.name ? String(activeRes.active.name) : null;
+      setContextPicker((p) => ({ ...p, loading: false, contexts, activeId, activeName, error: null }));
+    } catch (e) {
+      setContextPicker((p) => ({
+        ...p,
+        loading: false,
+        contexts: [],
+        activeId: null,
+        activeName: null,
+        error: e instanceof Error ? e.message : "Failed to load contexts",
+      }));
+    } finally {
+      ctxRefreshInFlightRef.current = false;
+    }
+  }, []);
+
+  const refreshScopeChipMode = useCallback(async () => {
+    const now = Date.now();
+    if (scopeRefreshInFlightRef.current) return;
+    if (now - scopeRefreshLastRef.current < 500) return;
+    scopeRefreshLastRef.current = now;
+    scopeRefreshInFlightRef.current = true;
+    try {
+      const res = await window.electronAPI?.contextScope?.getMode?.();
+      const m = res?.mode === "all" || res?.mode === "context" ? res.mode : "context";
+      setScopeChipMode(m);
+    } catch {
+      setScopeChipMode("context");
+    } finally {
+      scopeRefreshInFlightRef.current = false;
     }
   }, []);
 
@@ -261,6 +348,59 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
       window.removeEventListener("context:scoping", onChanged as any);
     };
   }, [loadContextStatus]);
+
+  useEffect(() => {
+    refreshContextPicker();
+    refreshScopeChipMode();
+    const onChanged = () => refreshContextPicker();
+    const onScope = () => refreshScopeChipMode();
+    window.addEventListener("context:changed", onChanged as any);
+    window.addEventListener("context:scoping", onScope as any);
+    return () => {
+      window.removeEventListener("context:changed", onChanged as any);
+      window.removeEventListener("context:scoping", onScope as any);
+    };
+  }, [refreshContextPicker, refreshScopeChipMode]);
+
+  useEffect(() => {
+    if (!contextPicker.open) return;
+    const updatePos = () => {
+      const el = contextChipRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+      const viewportW = window.innerWidth || document.documentElement.clientWidth || 0;
+      const menuH = 260;
+      const margin = 6;
+      const spaceBelow = viewportH - rect.bottom;
+      const openUp = spaceBelow < menuH + margin;
+      const width = Math.max(220, Math.min(360, rect.width + 180));
+      const left = Math.max(6, Math.min(rect.left, viewportW - width - 6));
+      const top = openUp ? Math.max(6, rect.top - menuH - margin) : Math.min(viewportH - 6, rect.bottom + margin);
+      setContextMenuPos({ top, left, width });
+    };
+    updatePos();
+    window.addEventListener("resize", updatePos);
+    window.addEventListener("scroll", updatePos, true);
+    return () => {
+      window.removeEventListener("resize", updatePos);
+      window.removeEventListener("scroll", updatePos, true);
+    };
+  }, [contextPicker.open]);
+
+  useEffect(() => {
+    if (!contextPicker.open) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      const menu = document.querySelector(`[data-testid="${testIds.chat.contextMenu}"]`);
+      if (menu && menu.contains(t)) return;
+      if (contextChipRef.current && contextChipRef.current.contains(t)) return;
+      setContextPicker((p) => ({ ...p, open: false }));
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [contextPicker.open]);
 
   useEffect(() => {
     // Load persisted chat when active context changes.
@@ -977,6 +1117,124 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                 onEnterWhenMenuOpen={() => {}}
                 onEnter={() => handleSend()}
               />
+
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    ref={contextChipRef}
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] text-gray-800 hover:bg-gray-100 disabled:opacity-50"
+                    onClick={() => setContextPicker((p) => ({ ...p, open: !p.open }))}
+                    disabled={!window.electronAPI?.mcp?.call}
+                    data-testid={testIds.chat.contextChip}
+                    title={contextPicker.error ? `Context: ${contextPicker.error}` : contextPicker.activeName ? `Context: ${contextPicker.activeName}` : "No active Context"}
+                  >
+                    <span className="font-semibold">Context:</span>
+                    <span className="max-w-[180px] truncate">
+                      {contextPicker.loading ? "Loading…" : contextPicker.activeName || "No Context"}
+                    </span>
+                    <span className="text-gray-500">▾</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] text-gray-800 hover:bg-gray-100 disabled:opacity-50"
+                    onClick={async () => {
+                      const next = scopeChipMode === "context" ? "all" : "context";
+                      try {
+                        await window.electronAPI?.contextScope?.setMode?.(next);
+                        setScopeChipMode(next);
+                        window.dispatchEvent(new CustomEvent("context:scoping"));
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    disabled={!window.electronAPI?.contextScope?.setMode}
+                    data-testid={testIds.chat.scopeChip}
+                    title={scopeChipMode === "context" ? "Scoped to active Context" : "All workbooks (unscoped)"}
+                  >
+                    <span className="font-semibold">Scope:</span>
+                    <span>{scopeChipMode === "context" ? "Scoped" : "All"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {contextPicker.open &&
+                contextMenuPos &&
+                typeof document !== "undefined" &&
+                createPortal(
+                  <div
+                    className="max-h-64 overflow-auto rounded border border-gray-200 bg-white shadow-lg"
+                    style={{
+                      position: "fixed",
+                      top: contextMenuPos.top,
+                      left: contextMenuPos.left,
+                      width: contextMenuPos.width,
+                      zIndex: 10000,
+                    }}
+                    data-testid={testIds.chat.contextMenu}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
+                      <div className="text-xs font-semibold text-gray-800">Select Context</div>
+                      <button
+                        type="button"
+                        className="text-[11px] text-gray-600 hover:text-gray-800"
+                        onClick={() => refreshContextPicker()}
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    {contextPicker.contexts.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-gray-500">
+                        {contextPicker.loading ? "Loading…" : contextPicker.error ? `Error: ${contextPicker.error}` : "No contexts found"}
+                      </div>
+                    ) : (
+                      contextPicker.contexts.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className={`block w-full px-3 py-2 text-left text-xs hover:bg-gray-50 ${
+                            c.id === contextPicker.activeId ? "bg-gray-50 font-semibold" : ""
+                          }`}
+                          data-testid={testIds.chat.contextItem(c.id)}
+                          title={c.name}
+                          onClick={async () => {
+                            try {
+                              if (!window.electronAPI?.mcp?.call) return;
+                              await window.electronAPI.mcp.call("context-manager", "tools/call", {
+                                name: "activate_context",
+                                arguments: { context_id: c.id },
+                              });
+                              setContextPicker((p) => ({ ...p, open: false, activeId: c.id, activeName: c.name }));
+                              window.dispatchEvent(new CustomEvent("context:changed"));
+                            } catch (e) {
+                              notifyError(e instanceof Error ? e.message : "Failed to activate context", "Chat");
+                            }
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate">{c.name}</span>
+                            {c.id === contextPicker.activeId && <span className="text-[10px] text-gray-500">Active</span>}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                    <div className="border-t border-gray-100 px-3 py-2">
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:underline"
+                        onClick={() => {
+                          setContextPicker((p) => ({ ...p, open: false }));
+                          onJumpToContexts?.();
+                        }}
+                      >
+                        Go to Contexts…
+                      </button>
+                    </div>
+                  </div>,
+                  document.body,
+                )}
 
               <button
                 type="button"

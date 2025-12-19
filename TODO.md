@@ -139,9 +139,13 @@ This file is the single source of truth for roadmap planning.
 
 ### Chat becomes iDA (Integrated Digital Assisant)
 - [ ] Update Chat area
-- [ ] Add @(Focused Context), /(Commands), Rules
+- [x] Add @(Focused Context), 
+- [ ] Add actions and command /Commands
+- [ ] Add /CreateRule (store the rules)
 - [ ] Add Teams, Agents, Ask, and Plan capabilities
 - [ ] Allow chat view to move to full 'other' side of the workspace
+- [ ] Chunck and store chat for scope in vector store when avaiable
+  - [ ] Add chat content to current context by saving as a file (Need some thoughts here)
 
 
 ### Import workbook/dashboard stack
@@ -165,15 +169,14 @@ This file is the single source of truth for roadmap planning.
   - [x] Allow user to edit llm.comfig in a new tab to edit entire yaml and to easily add new providers.
 - [ ] Show tool useage reporting and thinking as small or simple reporting in the chat area
 - [x] Allow user to move chat area to tab for chat first working add pop-out icon
-- [ ] Improve scope indicator in chat area
-  - [ ] add a quick switch switch combobox to the chat header
+- [x] Improve scope indicator in chat area
+  - [x] add a quick switch switch combobo
 - [x] Show full name of files not ellipsis in @
 - [ ] fix startup left trim of the views area (looks like dashbard pushes the view left)
 - [x] Show selected object as a chip and highlighted for clearity
   - [x] Trim chip to just the object name
   - [x] Add chip inline in prompt text
   - [x] Fix blank spaces after inline chip isertion
-
 - [x] Add toggle on Chat settings button, open/close
 
 
@@ -184,5 +187,5 @@ This file is the single source of truth for roadmap planning.
 - [ ] Add split for chat tab and other tabs so use can reivew and chat at the same time
 - [ ] Animate the 'Thinking...' indicator in the chat
 - [ ] Fix the double sources
-  - [ ] Improve the visual apeal of the sources
+  - [ ] Improve the visual appeal of the sources
 - [ ] Add split to tabs area to allow side by side viewer of mutliple tabs

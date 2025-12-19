@@ -1,2 +1,2 @@
 dataDir: C:\Users\JohnDeHart\AppData\Roaming/insightLM-LT
-llmProvider: ollama
+llmProvider: openai

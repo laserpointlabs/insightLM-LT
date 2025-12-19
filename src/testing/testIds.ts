@@ -38,6 +38,10 @@ export const testIds = {
     history: "chat-history",
     settings: "chat-settings",
     popout: "chat-popout",
+    contextChip: "chat-context-chip",
+    contextMenu: "chat-context-menu",
+    contextItem: (contextId: string) => `chat-context-item-${encodeURIComponent(String(contextId || ""))}`,
+    scopeChip: "chat-scope-chip",
     message: (messageId: string) =>
       `chat-message-${encodeURIComponent(String(messageId || ""))}`,
     emptyState: {
