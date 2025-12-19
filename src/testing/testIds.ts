@@ -148,6 +148,11 @@ export const testIds = {
       create: "workbooks-create",
       refresh: "workbooks-refresh",
       collapseAll: "workbooks-collapse-all",
+      search: "workbooks-search",
+    },
+    search: {
+      input: "workbooks-search-input",
+      clear: "workbooks-search-clear",
     },
     item: (workbookId: string) => `workbooks-item-${workbookId}`,
     toggle: (workbookId: string) => `workbooks-toggle-${workbookId}`,

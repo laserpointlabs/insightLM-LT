@@ -7,6 +7,7 @@ interface CollapsibleViewProps {
   onToggleCollapse: () => void;
   children: ReactNode;
   actionButton?: ReactNode;
+  collapsedActionButton?: ReactNode;
   testId?: string;
 }
 
@@ -16,6 +17,7 @@ export function CollapsibleView({
   onToggleCollapse,
   children,
   actionButton,
+  collapsedActionButton,
   testId,
 }: CollapsibleViewProps) {
   return (
@@ -33,9 +35,9 @@ export function CollapsibleView({
           />
           {title}
         </button>
-        {!isCollapsed && actionButton && (
+        {((!isCollapsed && actionButton) || (isCollapsed && collapsedActionButton)) && (
           <div className="flex items-center gap-0.5">
-            {actionButton}
+            {!isCollapsed ? actionButton : collapsedActionButton}
           </div>
         )}
       </div>

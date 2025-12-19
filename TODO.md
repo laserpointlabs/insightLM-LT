@@ -167,7 +167,7 @@ This file is the single source of truth for roadmap planning.
 - [x] @ - context direction
 - [x] save llm.cfg to users appdata
   - [x] Allow user to edit llm.comfig in a new tab to edit entire yaml and to easily add new providers.
-- [ ] Show tool useage reporting and thinking as small or simple reporting in the chat area
+- [x] Show tool useage reporting and thinking as small or simple reporting in the chat area
 - [x] Allow user to move chat area to tab for chat first working add pop-out icon
 - [x] Improve scope indicator in chat area
   - [x] add a quick switch switch combobo
@@ -179,11 +179,7 @@ This file is the single source of truth for roadmap planning.
   - [x] Fix blank spaces after inline chip isertion
 - [x] Add toggle on Chat settings button, open/close
 - [ ] Spreadsheets are opening white sometimes, not sure what the trigger is but I can fix by reloading the the app under view reload. 
-
-
-- [ ] add search to workbooks header
-
-
+- [ ] Update the context view when we set the context and scoping in the chat text area so they match. (verify)
 
 ## Other fixes and bugs for later
 - [ ] change move icon to ↓↑ in 
@@ -191,6 +187,8 @@ This file is the single source of truth for roadmap planning.
 - [ ] Add split for chat tab and other tabs so use can reivew and chat at the same time
 - [ ] Animate the 'Thinking...' indicator in the chat
 - [ ] Fix the double sources
-  - [ ] Improve the visual appeal of the sources
+  - [ ] Improve the visual appeal of the sources in the AI chat response
 - [ ] Add split to tabs area to allow side by side viewer of mutliple tabs
 - [ ] Clean up smoke testing worbooks and Dashboards
+- [ ] Allow AI access to application context (currnet tabs, chat modes, chat data and chat(s), open workbenchs, loaded extensions, etc. )
+- [x] Add workbook search

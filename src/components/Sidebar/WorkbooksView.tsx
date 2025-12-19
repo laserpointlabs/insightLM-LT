@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useDocumentStore } from "../../store/documentStore";
 import { useWorkbookStore } from "../../store/workbookStore";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -74,6 +74,10 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     new Set(),
   );
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const prevExpandedWorkbooksRef = useRef<Set<string> | null>(null);
+  const prevExpandedFoldersRef = useRef<Set<string> | null>(null);
   const [forceVisibleControls, setForceVisibleControls] = useState<boolean>(
     typeof document !== "undefined" && document.body?.dataset?.automationMode === "true",
   );
@@ -519,6 +523,26 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
       );
     }
   }, [onActionButton, handleCreateWorkbook, handleRefreshWorkbooks, handleCollapseAll]);
+
+  // Allow App header search icon to expand Workbooks then focus the search input.
+  useEffect(() => {
+    const focus = () => {
+      try {
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } catch {
+        // ignore
+      }
+    };
+    const onFocusSearch = () => focus();
+    window.addEventListener("workbooks:focusSearch", onFocusSearch as any);
+    // If App set a global flag before WorkbooksView mounted, honor it once.
+    if ((window as any).__insightlmFocusWorkbooksSearch === true) {
+      (window as any).__insightlmFocusWorkbooksSearch = false;
+      setTimeout(() => focus(), 0);
+    }
+    return () => window.removeEventListener("workbooks:focusSearch", onFocusSearch as any);
+  }, []);
 
   const handleRenameWorkbook = (workbookId: string) => {
     if (!window.electronAPI?.workbook) {
@@ -1480,22 +1504,126 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     }
   };
 
-  const activeWorkbooks = workbooks.filter((w) => !w.archived);
+  const q = searchQuery.trim().toLowerCase();
+  const matches = useCallback(
+    (s: any) => String(s || "").toLowerCase().includes(q),
+    [q],
+  );
+
+  const getDocFolderName = useCallback((doc: any, workbook: any): string => {
+    const folderNames: string[] = Array.isArray(workbook?.folders) ? workbook.folders : [];
+    const explicit = String(doc?.folder || "").trim();
+    if (explicit) return explicit;
+    const p = typeof doc?.path === "string" ? doc.path.replace(/\\/g, "/") : "";
+    const parts = p.split("/");
+    const candidate = parts.length >= 3 ? parts[1] : "";
+    return candidate && folderNames.includes(candidate) ? candidate : "";
+  }, []);
+
+  const filteredActiveWorkbooks = useMemo(() => {
+    const active = workbooks.filter((w) => !w.archived);
+    if (!q) return active;
+
+    return active.filter((workbook: any) => {
+      if (matches(workbook?.name) || matches(workbook?.id)) return true;
+      const folderNames: string[] = Array.isArray(workbook?.folders) ? workbook.folders : [];
+      if (folderNames.some((f) => matches(f))) return true;
+      const docs = Array.isArray(workbook?.documents) ? workbook.documents : [];
+      return docs.some((d: any) => matches(d?.filename) || matches(d?.path));
+    });
+  }, [workbooks, q, matches]);
+
+  // Auto-expand workbooks/folders with matches while searching; restore prior state on clear.
+  useEffect(() => {
+    if (!q) {
+      if (prevExpandedWorkbooksRef.current) {
+        setExpandedWorkbooks(prevExpandedWorkbooksRef.current);
+        prevExpandedWorkbooksRef.current = null;
+      }
+      if (prevExpandedFoldersRef.current) {
+        setExpandedFolders(prevExpandedFoldersRef.current);
+        prevExpandedFoldersRef.current = null;
+      }
+      return;
+    }
+
+    if (!prevExpandedWorkbooksRef.current) prevExpandedWorkbooksRef.current = new Set(expandedWorkbooks);
+    if (!prevExpandedFoldersRef.current) prevExpandedFoldersRef.current = new Set(expandedFolders);
+
+    const nextExpandedWb = new Set<string>();
+    const nextExpandedFolders = new Set<string>();
+
+    for (const workbook of filteredActiveWorkbooks as any[]) {
+      const wbId = String(workbook?.id || "");
+      if (!wbId) continue;
+
+      const folderNames: string[] = Array.isArray(workbook?.folders) ? workbook.folders : [];
+      const docs = Array.isArray(workbook?.documents) ? workbook.documents : [];
+
+      let workbookHasMatch = matches(workbook?.name) || matches(workbook?.id);
+      if (!workbookHasMatch) {
+        workbookHasMatch =
+          folderNames.some((f) => matches(f)) || docs.some((d: any) => matches(d?.filename) || matches(d?.path));
+      }
+      if (workbookHasMatch) nextExpandedWb.add(wbId);
+
+      for (const folderName of folderNames) {
+        const folderMatch = matches(folderName);
+        const inFolder = docs.filter((d: any) => getDocFolderName(d, workbook) === folderName);
+        const docMatchInFolder = inFolder.some((d: any) => matches(d?.filename) || matches(d?.path));
+        if (folderMatch || docMatchInFolder) {
+          nextExpandedFolders.add(`${wbId}::${folderName}`);
+        }
+      }
+    }
+
+    setExpandedWorkbooks(nextExpandedWb);
+    setExpandedFolders(nextExpandedFolders);
+  }, [q, filteredActiveWorkbooks, matches, getDocFolderName]);  
+
+  const activeWorkbooks = filteredActiveWorkbooks;
   const archivedWorkbooks = workbooks.filter((w) => w.archived);
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto p-2">
+        <div className="mb-2">
+          <div className="relative">
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setSearchQuery("");
+              }}
+              placeholder="Search workbooks, folders, files…"
+              className="w-full rounded border border-gray-200 bg-white px-2 py-1 pr-8 text-xs text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              data-testid={testIds.workbooks.search.input}
+            />
+            {searchQuery.trim() && (
+              <button
+                type="button"
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                onClick={() => setSearchQuery("")}
+                title="Clear search"
+                data-testid={testIds.workbooks.search.clear}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+
         {loading && <div className="text-sm text-gray-500">Loading...</div>}
         {error && <div className="text-sm text-red-500">{error}</div>}
 
         {activeWorkbooks.length === 0 && !loading && (
           <div className="mt-4 text-sm text-gray-500">
-            No workbooks yet. Right-click to create one.
+            {q ? "No matches." : "No workbooks yet. Right-click to create one."}
           </div>
         )}
 
-        {activeWorkbooks.map((workbook) => (
+        {activeWorkbooks.map((workbook: any) => (
           <div
             key={workbook.id}
             className={`mb-1 rounded relative ${dragOverTarget?.kind === "workbook" && dragOverTarget.workbookId === workbook.id ? "bg-blue-50 ring-1 ring-blue-300" : ""}`}
@@ -1579,24 +1707,36 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                 {(() => {
                   const docs = (workbook.documents || []).filter((d: any) => !d.archived);
                   const folderNames: string[] = Array.isArray(workbook.folders) ? workbook.folders : [];
-                  const topLevelDocs = docs.filter((d: any) => {
-                    const folder = d.folder || (typeof d.path === "string" && d.path.replace(/\\/g, "/").split("/")[1]);
+                  const filteredDocs = !q
+                    ? docs
+                    : docs.filter((d: any) => matches(d?.filename) || matches(d?.path));
+                  const topLevelDocs = (q ? filteredDocs : docs).filter((d: any) => {
+                    const folder = getDocFolderName(d, workbook);
                     return !folder || !folderNames.includes(folder);
                   });
 
-                  const totalDocs = docs.length;
-                  const hasAny = totalDocs > 0 || folderNames.length > 0;
+                  const visibleFolderNames = !q
+                    ? folderNames
+                    : folderNames.filter((folderName) => {
+                        if (matches(folderName)) return true;
+                        const anyInFolder = docs
+                          .filter((d: any) => getDocFolderName(d, workbook) === folderName)
+                          .some((d: any) => matches(d?.filename) || matches(d?.path));
+                        return anyInFolder;
+                      });
+
+                  const totalDocs = (q ? filteredDocs : docs).length;
+                  const hasAny = totalDocs > 0 || visibleFolderNames.length > 0;
                   if (!hasAny) return <div className="text-xs text-gray-400">No documents</div>;
 
                   return (
                     <div className="flex flex-col gap-0.5">
-                      {folderNames.map((folderName) => {
+                      {visibleFolderNames.map((folderName) => {
                         const folderKey = `${workbook.id}::${folderName}`;
-                        const inFolder = docs.filter((d: any) => {
-                          if (d.folder === folderName) return true;
-                          const p = typeof d.path === "string" ? d.path.replace(/\\/g, "/") : "";
-                          return p.startsWith(`documents/${folderName}/`);
-                        });
+                        const allInFolder = docs.filter((d: any) => getDocFolderName(d, workbook) === folderName);
+                        const inFolder = q
+                          ? allInFolder.filter((d: any) => matches(d?.filename) || matches(d?.path) || matches(folderName))
+                          : allInFolder;
 
                         return (
                           <div key={folderName}>

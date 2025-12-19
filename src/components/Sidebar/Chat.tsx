@@ -1288,7 +1288,11 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
 
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] text-gray-800 hover:bg-gray-100 disabled:opacity-50"
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] disabled:opacity-50 ${
+                      scopeChipMode === "context"
+                        ? "border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100"
+                        : "border-red-300 bg-red-50 text-red-800 hover:bg-red-100"
+                    }`}
                     onClick={async () => {
                       const next = scopeChipMode === "context" ? "all" : "context";
                       try {
@@ -1301,7 +1305,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                     }}
                     disabled={!window.electronAPI?.contextScope?.setMode}
                     data-testid={testIds.chat.scopeChip}
-                    title={scopeChipMode === "context" ? "Scoped to active Context" : "All workbooks (unscoped)"}
+                    title={scopeChipMode === "context" ? "Scoped to active Context" : "WARNING: All workbooks (unscoped)"}
                   >
                     <span className="font-semibold">Scope:</span>
                     <span>{scopeChipMode === "context" ? "Scoped" : "All"}</span>

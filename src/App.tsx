@@ -17,6 +17,7 @@ import { ExtensionToggle } from "./components/Extensions/ExtensionToggle";
 import { ToastCenter } from "./components/Notifications/ToastCenter";
 import { initAutomationUI } from "./testing/automationUi";
 import { testIds } from "./testing/testIds";
+import { SearchIcon } from "./components/Icons";
 
 function App() {
   const [dashboardActionButton, setDashboardActionButton] = useState<React.ReactNode>(null);
@@ -108,6 +109,45 @@ function App() {
       const isContextsCollapsed = collapsedViews.has("contexts");
       const isWorkbooksCollapsed = collapsedViews.has("workbooks");
       const isChatCollapsed = collapsedViews.has("chat");
+
+      const focusWorkbooksSearch = async () => {
+        // Persist intent so WorkbooksView can focus even if it mounts after we dispatch.
+        (window as any).__insightlmFocusWorkbooksSearch = true;
+        try {
+          window.dispatchEvent(new CustomEvent("workbooks:focusSearch"));
+        } catch {
+          // ignore
+        }
+      };
+      const openWorkbooksAndFocusSearch = async () => {
+        if (isWorkbooksCollapsed) {
+          toggleViewCollapse("workbooks");
+          // Give React a beat to mount the view.
+          setTimeout(() => {
+            focusWorkbooksSearch().catch(() => {});
+          }, 0);
+        } else {
+          focusWorkbooksSearch().catch(() => {});
+        }
+      };
+
+      const workbooksSearchButton = (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openWorkbooksAndFocusSearch().catch(() => {});
+          }}
+          className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+          title="Search workbooks"
+          data-testid={testIds.workbooks.header.search}
+        >
+          <SearchIcon className="h-4 w-4" />
+        </button>
+      );
+
+      const workbooksHeaderActions = workbookActionButton;
 
       return (
         <div className="flex h-full flex-col">
@@ -222,7 +262,8 @@ function App() {
                 title="Workbooks"
                 isCollapsed={isWorkbooksCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("workbooks")}
-                actionButton={workbookActionButton}
+                actionButton={workbooksHeaderActions}
+                collapsedActionButton={workbooksSearchButton}
                 testId={testIds.sidebar.headers.workbooks}
               >
                 <WorkbooksView onActionButton={setWorkbookActionButton} />
@@ -234,7 +275,8 @@ function App() {
                 title="Workbooks"
                 isCollapsed={isWorkbooksCollapsed}
                 onToggleCollapse={() => toggleViewCollapse("workbooks")}
-                actionButton={workbookActionButton}
+                actionButton={workbooksHeaderActions}
+                collapsedActionButton={workbooksSearchButton}
                 testId={testIds.sidebar.headers.workbooks}
               >
                 <div />
