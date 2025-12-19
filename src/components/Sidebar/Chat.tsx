@@ -82,11 +82,11 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   }, [contextStatus.activeContextId]);
 
   const handleShowHistory = useCallback(() => {
-    setActiveTab("history");
+    setActiveTab((prev) => (prev === "history" ? "chat" : "history"));
   }, []);
 
   const handleShowSettings = useCallback(() => {
-    setActiveTab("settings");
+    setActiveTab((prev) => (prev === "settings" ? "chat" : "settings"));
   }, []);
 
   const loadContextStatus = useCallback(async () => {

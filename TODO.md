@@ -174,7 +174,7 @@ This file is the single source of truth for roadmap planning.
   - [x] Add chip inline in prompt text
   - [x] Fix blank spaces after inline chip isertion
 
-- [ ] Add toggle on Chat settings button, open/close
+- [x] Add toggle on Chat settings button, open/close
 
 
 
