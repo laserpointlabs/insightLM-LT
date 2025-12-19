@@ -7,6 +7,7 @@ import { AddIcon, RefreshIcon, CollapseAllIcon, FileIcon, FolderIcon, DeleteIcon
 import { extensionRegistry } from "../../services/extensionRegistry";
 import { WorkbookActionContribution } from "../../types";
 import { notifyError, notifyInfo, notifySuccess } from "../../utils/notify";
+import { getFileTypeIcon } from "../../utils/fileTypeIcon";
 import { MoveFolderDialog } from "../MoveFolderDialog";
 import { MoveDocumentDialog } from "../MoveDocumentDialog";
 import { ConflictResolutionDialog, type CollisionResolution } from "../ConflictResolutionDialog";
@@ -1856,7 +1857,10 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                                       }}
                                       data-testid={testIds.workbooks.doc(workbook.id, String(doc.path || doc.filename || ""))}
                                     >
-                                      <span className="truncate">📄 {doc.filename}</span>
+                                      <span className="flex min-w-0 items-center gap-1 truncate">
+                                        <span className="shrink-0">{getFileTypeIcon(doc.filename, { size: "xs" })}</span>
+                                        <span className="min-w-0 flex-1 truncate">{doc.filename}</span>
+                                      </span>
                                       <div className={`flex items-center gap-0.5 ${forceVisibleControls ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                                         <button
                                           onClick={(e) => {
@@ -1930,7 +1934,10 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
                           }}
                           data-testid={testIds.workbooks.doc(workbook.id, String(doc.path || doc.filename || ""))}
                         >
-                          <span className="truncate">📄 {doc.filename}</span>
+                          <span className="flex min-w-0 items-center gap-1 truncate">
+                            <span className="shrink-0">{getFileTypeIcon(doc.filename, { size: "xs" })}</span>
+                            <span className="min-w-0 flex-1 truncate">{doc.filename}</span>
+                          </span>
                           <div className={`flex items-center gap-0.5 ${forceVisibleControls ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                             <button
                               onClick={(e) => {

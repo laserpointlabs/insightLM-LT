@@ -178,8 +178,7 @@ This file is the single source of truth for roadmap planning.
   - [x] Add chip inline in prompt text
   - [x] Fix blank spaces after inline chip isertion
 - [x] Add toggle on Chat settings button, open/close
-- [ ] Spreadsheets are opening white sometimes, not sure what the trigger is but I can fix by reloading the the app under view reload. 
-- [ ] Update the context view when we set the context and scoping in the chat text area so they match. (verify)
+- [x] Update the context view when we set the context and scoping in the chat text area so they match. (verify)
 
 ## Other fixes and bugs for later
 - [ ] change move icon to ↓↑ in 
@@ -203,3 +202,18 @@ This file is the single source of truth for roadmap planning.
 - [ ] Git integration
 - [ ] Active tab priority and general addition
 - [ ]  Traning Paks: Add extension like traning for knowledge that has been curated and tested users can purchase and recieve testing data (like the old days with anasys :)
+
+- [ ] Spreadsheets are opening white sometimes, not sure what the trigger is but I can fix by reloading the the app under view reload. ) [Working right now - 12/19/2025]
+
+
+- [ ] Filter Workbooks view such that as the user types the search Worbkooks/Folders are filtertered out but still show contents so if I have a workbook "Test" Show and I start Te.. show the workbook and any files in the workbook that may be te.. also 
+
+
+- [ ] Save state of sheet items (cell hight/width, font, etc.)
+
+
+- IMprove document tab calaibltity (drag order, rename, .etc)
+
+- [ ] file context modal (save as... → pdf, word, excel)
+
+- [ ] Double click view to collas views below and expand view fully

@@ -8,6 +8,8 @@ import { Chat } from "../Sidebar/Chat";
 import { useDocumentStore } from "../../store/documentStore";
 import { extensionRegistry } from "../../services/extensionRegistry";
 import { notifyError, notifySuccess } from "../../utils/notify";
+import { getFileTypeIcon } from "../../utils/fileTypeIcon";
+import { ChatIcon, DashboardIcon } from "../Icons";
 
 // Component to handle async component loading
 function AsyncComponentLoader({ componentPromise, props }: { componentPromise: Promise<any>, props: any }) {
@@ -298,8 +300,17 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
               }`}
               onClick={() => setActiveDocId(doc.id)}
             >
-              <span className="text-sm">
-                {doc.filename}
+              <span className="flex min-w-0 items-center gap-2 text-sm">
+                <span className="shrink-0">
+                  {doc.type === "dashboard" ? (
+                    <DashboardIcon className="h-3 w-3" />
+                  ) : doc.type === "chat" ? (
+                    <ChatIcon className="h-3 w-3" />
+                  ) : (
+                    getFileTypeIcon(doc.filename, { size: "xs" })
+                  )}
+                </span>
+                <span className="min-w-0 truncate">{doc.filename}</span>
                 {hasUnsavedChanges(doc.id) && (
                   <span className="ml-2 text-orange-500">●</span>
                 )}
