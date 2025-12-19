@@ -16,6 +16,19 @@ export function setupConfigIPC(configService: ConfigService, llmService: LLMServ
     };
   });
 
+  ipcMain.handle("config:getLLMRaw", async () => {
+    return configService.readLLMYamlRaw();
+  });
+
+  ipcMain.handle("config:saveLLMRaw", async (_evt, rawYaml: string) => {
+    // Save raw YAML, then apply to running LLM service and return updated parsed config.
+    const saved = configService.saveLLMYamlRaw(rawYaml);
+    const llmStore = configService.loadLLMConfigStore();
+    const llm = configService.loadLLMConfig();
+    llmService.setConfig(llm);
+    return { ...saved, llmStore, llm };
+  });
+
   ipcMain.handle("config:updateApp", async (_evt, updates: Partial<AppConfig>) => {
     const current = configService.loadAppConfig();
     const next: AppConfig = {

@@ -115,6 +115,8 @@ try {
     get: () => ipcRenderer.invoke("config:get"),
     updateApp: (updates: any) => ipcRenderer.invoke("config:updateApp", updates),
     updateLLM: (updates: any) => ipcRenderer.invoke("config:updateLLM", updates),
+    getLLMRaw: () => ipcRenderer.invoke("config:getLLMRaw"),
+    saveLLMRaw: (rawYaml: string) => ipcRenderer.invoke("config:saveLLMRaw", rawYaml),
   },
 
   mcp: {

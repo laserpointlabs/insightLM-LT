@@ -73,6 +73,68 @@ export class ConfigService {
   private llmConfig: LLMConfig | null = null;
   private llmStore: LLMConfigStore | null = null;
 
+  private getUserConfigDir(): string {
+    const appCfg = this.loadAppConfig();
+    return path.join(appCfg.dataDir, "config");
+  }
+
+  private getUserConfigPath(filename: string): string {
+    return path.join(this.getUserConfigDir(), filename);
+  }
+
+  private ensureUserConfigDir(): void {
+    const dir = this.getUserConfigDir();
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
+
+  /**
+   * Ensure a user-writable LLM config exists in AppData, seeded from the packaged/dev config if present.
+   */
+  private ensureUserLLMConfigExists(): string {
+    this.ensureUserConfigDir();
+    const userPath = this.getUserConfigPath("llm.yaml");
+    if (fs.existsSync(userPath)) return userPath;
+
+    const basePath = path.join(getConfigDir(), "llm.yaml");
+    try {
+      if (fs.existsSync(basePath)) {
+        fs.copyFileSync(basePath, userPath);
+        return userPath;
+      }
+    } catch {
+      // ignore seed failure; fall through to default write
+    }
+
+    const defaults = this.defaultStore();
+    const toWrite: any = {
+      activeProvider: defaults.activeProvider,
+      profiles: {
+        openai: { ...defaults.profiles.openai },
+        claude: { ...defaults.profiles.claude },
+        ollama: { ...defaults.profiles.ollama },
+      },
+    };
+    fs.writeFileSync(userPath, yaml.dump(toWrite, { lineWidth: 120 }), "utf-8");
+    return userPath;
+  }
+
+  readLLMYamlRaw(): { path: string; content: string } {
+    const p = this.ensureUserLLMConfigExists();
+    const content = fs.readFileSync(p, "utf-8");
+    return { path: p, content };
+  }
+
+  saveLLMYamlRaw(rawYaml: string): { path: string } {
+    const p = this.ensureUserLLMConfigExists();
+    // Validate YAML parses (fail-fast for UX).
+    yaml.load(String(rawYaml ?? ""));
+    fs.writeFileSync(p, String(rawYaml ?? ""), "utf-8");
+    this.clearCache();
+    return { path: p };
+  }
+
   private isProvider(x: any): x is LLMProvider {
     return x === "openai" || x === "claude" || x === "ollama";
   }
@@ -157,7 +219,7 @@ export class ConfigService {
 
     const defaults = this.defaultStore();
     try {
-      const configPath = path.join(getConfigDir(), "llm.yaml");
+      const configPath = this.ensureUserLLMConfigExists();
       const content = fs.readFileSync(configPath, "utf-8");
       const raw = (yaml.load(content) as any) || {};
 
@@ -243,7 +305,7 @@ export class ConfigService {
   }
 
   saveLLMConfigStore(store: LLMConfigStore): void {
-    const configPath = path.join(getConfigDir(), "llm.yaml");
+    const configPath = this.ensureUserLLMConfigExists();
     const toWrite: any = {
       activeProvider: store.activeProvider,
       profiles: {

@@ -72,6 +72,82 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       return;
     }
 
+    // Handle config documents (raw YAML editors, etc.)
+    if (doc.type === "config" && doc.configKey) {
+      const existing = get().openDocuments.find(
+        (d) => d.type === "config" && d.configKey === doc.configKey,
+      );
+      if (existing) {
+        set(() => ({ lastOpenedDocId: existing.id }));
+        return;
+      }
+
+      const docKey = `config:${doc.configKey}`;
+      if (get().loadingDocuments.has(docKey)) return;
+
+      set((state) => ({
+        loadingDocuments: new Set(state.loadingDocuments).add(docKey),
+      }));
+
+      const tempDoc: OpenDocument = {
+        ...doc,
+        id: `doc-${nextDocId++}`,
+        type: "config",
+        filename: doc.filename || (doc.configKey === "llm" ? "llm.yaml" : "config.yaml"),
+        path: doc.path || (doc.configKey === "llm" ? "config/llm.yaml" : "config/config.yaml"),
+        content: undefined,
+      };
+
+      set((state) => ({
+        openDocuments: [...state.openDocuments, tempDoc],
+        lastOpenedDocId: tempDoc.id,
+      }));
+
+      // Load content
+      const loadContent = async () => {
+        try {
+          let content = "";
+          if (doc.configKey === "llm") {
+            if (!window.electronAPI?.config?.getLLMRaw) throw new Error("Config API not available");
+            const res = await window.electronAPI.config.getLLMRaw();
+            content = String(res?.content ?? "");
+          }
+
+          const newLoadingSet = new Set(get().loadingDocuments);
+          newLoadingSet.delete(docKey);
+          set((state) => ({
+            openDocuments: state.openDocuments.map((d) =>
+              d.id === tempDoc.id ? { ...d, content } : d,
+            ),
+            loadingDocuments: newLoadingSet,
+          }));
+        } catch (error) {
+          const newLoadingSet = new Set(get().loadingDocuments);
+          newLoadingSet.delete(docKey);
+          set((state) => ({
+            openDocuments: state.openDocuments.map((d) =>
+              d.id === tempDoc.id
+                ? {
+                    ...d,
+                    content: `Error loading config: ${
+                      error instanceof Error ? error.message : "Unknown error"
+                    }`,
+                  }
+                : d,
+            ),
+            loadingDocuments: newLoadingSet,
+          }));
+        }
+      };
+
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(() => loadContent(), { timeout: 100 });
+      } else {
+        setTimeout(() => loadContent(), 0);
+      }
+      return;
+    }
+
     // Handle regular documents
     if (!doc.workbookId || !doc.path) {
       console.error("Cannot open document: missing workbookId or path");

@@ -750,15 +750,33 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                   <div className="text-[11px] text-gray-500" data-testid={testIds.chat.llmConfig.status}>
                     {llmForm.loading ? "Saving/loading…" : llmForm.error ? `Error: ${llmForm.error}` : "Saved to config/llm.yaml"}
                   </div>
-                  <button
-                    type="button"
-                    className="rounded bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
-                    onClick={saveLlmConfig}
-                    disabled={llmForm.loading}
-                    data-testid={testIds.chat.llmConfig.save}
-                  >
-                    Save
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+                      onClick={() => {
+                        openDocument({
+                          type: "config",
+                          configKey: "llm",
+                          filename: "llm.yaml",
+                          content: undefined,
+                        } as any);
+                      }}
+                      disabled={llmForm.loading}
+                      title="Edit the full llm.yaml (raw YAML) in a tab"
+                    >
+                      Edit YAML
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+                      onClick={saveLlmConfig}
+                      disabled={llmForm.loading}
+                      data-testid={testIds.chat.llmConfig.save}
+                    >
+                      Save
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

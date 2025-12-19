@@ -42,8 +42,9 @@ export interface OpenDocument {
   path?: string; // Optional for dashboards
   filename: string;
   content?: string;
-  type?: "document" | "dashboard"; // Document type
+  type?: "document" | "dashboard" | "config"; // Document type
   dashboardId?: string; // For dashboard documents
+  configKey?: "llm"; // For config documents
 }
 
 interface DocumentViewerProps {
@@ -96,17 +97,22 @@ export function DocumentViewer({ documents, onClose }: DocumentViewerProps) {
 
   const handleSave = useCallback(async () => {
     if (!activeDocId || !activeDoc || activeDoc.type === "dashboard") return;
-    if (!activeDoc.workbookId || !activeDoc.path) return;
 
     const unsavedContent = unsavedChanges.get(activeDocId);
     const contentToSave = unsavedContent || activeDoc.content || "";
 
     try {
-      await window.electronAPI.file.write(
-        activeDoc.workbookId,
-        activeDoc.path,
-        contentToSave
-      );
+      if (activeDoc.type === "config" && activeDoc.configKey === "llm") {
+        if (!window.electronAPI?.config?.saveLLMRaw) throw new Error("Config API not available");
+        await window.electronAPI.config.saveLLMRaw(contentToSave);
+      } else {
+        if (!activeDoc.workbookId || !activeDoc.path) return;
+        await window.electronAPI.file.write(
+          activeDoc.workbookId,
+          activeDoc.path,
+          contentToSave
+        );
+      }
       updateDocumentContent(activeDocId, contentToSave);
       clearUnsavedContent(activeDocId);
       notifySuccess("Saved", activeDoc.filename);
