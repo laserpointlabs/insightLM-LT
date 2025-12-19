@@ -178,6 +178,14 @@ This file is the single source of truth for roadmap planning.
   - [x] Fix blank spaces after inline chip isertion
 - [x] Add toggle on Chat settings button, open/close
 - [x] Update the context view when we set the context and scoping in the chat text area so they match. (verify)
+- [ ] Remove inital thinking and animate the actual thinkng...
+- [x] Render mermaid in the chat text area
+- [x] Store chat tab state
+- [ ] When a user selectes a new context auto change to scoped if in the all state.
+- [ ] Ensure tabs remain open after refrech
+- [ ] Auto close the chat view when we pop-out to the tabbed view
+- [ ] Workbooks natrually to context so a user can just select them without create a spcial context view of just a single workbook. This can also be a general list in the context chip. 
+ 
 
 ## Other fixes and bugs for later
 - [ ] change move icon to ↓↑ in 

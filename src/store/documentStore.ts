@@ -32,6 +32,87 @@ interface DocumentStore {
 
 let nextDocId = 1;
 
+const OPEN_TABS_STORAGE_KEY = "insightlm.openTabs.v1";
+
+type PersistedTab =
+  | { type: "chat"; chatKey: string; filename: string }
+  | { type: "document"; workbookId: string; path: string; filename: string }
+  | { type: "dashboard"; dashboardId: string; filename: string }
+  | { type: "config"; configKey: string; filename: string };
+
+function readPersistedTabs(): PersistedTab[] {
+  try {
+    const raw = localStorage.getItem(OPEN_TABS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((t: any) => {
+        if (t?.type === "chat") {
+          const chatKey = String(t?.chatKey || "main").trim() || "main";
+          const filename = String(t?.filename || "Chat").trim() || "Chat";
+          return { type: "chat", chatKey, filename } as PersistedTab;
+        }
+        if (t?.type === "document") {
+          const workbookId = String(t?.workbookId || "").trim();
+          const p = String(t?.path || "").trim();
+          const filename = String(t?.filename || "").trim() || (p.split("/").pop() || p || "Document");
+          if (!workbookId || !p) return null;
+          return { type: "document", workbookId, path: p, filename } as PersistedTab;
+        }
+        if (t?.type === "dashboard") {
+          const dashboardId = String(t?.dashboardId || "").trim();
+          const filename = String(t?.filename || "Dashboard").trim() || "Dashboard";
+          if (!dashboardId) return null;
+          return { type: "dashboard", dashboardId, filename } as PersistedTab;
+        }
+        if (t?.type === "config") {
+          const configKey = String(t?.configKey || "").trim();
+          const filename = String(t?.filename || "config").trim() || "config";
+          if (!configKey) return null;
+          return { type: "config", configKey, filename } as PersistedTab;
+        }
+        return null;
+      })
+      .filter(Boolean) as PersistedTab[];
+  } catch {
+    return [];
+  }
+}
+
+function writePersistedTabs(tabs: PersistedTab[]) {
+  try {
+    localStorage.setItem(OPEN_TABS_STORAGE_KEY, JSON.stringify(tabs));
+  } catch {
+    // ignore
+  }
+}
+
+function sameTab(a: PersistedTab, b: PersistedTab): boolean {
+  if (a.type !== b.type) return false;
+  if (a.type === "chat") return a.chatKey === (b as any).chatKey;
+  if (a.type === "document") return a.workbookId === (b as any).workbookId && a.path === (b as any).path;
+  if (a.type === "dashboard") return a.dashboardId === (b as any).dashboardId;
+  if (a.type === "config") return a.configKey === (b as any).configKey;
+  return false;
+}
+
+function persistTabOpen(tab: PersistedTab) {
+  const tabs = readPersistedTabs().filter((t) => !sameTab(t, tab));
+  tabs.push(tab);
+  writePersistedTabs(tabs);
+}
+
+function persistTabClosed(tab: PersistedTab) {
+  const tabs = readPersistedTabs().filter((t) => !sameTab(t, tab));
+  writePersistedTabs(tabs);
+}
+
+function persistTabsReplace(match: (t: PersistedTab) => boolean, replaceWith: (t: PersistedTab) => PersistedTab) {
+  const tabs = readPersistedTabs().map((t) => (match(t) ? replaceWith(t) : t));
+  writePersistedTabs(tabs);
+}
+
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
   openDocuments: [],
   loadingDocuments: new Set(),
@@ -69,6 +150,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         openDocuments: [...state.openDocuments, tempDoc],
         lastOpenedDocId: tempDoc.id,
       }));
+
+      try {
+        persistTabOpen({ type: "dashboard", dashboardId: String(doc.dashboardId), filename: tempDoc.filename || "Dashboard" });
+      } catch {
+        // ignore
+      }
       return;
     }
 
@@ -85,6 +172,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         ...doc,
         id: `doc-${nextDocId++}`,
         type: "chat",
+        chatKey: key,
         filename: doc.filename || "Chat",
         content: "",
       } as any;
@@ -93,6 +181,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         openDocuments: [...state.openDocuments, tempDoc],
         lastOpenedDocId: tempDoc.id,
       }));
+
+      try {
+        persistTabOpen({ type: "chat", chatKey: String(key || "main"), filename: tempDoc.filename || "Chat" });
+      } catch {
+        // ignore
+      }
       return;
     }
 
@@ -126,6 +220,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         openDocuments: [...state.openDocuments, tempDoc],
         lastOpenedDocId: tempDoc.id,
       }));
+
+      try {
+        persistTabOpen({
+          type: "config",
+          configKey: String(doc.configKey),
+          filename: tempDoc.filename || "config",
+        });
+      } catch {
+        // ignore
+      }
 
       // Load content
       const loadContent = async () => {
@@ -220,6 +324,17 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       lastOpenedDocId: tempDoc.id,
     }));
 
+    try {
+      persistTabOpen({
+        type: "document",
+        workbookId: String(doc.workbookId),
+        path: String(doc.path),
+        filename: String(doc.filename || tempDoc.filename || "").trim() || (String(doc.path).split("/").pop() || String(doc.path)),
+      });
+    } catch {
+      // ignore
+    }
+
     // Load content asynchronously if not provided (undefined means not provided, "" means empty)
     if (doc.content === undefined) {
       // Use requestIdleCallback or setTimeout to yield to browser, preventing blocking
@@ -267,9 +382,33 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   closeDocument: (id) =>
-    set((state) => ({
-      openDocuments: state.openDocuments.filter((d) => d.id !== id),
-    })),
+    set((state) => {
+      const closing = state.openDocuments.find((d) => d.id === id);
+      try {
+        if ((closing as any)?.type === "chat") {
+          persistTabClosed({ type: "chat", chatKey: String((closing as any)?.chatKey || "main"), filename: String(closing?.filename || "Chat") });
+        } else if ((closing as any)?.type === "dashboard" && (closing as any)?.dashboardId) {
+          persistTabClosed({ type: "dashboard", dashboardId: String((closing as any)?.dashboardId), filename: String(closing?.filename || "Dashboard") });
+        } else if ((closing as any)?.type === "config" && (closing as any)?.configKey) {
+          persistTabClosed({ type: "config", configKey: String((closing as any)?.configKey), filename: String(closing?.filename || "config") });
+        } else if ((closing as any)?.workbookId && (closing as any)?.path) {
+          persistTabClosed({
+            type: "document",
+            workbookId: String((closing as any)?.workbookId),
+            path: String((closing as any)?.path),
+            filename: String(closing?.filename || "Document"),
+          });
+        }
+      } catch {
+        // ignore
+      }
+      const remaining = state.openDocuments.filter((d) => d.id !== id);
+      const nextLast =
+        state.lastOpenedDocId === id
+          ? (remaining.length ? remaining[remaining.length - 1].id : null)
+          : state.lastOpenedDocId;
+      return { openDocuments: remaining, lastOpenedDocId: nextLast };
+    }),
 
   updateDocumentContent: (id, content) =>
     set((state) => ({
@@ -327,6 +466,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         openDocuments: state.openDocuments.map((d) => {
           if (d.type === "dashboard") return d;
           if (d.workbookId === sourceWorkbookId && d.path === sourcePath) {
+            try {
+              persistTabsReplace(
+                (t) => t.type === "document" && t.workbookId === sourceWorkbookId && t.path === sourcePath,
+                (t) => ({
+                  ...t,
+                  workbookId: targetWorkbookId,
+                  path: targetPath,
+                  filename: targetFilename ?? (t as any).filename,
+                  type: "document",
+                }) as any,
+              );
+            } catch {
+              // ignore
+            }
             return {
               ...d,
               workbookId: targetWorkbookId,
@@ -353,6 +506,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         if (!p.startsWith(from)) return d;
         const newPath = to + p.slice(from.length);
         const newFilename = newPath.split("/").pop() || d.filename;
+
+        try {
+          persistTabsReplace(
+            (t) => t.type === "document" && t.workbookId === workbookId && t.path === d.path,
+            (t) => ({ ...t, path: newPath, filename: newFilename, type: "document" } as any),
+          );
+        } catch {
+          // ignore
+        }
 
         const oldKey = `${workbookId}:${d.path}`;
         const newKey = `${workbookId}:${newPath}`;

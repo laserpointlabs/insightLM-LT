@@ -25,7 +25,7 @@ function App() {
   const [workbookActionButton, setWorkbookActionButton] = useState<React.ReactNode>(null);
   const [chatActionButton, setChatActionButton] = useState<React.ReactNode>(null);
   const [activeContextName, setActiveContextName] = useState<string | null>(null);
-  const { openDocuments, closeDocument } = useDocumentStore();
+  const { openDocuments, closeDocument, openDocument } = useDocumentStore();
   const {
     sidebarWidth,
     viewHeights,
@@ -48,6 +48,49 @@ function App() {
     extensionRegistry.register(jupyterExtensionManifest);
     extensionRegistry.register(spreadsheetExtensionManifest);
   }, []);
+
+  // Restore "popped out" Chat tab after renderer refresh (Vite reload / Ctrl+R).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("insightlm.openTabs.v1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      for (const t of parsed) {
+        const type = String(t?.type || "");
+        if (type === "chat") {
+          const chatKey = String(t?.chatKey || "main").trim() || "main";
+          const filename = String(t?.filename || "Chat").trim() || "Chat";
+          openDocument({ type: "chat", chatKey, filename } as any).catch(() => {});
+          continue;
+        }
+        if (type === "document") {
+          const workbookId = String(t?.workbookId || "").trim();
+          const p = String(t?.path || "").trim();
+          if (!workbookId || !p) continue;
+          const filename = String(t?.filename || p.split("/").pop() || p).trim() || (p.split("/").pop() || p);
+          openDocument({ workbookId, path: p, filename } as any).catch(() => {});
+          continue;
+        }
+        if (type === "dashboard") {
+          const dashboardId = String(t?.dashboardId || "").trim();
+          if (!dashboardId) continue;
+          const filename = String(t?.filename || "Dashboard").trim() || "Dashboard";
+          openDocument({ type: "dashboard", dashboardId, filename } as any).catch(() => {});
+          continue;
+        }
+        if (type === "config") {
+          const configKey = String(t?.configKey || "").trim();
+          if (!configKey) continue;
+          const filename = String(t?.filename || "config").trim() || "config";
+          openDocument({ type: "config", configKey, filename } as any).catch(() => {});
+          continue;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [openDocument]);
 
   // Lightweight automation mode: bots can force-show hover-only controls via `window.__insightlmAutomationUI.setMode(true)`.
   useEffect(() => {
