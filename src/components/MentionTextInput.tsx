@@ -15,7 +15,14 @@ interface MentionTextInputProps {
   onChange: (next: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  /**
+   * Applied to the outer container (so parent layouts can flex/size the control).
+   * `className` continues to apply to the input/textarea element for styling.
+   */
+  containerClassName?: string;
   className?: string;
+  multiline?: boolean;
+  rows?: number;
   inputTestId?: string;
   menuTestId?: string;
   itemTestId?: (item: MentionItem) => string;
@@ -55,7 +62,10 @@ export function MentionTextInput({
   onChange,
   disabled,
   placeholder,
+  containerClassName,
   className,
+  multiline,
+  rows = 3,
   inputTestId,
   menuTestId,
   itemTestId,
@@ -63,7 +73,7 @@ export function MentionTextInput({
   onEnterWhenMenuOpen,
   onEnter,
 }: MentionTextInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [mentionState, setMentionState] = useState<{ start: number; query: string } | null>(null);
@@ -145,49 +155,99 @@ export function MentionTextInput({
   };
 
   return (
-    <div className="relative">
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={(e) => {
-          const next = e.target.value;
-          onChange(next);
-          const caret = (e.target as HTMLInputElement).selectionStart ?? next.length;
-          const ms = getMentionQuery(next, caret);
-          setMentionState(ms);
-          setMenuOpen(!!ms);
-          if (ms) setActiveIndex(0);
-        }}
-        onKeyDown={(e) => {
-          if (!menuOpen) {
-            if (e.key === "Enter") {
-              onEnter?.();
+    <div className={`relative ${containerClassName || ""}`}>
+      {multiline ? (
+        <textarea
+          ref={inputRef as any}
+          value={value}
+          rows={rows}
+          onChange={(e) => {
+            const next = e.target.value;
+            onChange(next);
+            const caret = (e.target as HTMLTextAreaElement).selectionStart ?? next.length;
+            const ms = getMentionQuery(next, caret);
+            setMentionState(ms);
+            setMenuOpen(!!ms);
+            if (ms) setActiveIndex(0);
+          }}
+          onKeyDown={(e) => {
+            if (!menuOpen) {
+              // In multiline mode:
+              // - Enter inserts newline (default browser behavior)
+              // - Ctrl/Cmd+Enter triggers submit
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                onEnter?.();
+              }
+              return;
             }
-            return;
-          }
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setActiveIndex((i) => Math.min(i + 1, Math.max(0, filtered.length - 1)));
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setActiveIndex((i) => Math.max(i - 1, 0));
-          } else if (e.key === "Enter") {
-            e.preventDefault();
-            if (filtered[activeIndex]) insertMention(filtered[activeIndex]);
-            else onEnterWhenMenuOpen?.();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            setMenuOpen(false);
-          }
-        }}
-        onClick={() => setTimeout(refreshMentionState, 0)}
-        onKeyUp={() => setTimeout(refreshMentionState, 0)}
-        disabled={disabled}
-        placeholder={placeholder}
-        className={className}
-        data-testid={inputTestId}
-      />
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setActiveIndex((i) => Math.min(i + 1, Math.max(0, filtered.length - 1)));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActiveIndex((i) => Math.max(i - 1, 0));
+            } else if (e.key === "Enter") {
+              // In menu: Enter selects mention, prevents newline.
+              e.preventDefault();
+              if (filtered[activeIndex]) insertMention(filtered[activeIndex]);
+              else onEnterWhenMenuOpen?.();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setMenuOpen(false);
+            }
+          }}
+          onClick={() => setTimeout(refreshMentionState, 0)}
+          onKeyUp={() => setTimeout(refreshMentionState, 0)}
+          disabled={disabled}
+          placeholder={placeholder}
+          className={className}
+          data-testid={inputTestId}
+        />
+      ) : (
+        <input
+          ref={inputRef as any}
+          type="text"
+          value={value}
+          onChange={(e) => {
+            const next = e.target.value;
+            onChange(next);
+            const caret = (e.target as HTMLInputElement).selectionStart ?? next.length;
+            const ms = getMentionQuery(next, caret);
+            setMentionState(ms);
+            setMenuOpen(!!ms);
+            if (ms) setActiveIndex(0);
+          }}
+          onKeyDown={(e) => {
+            if (!menuOpen) {
+              if (e.key === "Enter") {
+                onEnter?.();
+              }
+              return;
+            }
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setActiveIndex((i) => Math.min(i + 1, Math.max(0, filtered.length - 1)));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActiveIndex((i) => Math.max(i - 1, 0));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              if (filtered[activeIndex]) insertMention(filtered[activeIndex]);
+              else onEnterWhenMenuOpen?.();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setMenuOpen(false);
+            }
+          }}
+          onClick={() => setTimeout(refreshMentionState, 0)}
+          onKeyUp={() => setTimeout(refreshMentionState, 0)}
+          disabled={disabled}
+          placeholder={placeholder}
+          className={className}
+          data-testid={inputTestId}
+        />
+      )}
 
       {menuOpen && mentionState && (
         <div

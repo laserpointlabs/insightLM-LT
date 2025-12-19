@@ -15,11 +15,10 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
   // Replace workbook:// links with a special marker before ReactMarkdown processes them
   // This prevents ReactMarkdown from creating <a> tags that Electron intercepts
   const processedContent = React.useMemo(() => {
-    if (role !== 'assistant') return content;
+    if (role !== "assistant") return content;
 
     // Replace workbook:// links with a special format that we'll handle manually
-    return content.replace(/\[([^\]]+)\]\(workbook:\/\/([^\)]+)\)/g, (match, linkText, workbookPath) => {
-      console.log(`[ChatMessage] Found workbook link in content: ${match}`);
+    return content.replace(/\[([^\]]+)\]\(workbook:\/\/([^\)]+)\)/g, (_match, linkText, workbookPath) => {
       // Store the workbook path in a data attribute format we can parse
       return `[${linkText}](__workbook_link__${workbookPath}__)`;
     });
@@ -34,7 +33,6 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
       const link = target.closest('a[href^="__workbook_link__"]');
       if (link) {
         const href = link.getAttribute('href');
-        console.log(`[ChatMessage] Global click handler caught workbook link!`, href);
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -45,13 +43,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
           const workbookId = decodeURIComponent(urlParts[0]);
           const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
-          console.log(`[ChatMessage] Global handler opening:`, { workbookId, filePath });
           openDocument({
             workbookId,
             path: filePath,
             filename: filePath.split('/').pop() || filePath,
           }).catch((error) => {
-            console.error("[ChatMessage] Global handler openDocument failed:", error);
+            notifyError(error instanceof Error ? error.message : "Failed to open document", "Chat");
           });
         }
 
@@ -62,7 +59,6 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
       const workbookLink = target.closest('a[href^="workbook://"]');
       if (workbookLink) {
         const href = workbookLink.getAttribute('href');
-        console.log(`[ChatMessage] Global click handler caught workbook:// link!`, href);
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -72,13 +68,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
           const workbookId = decodeURIComponent(urlParts[0]);
           const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
-          console.log(`[ChatMessage] Global handler opening:`, { workbookId, filePath });
           openDocument({
             workbookId,
             path: filePath,
             filename: filePath.split('/').pop() || filePath,
           }).catch((error) => {
-            console.error("[ChatMessage] Global handler openDocument failed:", error);
+            notifyError(error instanceof Error ? error.message : "Failed to open document", "Chat");
           });
         }
 
@@ -97,7 +92,7 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
 
   if (role === "user") {
     return (
-      <div className="ml-4 whitespace-pre-wrap rounded bg-blue-100 p-2 text-sm">
+      <div className="whitespace-pre-wrap rounded-xl bg-blue-600 px-3 py-2 text-sm text-white shadow-sm">
         {content}
       </div>
     );
@@ -105,14 +100,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
 
   // Render assistant messages as markdown
   return (
-    <div className="mr-4 rounded bg-gray-100 p-2 text-sm">
-      <div className="prose prose-sm dark:prose-invert max-w-none [&_small]:not-prose">
+    <div className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-900 shadow-sm">
+      <div className="prose prose-sm max-w-none [&_small]:not-prose">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
             a: ({ href, children }) => {
-              console.log(`[ChatMessage] Rendering link component, href:`, href);
-
               // Handle our special marker format
               if (href?.startsWith('__workbook_link__')) {
                 const workbookPath = href.replace('__workbook_link__', '').replace('__', '');
@@ -120,42 +113,23 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                 const workbookId = decodeURIComponent(urlParts[0]);
                 const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
-                console.log(`[ChatMessage] Parsed workbook link (marker format) - workbookId: ${workbookId}, filePath: ${filePath}`);
-
                 const handleClick = (e: React.MouseEvent) => {
-                  console.log(`[ChatMessage] handleClick called!`, {
-                    type: e.type,
-                    target: e.target,
-                    currentTarget: e.currentTarget,
-                    defaultPrevented: e.defaultPrevented,
-                    isPropagationStopped: e.isPropagationStopped(),
-                  });
-
                   e.preventDefault();
                   e.stopPropagation();
                   e.nativeEvent.stopImmediatePropagation();
-
-                  console.log(`[ChatMessage] After preventDefault - defaultPrevented: ${e.defaultPrevented}, isPropagationStopped: ${e.isPropagationStopped()}`);
-                  console.log(`[ChatMessage] Calling openDocument with:`, { workbookId, path: filePath, filename: filePath.split('/').pop() || filePath });
 
                   openDocument({
                     workbookId,
                     path: filePath,
                     filename: filePath.split('/').pop() || filePath,
                   })
-                  .then(() => {
-                    console.log(`[ChatMessage] openDocument SUCCESS - file should be open now`);
-                  })
                   .catch((error) => {
-                    console.error("[ChatMessage] openDocument FAILED:", error);
                     notifyError(
                       error instanceof Error ? error.message : "Failed to open document",
                       "Chat",
                     );
                   });
                 };
-
-                console.log(`[ChatMessage] Returning span element for workbook link`);
 
                 // Check if this is in a sources section (contains emoji)
                 const isInSources = String(children).includes('📄');
@@ -167,17 +141,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                     role="button"
                     tabIndex={0}
                     className={`${isInSources ? 'text-[10px] text-gray-600 hover:text-gray-800 leading-tight' : 'text-blue-600 hover:text-blue-800 underline'} cursor-pointer font-normal inline-flex items-center gap-1`}
-                    onClick={(e) => {
-                      console.log(`[ChatMessage] onClick event fired on span!`, e);
-                      handleClick(e);
-                    }}
+                    onClick={handleClick}
                     onMouseDown={(e) => {
-                      console.log(`[ChatMessage] onMouseDown fired!`);
                       e.preventDefault();
                       e.stopPropagation();
                     }}
                     onMouseUp={(e) => {
-                      console.log(`[ChatMessage] onMouseUp fired!`);
                       e.preventDefault();
                       e.stopPropagation();
                     }}
@@ -206,23 +175,10 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                 const workbookId = decodeURIComponent(urlParts[0]);
                 const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
-                console.log(`[ChatMessage] Parsed workbook link - workbookId: ${workbookId}, filePath: ${filePath}`);
-
                 const handleClick = (e: React.MouseEvent) => {
-                  console.log(`[ChatMessage] handleClick called!`, {
-                    type: e.type,
-                    target: e.target,
-                    currentTarget: e.currentTarget,
-                    defaultPrevented: e.defaultPrevented,
-                    isPropagationStopped: e.isPropagationStopped(),
-                  });
-
                   e.preventDefault();
                   e.stopPropagation();
                   e.nativeEvent.stopImmediatePropagation();
-
-                  console.log(`[ChatMessage] After preventDefault - defaultPrevented: ${e.defaultPrevented}, isPropagationStopped: ${e.isPropagationStopped()}`);
-                  console.log(`[ChatMessage] Calling openDocument with:`, { workbookId, path: filePath, filename: filePath.split('/').pop() || filePath });
 
                   // Match exactly how WorkbooksView opens documents
                   openDocument({
@@ -230,19 +186,13 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                     path: filePath,
                     filename: filePath.split('/').pop() || filePath,
                   })
-                  .then(() => {
-                    console.log(`[ChatMessage] openDocument SUCCESS - file should be open now`);
-                  })
                   .catch((error) => {
-                    console.error("[ChatMessage] openDocument FAILED:", error);
                     notifyError(
                       error instanceof Error ? error.message : "Failed to open document",
                       "Chat",
                     );
                   });
                 };
-
-                console.log(`[ChatMessage] Returning span element for workbook link`);
 
                 // Check if this is in a sources section (contains emoji)
                 const isInSources = String(children).includes('📄');
@@ -254,17 +204,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                     role="button"
                     tabIndex={0}
                     className={`${isInSources ? 'text-[10px] text-gray-600 hover:text-gray-800 leading-tight' : 'text-blue-600 hover:text-blue-800 underline'} cursor-pointer font-normal inline-flex items-center gap-1`}
-                    onClick={(e) => {
-                      console.log(`[ChatMessage] onClick event fired on span!`, e);
-                      handleClick(e);
-                    }}
+                    onClick={handleClick}
                     onMouseDown={(e) => {
-                      console.log(`[ChatMessage] onMouseDown fired!`);
                       e.preventDefault();
                       e.stopPropagation();
                     }}
                     onMouseUp={(e) => {
-                      console.log(`[ChatMessage] onMouseUp fired!`);
                       e.preventDefault();
                       e.stopPropagation();
                     }}
@@ -287,7 +232,6 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                 );
               }
 
-              console.log(`[ChatMessage] Returning regular <a> tag for non-workbook link`);
               return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
             },
             table: ({ children }) => (

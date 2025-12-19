@@ -78,6 +78,19 @@ export interface ElectronAPI {
         content: string;
       }>,
     ) => Promise<string>;
+    listModels?: () => Promise<{ models: Array<{ id: string; label?: string }>; error?: string }>;
+  };
+
+  chat?: {
+    getThread: (contextId: string) => Promise<{ sessionId: string; contextId: string; messages: any[] }>;
+    append: (params: { contextId: string; role: "user" | "assistant"; content: string }) => Promise<{ message: any }>;
+    clear: (contextId: string) => Promise<{ sessionId: string; contextId: string; messages: any[] }>;
+  };
+
+  config?: {
+    get: () => Promise<any>;
+    updateApp: (updates: any) => Promise<any>;
+    updateLLM: (updates: any) => Promise<any>;
   };
   mcp: {
     call: (serverName: string, method: string, params?: any) => Promise<any>;

@@ -1,6 +1,6 @@
-﻿import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ChatMessage } from "./ChatMessage";
-import { AddIcon, HistoryIcon, GearIcon } from "../Icons";
+import { AddIcon, HistoryIcon, GearIcon, SendIcon } from "../Icons";
 import { testIds } from "../../testing/testIds";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import { MentionItem, MentionTextInput } from "../MentionTextInput";
@@ -25,6 +25,13 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   >([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState<null | { status: "waiting" | "streaming"; text: string }>(null);
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll to bottom as messages or streaming text updates.
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [messages.length, streaming?.text, activeTab]);
   const [contextStatus, setContextStatus] = useState<{
     loading: boolean;
     scopeMode: "all" | "context";
@@ -111,7 +118,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     }
     try {
       const res = await window.electronAPI?.chat?.getThread?.(ctxId);
-      const msgs = Array.isArray(res?.messages) ? (res.messages as PersistedChatMessage[]) : [];
+      const msgs = Array.isArray(res?.messages) ? ((res?.messages || []) as PersistedChatMessage[]) : [];
       // Ensure deterministic ordering.
       msgs.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
       setMessages(msgs);
@@ -261,7 +268,23 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         content: m.content,
       }));
 
+      // Show a placeholder assistant bubble immediately (while waiting on the LLM).
+      setStreaming({ status: "waiting", text: "" });
       const response = await window.electronAPI.llm.chat(historyForLLM);
+
+      // Stream the response into the UI (typewriter) to improve perceived latency.
+      // This remains deterministic/testable and works even when provider/tool-calling isn't stream-capable.
+      setStreaming({ status: "streaming", text: "" });
+      const full = String(response || "");
+      const chunkSize = 32;
+      for (let i = 0; i < full.length; i += chunkSize) {
+        const next = full.slice(0, i + chunkSize);
+        setStreaming({ status: "streaming", text: next });
+        // Small delay; keep deterministic-ish without relying on wallclock for correctness.
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise<void>((r) => setTimeout(r, 16));
+      }
+      setStreaming(null);
 
       const appendedAssistant = await window.electronAPI?.chat?.append?.({
         contextId: ctxId,
@@ -273,6 +296,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         setMessages((prev) => [...prev, assistantMsg].sort((a, b) => a.seq - b.seq));
       }
     } catch (error) {
+      setStreaming(null);
       const ctxId2 = contextStatus.activeContextId;
       if (ctxId2) {
         try {
@@ -293,6 +317,8 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
       setLoading(false);
     }
   };
+
+  const renderedMessages = useMemo(() => messages, [messages]);
 
   const shouldShowScopedEmpty =
     !contextStatus.loading &&
@@ -326,6 +352,12 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     error: null,
   });
 
+  const [llmProfiles, setLlmProfiles] = useState<Record<"openai" | "claude" | "ollama", { model: string; apiKey: string; baseUrl: string }>>({
+    openai: { model: "gpt-4o", apiKey: "", baseUrl: "" },
+    claude: { model: "claude-3-5-sonnet-20241022", apiKey: "", baseUrl: "" },
+    ollama: { model: "llama3.2:1b", apiKey: "", baseUrl: "http://localhost:11434" },
+  });
+
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; label?: string }>>([]);
   const [modelsStatus, setModelsStatus] = useState<{ loading: boolean; error: string | null }>({
     loading: false,
@@ -340,16 +372,51 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     setLlmForm((p) => ({ ...p, loading: true, error: null }));
     try {
       const res = await window.electronAPI.config.get();
+      const store = res?.llmStore;
       const llm = res?.llm || {};
-      const provider =
-        llm.provider === "claude" || llm.provider === "ollama" ? llm.provider : "openai";
-      setLlmForm((p) => ({
-        ...p,
-        loading: false,
-        provider,
+
+      const activeProvider =
+        store?.activeProvider === "claude" || store?.activeProvider === "ollama"
+          ? store.activeProvider
+          : "openai";
+
+      const profiles = store?.profiles || {};
+      const nextProfiles = {
+        openai: {
+          model: String(profiles?.openai?.model || "gpt-4o"),
+          REDACTED || ""),
+          baseUrl: "",
+        },
+        claude: {
+          model: String(profiles?.claude?.model || "claude-3-5-sonnet-20241022"),
+          REDACTED || ""),
+          baseUrl: "",
+        },
+        ollama: {
+          model: String(profiles?.ollama?.model || "llama3.2:1b"),
+          REDACTED || ""),
+          baseUrl: String(profiles?.ollama?.baseUrl || "http://localhost:11434"),
+        },
+      } as const;
+
+      setLlmProfiles(nextProfiles as any);
+
+      // Prefer store-derived profile; fall back to llm (active config) if store missing.
+      const fallbackProvider = llm.provider === "claude" || llm.provider === "ollama" ? llm.provider : "openai";
+      const effectiveProvider = store?.activeProvider ? activeProvider : fallbackProvider;
+      const eff = (nextProfiles as any)[effectiveProvider] || {
         model: String(llm.model || ""),
         REDACTED || ""),
         baseUrl: String(llm.baseUrl || ""),
+      };
+
+      setLlmForm((p) => ({
+        ...p,
+        loading: false,
+        provider: effectiveProvider,
+        model: String(eff.model || ""),
+        REDACTED || ""),
+        baseUrl: String(eff.baseUrl || ""),
         error: null,
       }));
     } catch (e) {
@@ -401,12 +468,43 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     }
     try {
       setLlmForm((p) => ({ ...p, loading: true, error: null }));
-      await window.electronAPI.config.updateLLM({
-        provider: llmForm.provider,
-        model: llmForm.model,
-        REDACTED
-        baseUrl: llmForm.baseUrl,
+      const provider = llmForm.provider;
+      const merged = {
+        ...llmProfiles,
+        [provider]: {
+          ...llmProfiles[provider],
+          model: llmForm.model,
+          REDACTED
+          baseUrl: llmForm.baseUrl,
+        },
+      } as any;
+
+      const res = await window.electronAPI.config.updateLLM({
+        activeProvider: provider,
+        profiles: merged,
       });
+
+      // Reload from returned store so UI reflects canonical persisted values.
+      const store = res?.llmStore;
+      if (store?.profiles) {
+        setLlmProfiles({
+          openai: {
+            model: String(store.profiles?.openai?.model || "gpt-4o"),
+            REDACTED || ""),
+            baseUrl: "",
+          },
+          claude: {
+            model: String(store.profiles?.claude?.model || "claude-3-5-sonnet-20241022"),
+            REDACTED || ""),
+            baseUrl: "",
+          },
+          ollama: {
+            model: String(store.profiles?.ollama?.model || "llama3.2:1b"),
+            REDACTED || ""),
+            baseUrl: String(store.profiles?.ollama?.baseUrl || "http://localhost:11434"),
+          },
+        } as any);
+      }
       notifySuccess("LLM config saved", "Chat");
       setLlmForm((p) => ({ ...p, loading: false, error: null }));
     } catch (e) {
@@ -482,9 +580,20 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                   <select
                     className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"
                     value={llmForm.provider}
-                    onChange={(e) =>
-                      setLlmForm((p) => ({ ...p, provider: e.target.value as any }))
-                    }
+                    onChange={(e) => {
+                      const nextProvider = (e.target.value as any) as "openai" | "claude" | "ollama";
+                      const profile = llmProfiles[nextProvider];
+                      setLlmForm((p) => ({
+                        ...p,
+                        provider: nextProvider,
+                        model: profile?.model || p.model,
+                        REDACTED || "",
+                        baseUrl: profile?.baseUrl || "",
+                      }));
+                      // Clear stale model list when switching providers; user can Refresh.
+                      setAvailableModels([]);
+                      setModelsStatus({ loading: false, error: null });
+                    }}
                     disabled={llmForm.loading}
                     data-testid={testIds.chat.llmConfig.provider}
                   >
@@ -500,7 +609,14 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                     <select
                       className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs"
                       value={llmForm.model}
-                      onChange={(e) => setLlmForm((p) => ({ ...p, model: e.target.value }))}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLlmForm((p) => ({ ...p, model: v }));
+                        setLlmProfiles((prev) => ({
+                          ...prev,
+                          [llmForm.provider]: { ...prev[llmForm.provider], model: v },
+                        }));
+                      }}
                       disabled={llmForm.loading || modelsStatus.loading || availableModels.length === 0}
                       data-testid={testIds.chat.llmConfig.modelSelect}
                     >
@@ -529,7 +645,14 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                   <input
                     className="mt-2 w-full rounded border border-gray-300 px-2 py-1 text-xs"
                     value={llmForm.model}
-                    onChange={(e) => setLlmForm((p) => ({ ...p, model: e.target.value }))}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setLlmForm((p) => ({ ...p, model: v }));
+                      setLlmProfiles((prev) => ({
+                        ...prev,
+                        [llmForm.provider]: { ...prev[llmForm.provider], model: v },
+                      }));
+                    }}
                     disabled={llmForm.loading}
                     placeholder='Manual model override (optional)'
                     data-testid={testIds.chat.llmConfig.model}
@@ -544,7 +667,14 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                   <input
                     className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"
                     value={llmForm.apiKey}
-                    onChange={(e) => setLlmForm((p) => ({ ...p, REDACTED }))}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setLlmForm((p) => ({ ...p, apiKey: v }));
+                      setLlmProfiles((prev) => ({
+                        ...prev,
+                        [llmForm.provider]: { ...prev[llmForm.provider], apiKey: v },
+                      }));
+                    }}
                     disabled={llmForm.loading}
                     placeholder='e.g. "${OPENAI_API_KEY}"'
                     data-testid={testIds.chat.llmConfig.apiKey}
@@ -556,7 +686,14 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                   <input
                     className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"
                     value={llmForm.baseUrl}
-                    onChange={(e) => setLlmForm((p) => ({ ...p, baseUrl: e.target.value }))}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setLlmForm((p) => ({ ...p, baseUrl: v }));
+                      setLlmProfiles((prev) => ({
+                        ...prev,
+                        [llmForm.provider]: { ...prev[llmForm.provider], baseUrl: v },
+                      }));
+                    }}
                     disabled={llmForm.loading}
                     placeholder='e.g. "http://localhost:11434"'
                     data-testid={testIds.chat.llmConfig.baseUrl}
@@ -583,53 +720,93 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         ) : (
           <>
             <div data-testid={testIds.chat.tabs.panelChat}>
-              {messages.length === 0 && (
+              {renderedMessages.length === 0 && !streaming && (
                 <div className="mt-4 text-center text-sm text-gray-500">
                   Start a conversation about your workbooks
                 </div>
               )}
-              {messages.map((msg, idx) => (
-                <div
-                  key={msg.id || idx}
-                  data-chat-message
-                  data-role={msg.role}
-                  data-testid={testIds.chat.message(msg.id || String(idx))}
-                  data-chat-message-id={msg.id}
-                >
-                  <ChatMessage role={msg.role} content={msg.content} />
-                </div>
-              ))}
-              {loading && <div className="text-sm text-gray-500">Thinking...</div>}
+              <div className="space-y-3">
+                {renderedMessages.map((msg, idx) => {
+                  const isUser = msg.role === "user";
+                  return (
+                    <div
+                      key={msg.id || idx}
+                      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                      data-chat-message
+                      data-role={msg.role}
+                      data-testid={testIds.chat.message(msg.id || String(idx))}
+                      data-chat-message-id={msg.id}
+                    >
+                      <div className="w-full max-w-[85%]">
+                        <ChatMessage role={msg.role} content={msg.content} />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {streaming && (
+                  <div
+                    className="flex justify-start"
+                    data-testid={testIds.chat.streaming.container}
+                    data-chat-message
+                    data-role="assistant"
+                  >
+                    <div className="w-full max-w-[85%]">
+                      <div
+                        className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-900 whitespace-pre-wrap"
+                        data-testid={testIds.chat.streaming.content}
+                      >
+                        {streaming.status === "waiting" && !streaming.text ? "Thinking…" : streaming.text}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={endRef} />
+              </div>
             </div>
           </>
         )}
       </div>
 
       <div className="border-t border-gray-200 px-3 py-2">
-        <div className="flex gap-2">
-          <MentionTextInput
-            value={input}
-            onChange={setInput}
-            disabled={loading || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"}
-            placeholder="Ask about your workbooks… (type @ to reference)"
-            className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-            inputTestId={testIds.chat.input}
-            menuTestId={testIds.chat.mentions.menu}
-            itemTestId={(it) => testIds.chat.mentions.item(it.kind, it.id)}
-            mentionItems={mentionItems}
-            onEnterWhenMenuOpen={() => {}}
-            onEnter={() => handleSend()}
-          />
-          <button
-            type="button"
-            onClick={() => handleSend()}
-            disabled={loading || !input.trim() || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"}
-            className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Send"
-            data-testid={testIds.chat.send}
-          >
-            Send
-          </button>
+        <div className="w-full">
+          <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm focus-within:ring-1 focus-within:ring-blue-500">
+            <div className="relative">
+              <MentionTextInput
+                value={input}
+                onChange={setInput}
+                disabled={loading || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"}
+                multiline
+                rows={2}
+                placeholder="Ask about your workbooks… (type @ to reference) — Ctrl/Cmd+Enter to send"
+                containerClassName="w-full"
+                className="w-full resize-none bg-transparent px-2 py-1 pr-10 text-sm leading-5 text-gray-900 placeholder:text-gray-400 focus:outline-none max-h-48 overflow-y-auto"
+                inputTestId={testIds.chat.input}
+                menuTestId={testIds.chat.mentions.menu}
+                itemTestId={(it) => testIds.chat.mentions.item(it.kind, it.id)}
+                mentionItems={mentionItems}
+                onEnterWhenMenuOpen={() => {}}
+                onEnter={() => handleSend()}
+              />
+
+              <button
+                type="button"
+                onClick={() => handleSend()}
+                disabled={loading || !input.trim() || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"}
+                className={`absolute bottom-1.5 right-1.5 inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                  loading || !input.trim() || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+                aria-label="Send"
+                title="Send (Ctrl/Cmd+Enter)"
+                data-testid={testIds.chat.send}
+              >
+                <SendIcon className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

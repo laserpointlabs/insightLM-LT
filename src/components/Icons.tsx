@@ -220,3 +220,22 @@ export function NotebookIcon({ className = "h-4 w-4" }: { className?: string }) 
     </svg>
   );
 }
+
+export function SendIcon({ className = "h-4 w-4" }: { className?: string }) {
+  // A minimal "arrow up" send icon (Continue-style).
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M8 3v10" />
+      <path d="M4.8 6.2 8 3l3.2 3.2" />
+    </svg>
+  );
+}

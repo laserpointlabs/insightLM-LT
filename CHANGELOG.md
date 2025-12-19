@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2025-12-18 - Chat MVP (Scoped + Deterministic + Testable)
+
+#### Added
+
+- **Scoped Chat empty-state (demo-safe)**
+  - Chat now shows a deterministic empty state when there is **no active Context** or when **Scoped mode yields 0 in-scope workbooks**
+  - Added a **“Go to Contexts”** button to jump directly to Contexts to fix scoping
+  - Added explicit loading state and stable `data-testid`s for automation
+
+- **Persisted chat history (single-thread per Context)**
+  - Minimal persisted chat history backed by an Electron `ChatService` with deterministic ordering and stable message IDs
+  - Thread is restored on restart, and can be cleared deterministically
+
+- **LLM provider configuration (testable, no prompts)**
+  - YAML-backed config support for provider selection via `config/app.yaml` and `config/llm.yaml`
+  - In-app Settings tab in Chat to edit provider/model/baseUrl/apiKey without browser prompts/alerts
+  - Added `llm:listModels` IPC and UI “Refresh” button to list models from OpenAI/Claude/Ollama (and compatible gateways)
+  - Added per-provider profiles so switching providers restores provider-specific model/apiKey/baseUrl values
+
+- **Lightweight `@refs` in chat composer**
+  - `@` mention menu inserts deterministic references like `workbook://...`
+  - Responses include a deterministic “Sources” footer when files were read/used
+
+- **Chat composer UX**
+  - Multiline, word-wrapping chat input (2 rows by default) with Ctrl/Cmd+Enter send
+  - Continue.dev-inspired full-width composer with improved send button
+  - Streaming (typewriter) assistant rendering so responses appear progressively even when provider doesn’t support native token streaming
+
+#### Changed
+
+- **Tool execution + scoping**
+  - Tool execution is routed via `ToolProviderRegistry` and scoping is applied for RAG/list tools when a Context is active
+  - Hardened Ollama/gateway tool-call parsing to tolerate fenced JSON and extra prose around `{"tool":"...","args":{...}}`
+  - Lowered temperature for the Ollama tool-call decision step to reduce formatting variance with smaller local models
+
+- **Automation/test stability**
+  - Expanded centralized `data-testid`s for Chat empty states, tabs, settings, model refresh, mentions, streaming
+  - Updated CDP smoke automation to cover deterministic Chat “SCOPED context” flow and chat mentions
+  - Relaxed provider-dependent dashboard assertions to avoid false failures when local models vary in output shape
+
+#### Fixed
+
+- **Ollama gateway auth**
+  - Ollama-compatible gateways that require `Authorization: Bearer ...` are now supported when an apiKey is configured
+
+#### Notes / Known Issues
+
+- Local models may still return non-standard JSON shapes for dashboards; the app is fail-soft and automation avoids asserting provider-specific result types.
+
 ### 2025-01-15 - JupyterLab Extension Development & Architecture Planning
 
 #### Added
@@ -195,12 +244,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Major features and breaking changes will be documented
 - Issues and resolutions will be tracked
 - Future plans will be outlined in each entry
-
-
-
-
-
-
-
-
-

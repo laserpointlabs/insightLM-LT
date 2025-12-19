@@ -65,6 +65,10 @@ export const testIds = {
       item: (kind: string, id: string) =>
         `chat-mention-item-${kind}-${encodeURIComponent(String(id || ""))}`,
     },
+    streaming: {
+      container: "chat-streaming",
+      content: "chat-streaming-content",
+    },
   },
   toast: {
     center: "toast-center",

@@ -15,6 +15,19 @@ export interface LLMConfig {
   baseUrl?: string;
 }
 
+export type LLMProvider = LLMConfig["provider"];
+
+export type LLMProfile = {
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+};
+
+export type LLMConfigStore = {
+  activeProvider: LLMProvider;
+  profiles: Record<LLMProvider, LLMProfile>;
+};
+
 function expandEnvVars(str: string): string {
   return str.replace(/\$\{(\w+)\}/g, (match, varName) => {
     return process.env[varName] || match;
@@ -58,10 +71,27 @@ function getConfigDir(): string {
 export class ConfigService {
   private appConfig: AppConfig | null = null;
   private llmConfig: LLMConfig | null = null;
+  private llmStore: LLMConfigStore | null = null;
+
+  private isProvider(x: any): x is LLMProvider {
+    return x === "openai" || x === "claude" || x === "ollama";
+  }
+
+  private defaultStore(): LLMConfigStore {
+    return {
+      activeProvider: "openai",
+      profiles: {
+        openai: { model: "gpt-4o", apiKey: "${OPENAI_API_KEY}" },
+        claude: { model: "claude-3-5-sonnet-20241022", apiKey: "${ANTHROPIC_API_KEY}" },
+        ollama: { model: "llama3.2:1b", baseUrl: "http://localhost:11434", apiKey: "${LMAPI_KEY}" },
+      },
+    };
+  }
 
   clearCache() {
     this.appConfig = null;
     this.llmConfig = null;
+    this.llmStore = null;
   }
 
   loadAppConfig(): AppConfig {
@@ -91,19 +121,27 @@ export class ConfigService {
     if (this.llmConfig) return this.llmConfig;
 
     try {
-      const configPath = path.join(getConfigDir(), "llm.yaml");
-      const content = fs.readFileSync(configPath, "utf-8");
-      const config = yaml.load(content) as LLMConfig;
+      const store = this.loadLLMConfigStore();
+      const active = store.activeProvider;
+      const p = store.profiles[active] || {};
 
-      if (config.apiKey) {
-        config.apiKey = expandEnvVars(config.apiKey);
-      }
-      if (config.baseUrl) {
-        config.baseUrl = expandEnvVars(config.baseUrl);
-      }
+      const model =
+        String(p.model || "").trim() ||
+        (active === "openai"
+          ? "gpt-4o"
+          : active === "claude"
+            ? "claude-3-5-sonnet-20241022"
+            : "llama3.2:1b");
 
-      this.llmConfig = config;
-      return config;
+      const cfg: LLMConfig = {
+        provider: active,
+        model,
+      };
+      if (typeof p.apiKey === "string") cfg.apiKey = p.apiKey;
+      if (typeof p.baseUrl === "string") cfg.baseUrl = p.baseUrl;
+
+      this.llmConfig = cfg;
+      return cfg;
     } catch (error) {
       console.error("Failed to load LLM config:", error);
       this.llmConfig = {
@@ -111,6 +149,72 @@ export class ConfigService {
         model: "gpt-4",
       };
       return this.llmConfig;
+    }
+  }
+
+  loadLLMConfigStore(): LLMConfigStore {
+    if (this.llmStore) return this.llmStore;
+
+    const defaults = this.defaultStore();
+    try {
+      const configPath = path.join(getConfigDir(), "llm.yaml");
+      const content = fs.readFileSync(configPath, "utf-8");
+      const raw = (yaml.load(content) as any) || {};
+
+      // New format:
+      // activeProvider: openai|claude|ollama
+      // profiles:
+      //   openai: { apiKey, model }
+      //   claude: { apiKey, model }
+      //   ollama: { apiKey, model, baseUrl }
+      if (raw && typeof raw === "object" && raw.profiles && typeof raw.profiles === "object") {
+        const activeProvider: LLMProvider =
+          this.isProvider(raw.activeProvider)
+            ? raw.activeProvider
+            : this.isProvider(raw.provider)
+              ? raw.provider
+              : this.loadAppConfig().llmProvider;
+
+        const profiles: Record<LLMProvider, LLMProfile> = {
+          openai: { ...defaults.profiles.openai, ...(raw.profiles.openai || {}) },
+          claude: { ...defaults.profiles.claude, ...(raw.profiles.claude || {}) },
+          ollama: { ...defaults.profiles.ollama, ...(raw.profiles.ollama || {}) },
+        };
+
+        // Expand env vars per-profile (apiKey/baseUrl only).
+        for (const prov of ["openai", "claude", "ollama"] as LLMProvider[]) {
+          const p = profiles[prov] || {};
+          if (typeof p.apiKey === "string") p.apiKey = expandEnvVars(p.apiKey);
+          if (typeof p.baseUrl === "string") p.baseUrl = expandEnvVars(p.baseUrl);
+          profiles[prov] = p;
+        }
+
+        this.llmStore = { activeProvider, profiles };
+        return this.llmStore;
+      }
+
+      // Legacy format:
+      // provider, apiKey, model, baseUrl
+      const legacyProvider: LLMProvider =
+        this.isProvider(raw.provider) ? raw.provider : this.loadAppConfig().llmProvider;
+
+      const profiles: Record<LLMProvider, LLMProfile> = {
+        ...defaults.profiles,
+      };
+      const legacyProfile: LLMProfile = {
+        apiKey: typeof raw.apiKey === "string" ? expandEnvVars(raw.apiKey) : profiles[legacyProvider].apiKey,
+        model: typeof raw.model === "string" ? raw.model : profiles[legacyProvider].model,
+        baseUrl: typeof raw.baseUrl === "string" ? expandEnvVars(raw.baseUrl) : profiles[legacyProvider].baseUrl,
+      };
+      profiles[legacyProvider] = { ...profiles[legacyProvider], ...legacyProfile };
+
+      this.llmStore = { activeProvider: legacyProvider, profiles };
+      return this.llmStore;
+    } catch (e) {
+      // fail-soft defaults
+      const appProv = this.loadAppConfig().llmProvider;
+      this.llmStore = { ...defaults, activeProvider: appProv };
+      return this.llmStore;
     }
   }
 
@@ -125,17 +229,35 @@ export class ConfigService {
   }
 
   saveLLMConfig(config: LLMConfig): void {
-    const configPath = path.join(getConfigDir(), "llm.yaml");
-    const toWrite: LLMConfig = {
-      provider: config.provider,
+    // Back-compat entry point: update just the active provider profile and persist store format.
+    const store = this.loadLLMConfigStore();
+    const provider = config.provider;
+    store.activeProvider = provider;
+    store.profiles[provider] = {
+      ...store.profiles[provider],
       REDACTED
       model: config.model,
       baseUrl: config.baseUrl,
     };
+    this.saveLLMConfigStore(store);
+  }
+
+  saveLLMConfigStore(store: LLMConfigStore): void {
+    const configPath = path.join(getConfigDir(), "llm.yaml");
+    const toWrite: any = {
+      activeProvider: store.activeProvider,
+      profiles: {
+        openai: { ...store.profiles.openai },
+        claude: { ...store.profiles.claude },
+        ollama: { ...store.profiles.ollama },
+      },
+    };
     // Drop undefined keys for a clean yaml file.
-    Object.keys(toWrite).forEach((k) => {
-      if ((toWrite as any)[k] === undefined) delete (toWrite as any)[k];
-    });
+    for (const prov of ["openai", "claude", "ollama"] as LLMProvider[]) {
+      Object.keys(toWrite.profiles[prov]).forEach((k) => {
+        if (toWrite.profiles[prov][k] === undefined) delete toWrite.profiles[prov][k];
+      });
+    }
     fs.writeFileSync(configPath, yaml.dump(toWrite, { lineWidth: 120 }), "utf-8");
     this.clearCache();
   }

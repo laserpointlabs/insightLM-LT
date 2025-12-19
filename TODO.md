@@ -39,12 +39,12 @@ This file is the single source of truth for roadmap planning.
 
 ### Chat (core)
 - [ ] Rename chat to iDA (INtegrated Digital Assistant) (or DAS Digital Assistant System... lets think)
-- [ ] Add small UX hint when no workbooks are scoped (link to Contexts to fix)
-- [ ] Add deterministic chat history scaffolding (even if minimal in 1.0)
+- [x] Add small UX hint when no workbooks are scoped (link to Contexts to fix) — deterministic Chat empty-state + jump-to-contexts
+- [x] Add deterministic chat history scaffolding (even if minimal in 1.0) — persisted single-thread per Context
+- [x] config.yaml for llm source (ollama, openai, asksage) [Critical for genernal testing] — `config/app.yaml` + `config/llm.yaml` + in-app Settings tab + model listing
+- [/] @commands for specific context calls to worbooks, folders, and docs [Nice have and carries over to the dash boards] — lightweight `@` refs inserting `workbook://...` + citations. (@ commands are opening off of the bottom of the screen)
+- [x] Chats are first class citizens and remain in context with the scopeing — tools are scoped to active Context workbooks when Scoped mode is enabled
 - [ ] Tabbed and stored chats where chat context is first class (we can discuss need and complexity)
-- [ ] config.yaml for llm source (ollama, openai, asksage) [Critical for genernal testing]
-- [ ] @commands for specific context calls to worbooks, folders, and docs [Nice have and carries over to the dash boards]
-- [ ] Chats are first class citizens and remain in context with the scopeing
 - [ ] When asking a question that is out of scope the response should be somthing like "I dont know that..." per best practice.
 - [ ] API key management (env.os first, then others)
   
@@ -152,3 +152,6 @@ This file is the single source of truth for roadmap planning.
 - [ ] Investigate trade study mcp server
 - [ ] Investigate MCDA mcp server
 - [ ] Others? 
+
+### CDNs
+- [ ] download all necessary cdns at inital build, we dont what to need the internet

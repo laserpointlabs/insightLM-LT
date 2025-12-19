@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { ConfigService, type AppConfig, type LLMConfig } from "../services/configService";
+import { ConfigService, type AppConfig, type LLMConfig, type LLMConfigStore, type LLMProvider } from "../services/configService";
 import { LLMService } from "../services/llmService";
 
 function isProvider(x: any): x is "openai" | "claude" | "ollama" {
@@ -8,9 +8,11 @@ function isProvider(x: any): x is "openai" | "claude" | "ollama" {
 
 export function setupConfigIPC(configService: ConfigService, llmService: LLMService) {
   ipcMain.handle("config:get", async () => {
+    const llmStore = configService.loadLLMConfigStore();
     return {
       app: configService.loadAppConfig(),
       llm: configService.loadLLMConfig(),
+      llmStore,
     };
   });
 
@@ -25,33 +27,51 @@ export function setupConfigIPC(configService: ConfigService, llmService: LLMServ
     return { app: configService.loadAppConfig() };
   });
 
-  ipcMain.handle("config:updateLLM", async (_evt, updates: Partial<LLMConfig>) => {
-    const current = configService.loadLLMConfig();
-    const provider = isProvider((updates as any)?.provider) ? (updates as any).provider : current.provider;
-    const next: LLMConfig = {
-      ...current,
-      ...updates,
-      provider,
-      model: String((updates as any)?.model ?? current.model ?? "gpt-4").trim() || String(current.model || "gpt-4"),
-      apiKey: typeof (updates as any)?.apiKey === "string" ? (updates as any).REDACTED
-      baseUrl: typeof (updates as any)?.baseUrl === "string" ? (updates as any).baseUrl : current.baseUrl,
-    };
+  ipcMain.handle("config:updateLLM", async (_evt, updates: any) => {
+    const store: LLMConfigStore = configService.loadLLMConfigStore();
 
-    // Persist to YAML and apply live to the running LLM service.
-    configService.saveLLMConfig(next);
-    llmService.setConfig(next);
+    const nextActive: LLMProvider =
+      isProvider(updates?.activeProvider) ? updates.activeProvider : isProvider(updates?.provider) ? updates.provider : store.activeProvider;
+
+    // Merge full profiles map if provided.
+    if (updates?.profiles && typeof updates.profiles === "object") {
+      for (const p of ["openai", "claude", "ollama"] as const) {
+        const incoming = updates.profiles[p];
+        if (incoming && typeof incoming === "object") {
+          store.profiles[p] = { ...store.profiles[p], ...incoming };
+        }
+      }
+    }
+
+    // Also accept legacy-style updates (provider + fields) to update just that provider.
+    const targetProvider: LLMProvider = isProvider(updates?.provider) ? updates.provider : nextActive;
+    if (updates && (updates.model !== undefined || updates.apiKey !== undefined || updates.baseUrl !== undefined)) {
+      store.profiles[targetProvider] = {
+        ...store.profiles[targetProvider],
+        model: typeof updates.model === "string" ? updates.model : store.profiles[targetProvider]?.model,
+        apiKey: typeof updates.apiKey === "string" ? updates.REDACTED
+        baseUrl: typeof updates.baseUrl === "string" ? updates.baseUrl : store.profiles[targetProvider]?.baseUrl,
+      };
+    }
+
+    store.activeProvider = nextActive;
+
+    configService.saveLLMConfigStore(store);
+
+    // Apply live to running LLM service (active provider profile).
+    const activeCfg = configService.loadLLMConfig();
+    llmService.setConfig(activeCfg);
 
     // Keep app.yaml llmProvider in sync for clarity.
     try {
       const appCfg = configService.loadAppConfig();
-      if (appCfg.llmProvider !== next.provider) {
-        configService.saveAppConfig({ ...appCfg, llmProvider: next.provider });
+      if (appCfg.llmProvider !== activeCfg.provider) {
+        configService.saveAppConfig({ ...appCfg, llmProvider: activeCfg.provider });
       }
     } catch {
       // ignore
     }
 
-    return { llm: configService.loadLLMConfig() };
+    return { llm: activeCfg, llmStore: configService.loadLLMConfigStore() };
   });
 }
-

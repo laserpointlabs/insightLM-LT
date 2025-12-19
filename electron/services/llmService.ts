@@ -982,7 +982,7 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     const lastMessage = messages[messages.length - 1];
 
     // For Ollama, we'll use a prompt-based approach to detect tool needs
-    const enhancedPrompt = `${this.getSystemPrompt()}\n\nUser: ${lastMessage.content}\n\nThink step by step. If you need to read a file, list workbooks, or create a file, respond with JSON in this format: {"tool": "tool_name", "args": {...}}. Otherwise, respond normally.`;
+    const enhancedPrompt = `${this.getSystemPrompt()}\n\nUser: ${lastMessage.content}\n\nIf you need to use a tool, respond with ONLY valid JSON (no markdown fences, no extra text) in this format: {"tool": "tool_name", "args": {...}}.\nIf you do NOT need a tool, respond normally.`;
 
     const ollamaHeaders: Record<string, string> = {
       "Content-Type": "application/json",
@@ -1001,7 +1001,8 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
         prompt: enhancedPrompt,
         stream: false,
         options: {
-          temperature: 0.7,
+          // Lower temperature makes tool-call formatting significantly more reliable on smaller local models.
+          temperature: 0.2,
         },
       }),
     });
@@ -1013,15 +1014,10 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     const data = (await response.json()) as any;
     let responseText = data.response || "";
 
-    // Try to parse tool calls from response
-    try {
-      const toolCallMatch = responseText.match(
-        /\{"tool":\s*"([^"]+)",\s*"args":\s*(\{[^}]+\})\}/,
-      );
-      if (toolCallMatch) {
-        const toolName = toolCallMatch[1];
-        const toolArgs = JSON.parse(toolCallMatch[2]);
-        const result = await this.executeTool(toolName, toolArgs);
+    const toolCall = this.extractToolCallFromText(responseText);
+    if (toolCall) {
+      try {
+        const result = await this.executeTool(toolCall.name, toolCall.arguments);
 
         // Continue conversation with tool result
         messages.push({
@@ -1040,17 +1036,99 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
             model: this.config.model,
             prompt: messages.map((m) => `${m.role}: ${m.content}`).join("\n"),
             stream: false,
+            options: {
+              temperature: 0.3,
+            },
           }),
         });
 
         const finalData = (await finalResponse.json()) as any;
         return finalData.response || responseText;
+      } catch {
+        // Fail-soft: if tool execution fails, return original model output.
+        return responseText;
       }
-    } catch (e) {
-      // If parsing fails, just return the response
     }
 
     return responseText;
+  }
+
+  /**
+   * Best-effort extraction of {"tool": "...", "args": {...}} from models that don't support native tool calling.
+   * Smaller local models often wrap JSON in markdown fences or add extra prose; we tolerate that here.
+   */
+  private extractToolCallFromText(text: string): ToolCall | null {
+    if (!text || typeof text !== "string") return null;
+
+    const candidates: string[] = [];
+
+    // 1) Prefer fenced JSON blocks if present
+    const fence = text.match(/```json\s*([\s\S]*?)\s*```/i);
+    if (fence && fence[1]) candidates.push(fence[1].trim());
+
+    // 2) Otherwise, try to find a balanced JSON object that contains a "tool" key
+    const idx = text.indexOf("{");
+    if (idx >= 0) {
+      const balanced = this.extractFirstBalancedJsonObject(text.slice(idx));
+      if (balanced) candidates.push(balanced);
+    }
+
+    // 3) Last resort: if the model responded with ONLY JSON but we didn't match above
+    candidates.push(text.trim());
+
+    for (const c of candidates) {
+      const parsed = this.tryParseJson(c);
+      if (!parsed || typeof parsed !== "object") continue;
+      const toolName = (parsed as any).tool;
+      const args = (parsed as any).args;
+      if (typeof toolName !== "string" || !toolName.trim()) continue;
+      const toolArgs = args && typeof args === "object" ? args : {};
+      return { id: `ollama-${Date.now()}`, name: toolName.trim(), arguments: toolArgs };
+    }
+
+    return null;
+  }
+
+  private tryParseJson(text: string): any | null {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Extracts the first balanced {...} object from the start of `text`.
+   * Returns null if braces don't balance.
+   */
+  private extractFirstBalancedJsonObject(text: string): string | null {
+    let depth = 0;
+    let inStr = false;
+    let escape = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        if (inStr) escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        inStr = !inStr;
+        continue;
+      }
+      if (inStr) continue;
+      if (ch === "{") depth++;
+      if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          return text.slice(0, i + 1);
+        }
+      }
+    }
+    return null;
   }
 
   private formatMessagesForOpenAI(messages: LLMMessage[]): any[] {
