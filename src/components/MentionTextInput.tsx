@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type MentionKind = "workbook" | "folder" | "file";
 
@@ -74,9 +75,13 @@ export function MentionTextInput({
   onEnter,
 }: MentionTextInputProps) {
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [mentionState, setMentionState] = useState<{ start: number; query: string } | null>(null);
+  const [menuDirection, setMenuDirection] = useState<"down" | "up">("down");
+  const [menuPos, setMenuPos] = useState<null | { top: number; left: number; width: number }>(null);
 
   const filtered = useMemo(() => {
     if (!mentionState) return [];
@@ -105,6 +110,57 @@ export function MentionTextInput({
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [menuOpen, menuTestId]);
+
+  // Flip the mention menu upward when there isn't enough space below the input.
+  // This is critical for sidebar Chat (composer at bottom) and keeps the menu visible.
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const updatePlacement = () => {
+      const host = containerRef.current;
+      if (!host) return;
+      const rect = host.getBoundingClientRect();
+      const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+      const viewportW = window.innerWidth || document.documentElement.clientWidth || 0;
+
+      const estimatedMenuH = Math.min(
+        256,
+        menuRef.current?.getBoundingClientRect().height || 256,
+      );
+      const margin = 8; // ~mt-1/mb-1 + breathing room
+
+      const spaceBelow = viewportH - rect.bottom;
+      const spaceAbove = rect.top;
+
+      // Prefer opening upward if we'd clip below and there's more room above.
+      const direction =
+        spaceBelow < estimatedMenuH + margin && spaceAbove > spaceBelow ? "up" : "down";
+      setMenuDirection(direction);
+
+      // Position the menu in a portal (fixed) so it isn't clipped by overflow containers
+      // and it layers above headers/other panes.
+      const rawLeft = rect.left;
+      const rawWidth = rect.width;
+      const left = Math.max(4, Math.min(rawLeft, Math.max(4, viewportW - rawWidth - 4)));
+      const top =
+        direction === "down"
+          ? Math.min(viewportH - 4, rect.bottom + 4)
+          : Math.max(4, rect.top - estimatedMenuH - 4);
+      setMenuPos({ top, left, width: rawWidth });
+    };
+
+    // Defer until after menu renders so we can measure its height.
+    const t = window.setTimeout(updatePlacement, 0);
+    window.addEventListener("resize", updatePlacement);
+    // Use capture to catch scrolls in nested scroll containers.
+    window.addEventListener("scroll", updatePlacement, true);
+
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [menuOpen, filtered.length]);
 
   const refreshMentionState = () => {
     const el = inputRef.current;
@@ -155,7 +211,7 @@ export function MentionTextInput({
   };
 
   return (
-    <div className={`relative ${containerClassName || ""}`}>
+    <div ref={containerRef} className={`relative ${containerClassName || ""}`}>
       {multiline ? (
         <textarea
           ref={inputRef as any}
@@ -249,43 +305,63 @@ export function MentionTextInput({
         />
       )}
 
-      {menuOpen && mentionState && (
-        <div
-          className="absolute left-0 top-full z-50 mt-1 w-full max-h-64 overflow-auto rounded border border-gray-200 bg-white shadow-lg"
-          data-testid={menuTestId}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          {filtered.length > 0 ? (
-            filtered.map((it, idx) => (
-              <button
-                type="button"
-                key={`${it.kind}:${it.id}`}
-                className={`block w-full px-3 py-2 text-left text-xs hover:bg-gray-100 ${
-                  idx === activeIndex ? "bg-gray-100" : ""
-                }`}
-                onMouseEnter={() => setActiveIndex(idx)}
-                onClick={(e) => {
-                  e.preventDefault();
-                  insertMention(it);
-                }}
-                data-testid={itemTestId ? itemTestId(it) : undefined}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate">
-                    {it.kind === "workbook" ? "📚" : it.kind === "folder" ? "📁" : "📄"}{" "}
-                    {it.label}
-                  </span>
-                  <span className="font-mono text-[10px] text-gray-400 truncate">{it.insertText}</span>
-                </div>
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-xs text-gray-500">
-              {mentionItems.length === 0 ? "Loading workbooks…" : "No matches"}
-            </div>
-          )}
-        </div>
-      )}
+      {menuOpen &&
+        mentionState &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="max-h-64 overflow-auto rounded border border-gray-200 bg-white shadow-lg"
+            style={{
+              position: "fixed",
+              top: menuPos?.top ?? 0,
+              left: menuPos?.left ?? 0,
+              width: menuPos?.width ?? 0,
+              zIndex: 10000,
+            }}
+            data-testid={menuTestId}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {filtered.length > 0 ? (
+              filtered.map((it, idx) => (
+                <button
+                  type="button"
+                  key={`${it.kind}:${it.id}`}
+                  className={`block w-full px-3 py-2 text-left text-xs hover:bg-gray-100 ${
+                    idx === activeIndex ? "bg-gray-100" : ""
+                  }`}
+                  onMouseEnter={() => setActiveIndex(idx)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    insertMention(it);
+                  }}
+                  data-testid={itemTestId ? itemTestId(it) : undefined}
+                  title={`${it.label}\n${it.insertText}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="shrink-0">
+                      {it.kind === "workbook" ? "📚" : it.kind === "folder" ? "📁" : "📄"}
+                    </span>
+                    {/* Show the full human-friendly name; wrap instead of truncating. */}
+                    <span className="flex-1 break-words leading-snug">{it.label}</span>
+                    {/* Truncate the raw workbook://... insert text; full value is available on hover via title. */}
+                    <span
+                      className="max-w-[45%] shrink-0 truncate font-mono text-[10px] text-gray-400"
+                      title={it.insertText}
+                    >
+                      {it.insertText}
+                    </span>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-xs text-gray-500">
+                {mentionItems.length === 0 ? "Loading workbooks…" : "No matches"}
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

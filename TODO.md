@@ -155,3 +155,16 @@ This file is the single source of truth for roadmap planning.
 
 ### CDNs
 - [ ] download all necessary cdns at inital build, we dont what to need the internet
+
+
+
+
+### Quick Fixes and Bugs
+- [x] @ - context direction
+- [ ] edit llm.comfig in tab to add providers
+- [ ] Show tool useage and thinking as small or simple reporting in the chat area
+- [ ] Allow user to move chat area to tab for chat first working
+- [x] Move scope indicator to chat area, even switch combobox
+- [x] Show full name of files not ellipsis in @
+- [ ] change move icon to ↓↑ in 
+- [ ] fix startup left trim of the views area
