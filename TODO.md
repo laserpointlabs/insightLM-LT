@@ -69,6 +69,20 @@ This file is the single source of truth for roadmap planning.
 
 - [ ] Add load demo to top tool bar to load AC-1000 and related workbooks and the example trade study demo workbooks. 
 - [ ] Add clean up Clean up smoke test artifacts
+
+
+### Others - caltch all
+-[ ] Add link from card in dashoard to supporting informatin
+-[ ] Create proper production/dev smoke test app.config
+-[ ] Fix Chat Settings to work without selecting a context
+-[ ] Fix overflow on right side of the canvase
+ 
+
+Notes: Need to work on CRUD operataions by llm
+
+
+
+
 ---
 
 ## 1.1 — “Scale & safety”

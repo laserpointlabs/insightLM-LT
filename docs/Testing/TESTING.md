@@ -22,21 +22,27 @@ set REDACTED  # Windows
 export REDACTED  # Linux/Mac
 ```
 
-Then edit `config/llm.yaml`:
+Then edit `config/llm.yaml` to select OpenAI and reference your env var:
 
 ```yaml
-provider: "openai"
-apiKey: "${OPENAI_API_KEY}"
-model: "gpt-4"
+activeProvider: openai
+profiles:
+  openai:
+    model: gpt-4o
+    apiKey: ${OPENAI_API_KEY}
+    baseUrl: ''
 ```
 
 **Option B: Ollama (Local, No API Key Needed)**
 Edit `config/llm.yaml`:
 
 ```yaml
-provider: "ollama"
-model: "llama3.1"
-baseUrl: "http://localhost:11434"
+activeProvider: ollama
+profiles:
+  ollama:
+    model: llama3.1
+    baseUrl: http://localhost:11434
+    apiKey: ''
 ```
 
 Make sure Ollama is running locally if using this option.

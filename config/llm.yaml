@@ -2,8 +2,7 @@ activeProvider: ollama
 profiles:
   openai:
     model: gpt-4o
-    apiKey: >-
-      REDACTED_OPENAI_KEY
+    apiKey: ${OPENAI_API_KEY}
     baseUrl: ''
   claude:
     model: claude-3-5-sonnet-20241022
@@ -12,4 +11,4 @@ profiles:
   ollama:
     model: devstral-small-2:24b
     baseUrl: https://lmapi.laserpointlabs.com
-    REDACTED
+    apiKey: ${LMAPI_KEY}

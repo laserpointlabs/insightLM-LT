@@ -59,9 +59,12 @@ npm run dev
 1. Set `OPENAI_API_KEY` environment variable
 2. Edit `config/llm.yaml`:
    ```yaml
-   provider: "openai"
-   apiKey: "${OPENAI_API_KEY}"
-   model: "gpt-4"
+   activeProvider: openai
+   profiles:
+     openai:
+       model: gpt-4o
+       apiKey: ${OPENAI_API_KEY}
+       baseUrl: ''
    ```
 3. Restart app
 4. Type message in chat → Press Enter
