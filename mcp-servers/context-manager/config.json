@@ -1,0 +1,14 @@
+{
+  "name": "context-manager",
+  "description": "Context management (CMS): create/list/update/activate contexts that scope workbooks/RAG/chat",
+  "command": "python",
+  "args": ["server.py"],
+  "enabled": true
+}
+
+
+
+
+
+
+

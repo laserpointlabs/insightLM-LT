@@ -1,0 +1,17 @@
+---
+description: MCP/LLM/tool routing changes must stay decoupled and fail-soft
+globs:
+  - "electron/**/*.ts"
+  - "mcp-servers/**/*.{py,ts,js}"
+  - "tests/test-*.mjs"
+alwaysApply: false
+---
+
+- Avoid hardcoding MCP server names in core logic unless intentionally required.
+  - Prefer dynamic discovery through ToolRegistry / provider registry.
+- When formatting or parsing tool/LLM output:
+  - Fail-soft into **valid structured results** (never crash the UI on malformed output).
+  - Provide explicit empty states for “no data”.
+- Any change that affects MCP/tool discovery/routing must keep these green:
+  - `npm run test:decoupling`
+  - `npm run test:automation:prod` (if user-facing behavior changes)

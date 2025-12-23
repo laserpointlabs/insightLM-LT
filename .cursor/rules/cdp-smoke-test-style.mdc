@@ -1,0 +1,17 @@
+---
+description: CDP smoke test conventions (tests/automation-smoke-ui.mjs)
+globs:
+  - "tests/automation-smoke-ui.mjs"
+  - "tests/run-prod-renderer-smoke.mjs"
+alwaysApply: false
+---
+
+- Keep the smoke **deterministic**:
+  - Prefer deterministic fixtures (e.g., write a known CSV via `window.electronAPI.file.write`) to validate graphs.
+  - Avoid generic “ask the LLM to make a graph” tests unless the output is made deterministic.
+- Avoid flake:
+  - Poll for UI state changes; don’t rely on fixed sleeps.
+  - Always ensure dialogs close (`waitForGone`) before asserting subsequent UI state.
+- Selector discipline:
+  - Use `data-testid` selectors only.
+  - Prefer `set-diff` for newly created tiles/items rather than substring matches.

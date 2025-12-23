@@ -1,0 +1,14 @@
+---
+description: InsightLM-LT core engineering principles (deterministic UX + automation-centric)
+alwaysApply: true
+---
+
+- Prefer **deterministic UX** over cleverness:
+  - No `alert/prompt/confirm` in UI; use InputDialog / ConfirmDialog / Toast patterns.
+  - Always render explicit **empty states** for “no data / no results”.
+- Be **automation-centric**:
+  - Any MVP feature that changes user workflows should include a deterministic smoke step.
+  - Prefer assertions against stable DOM attributes (`data-testid`, `data-*`) over text.
+- Keep changes **robust + testable**:
+  - Add stable selectors early (don’t “add test ids later”).
+  - Avoid fragile coupling to context scope unless explicitly required (dashboards must be stable across context changes).

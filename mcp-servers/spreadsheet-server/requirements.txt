@@ -1,0 +1,3 @@
+# Spreadsheet formula calculation engine
+pycel>=1.0b30
+networkx>=2.0,<2.7  # pycel requires networkx < 2.7

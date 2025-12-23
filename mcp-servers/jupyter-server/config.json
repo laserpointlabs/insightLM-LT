@@ -1,0 +1,10 @@
+{
+  "name": "jupyter-server",
+  "description": "Jupyter notebook execution server for insightLM-LT",
+  "command": "python",
+  "args": ["server.py"],
+  "env": {
+    "INSIGHTLM_DATA_DIR": ""
+  },
+  "enabled": true
+}

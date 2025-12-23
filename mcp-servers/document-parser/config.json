@@ -1,0 +1,7 @@
+{
+  "name": "document-parser",
+  "description": "Parse PDF, DOCX, and other document formats",
+  "command": "python",
+  "args": ["server.py"],
+  "enabled": true
+}
