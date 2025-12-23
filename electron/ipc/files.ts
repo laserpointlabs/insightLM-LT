@@ -93,6 +93,31 @@ export function setupFileIPC(ragService?: RAGIndexService) {
   );
 
   ipcMain.handle(
+    "file:moveToFolder",
+    async (
+      _,
+      sourceWorkbookId: string,
+      relativePath: string,
+      targetWorkbookId: string,
+      targetFolder?: string,
+      options?: { overwrite?: boolean; destFilename?: string },
+    ) => {
+      try {
+        await fileService.moveDocumentToFolder(
+          sourceWorkbookId,
+          relativePath,
+          targetWorkbookId,
+          targetFolder,
+          options,
+        );
+      } catch (error) {
+        console.error("Error moving file to folder:", error);
+        throw error;
+      }
+    },
+  );
+
+  ipcMain.handle(
     "file:write",
     async (
       _,

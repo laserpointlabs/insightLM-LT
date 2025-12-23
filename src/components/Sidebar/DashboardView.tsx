@@ -4,6 +4,8 @@ import { useDocumentStore } from "../../store/documentStore";
 import { InputDialog } from "../InputDialog";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { AddIcon } from "../Icons";
+import { notifyError, notifySuccess } from "../../utils/notify";
+import { testIds } from "../../testing/testIds";
 
 interface DashboardViewProps {
   onActionButton?: (button: React.ReactNode) => void;
@@ -84,9 +86,13 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
             const dashboard = await createDashboard(name.trim());
             // Open the newly created dashboard directly without looking it up
             openDashboard(dashboard);
+            notifySuccess(`Dashboard "${name.trim()}" created`, "Dashboards");
           } catch (error) {
             console.error("Failed to create dashboard:", error);
-            alert(`Failed to create dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+            notifyError(
+              error instanceof Error ? error.message : "Failed to create dashboard",
+              "Dashboards",
+            );
           }
         }
       },
@@ -100,6 +106,7 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
           onClick={handleCreateDashboard}
           className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
           title="Create New Dashboard"
+          data-testid={testIds.dashboards.sidebar.create}
         >
           <AddIcon className="h-4 w-4" />
         </button>
@@ -129,9 +136,13 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
 
         try {
           await renameDashboard(dashboardId, newName.trim());
+          notifySuccess("Dashboard renamed", "Dashboards");
         } catch (error) {
           console.error("Failed to rename dashboard:", error);
-          alert(`Failed to rename dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+          notifyError(
+            error instanceof Error ? error.message : "Failed to rename dashboard",
+            "Dashboards",
+          );
         }
       },
     });
@@ -152,9 +163,13 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
           await deleteDashboard(dashboardId);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
           setContextMenu(null);
+          notifySuccess("Dashboard deleted", "Dashboards");
         } catch (error) {
           console.error("Failed to delete dashboard:", error);
-          alert(`Failed to delete dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+          notifyError(
+            error instanceof Error ? error.message : "Failed to delete dashboard",
+            "Dashboards",
+          );
         }
       },
     });
@@ -184,6 +199,7 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
               className="flex cursor-pointer items-center justify-between rounded p-1 hover:bg-gray-100"
               onClick={() => handleDashboardClick(dashboard.id)}
               onContextMenu={(e) => handleContextMenu(e, dashboard.id)}
+              data-testid={testIds.dashboards.sidebar.item(dashboard.id)}
             >
               <span className="flex items-center gap-1 text-sm">
                 📊 {dashboard.name}
@@ -210,6 +226,7 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
               handleRenameDashboard(contextMenu.dashboardId);
             }}
             className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+            data-testid={testIds.dashboards.sidebar.contextMenu.rename}
           >
             Rename Dashboard
           </button>
@@ -218,6 +235,7 @@ export function DashboardView({ onActionButton }: DashboardViewProps = {}) {
               handleDeleteDashboard(contextMenu.dashboardId);
             }}
             className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
+            data-testid={testIds.dashboards.sidebar.contextMenu.delete}
           >
             Delete Dashboard
           </button>

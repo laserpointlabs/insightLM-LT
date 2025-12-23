@@ -17,6 +17,33 @@ export function setupWorkbookIPC(configService: any) {
     }
   });
 
+  ipcMain.handle("workbook:createFolder", async (_, workbookId: string, folderName: string) => {
+    try {
+      await workbookService.createFolder(workbookId, folderName);
+    } catch (error) {
+      console.error("Error creating folder:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("workbook:deleteFolder", async (_, workbookId: string, folderName: string) => {
+    try {
+      await workbookService.deleteFolder(workbookId, folderName);
+    } catch (error) {
+      console.error("Error deleting folder:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("workbook:renameFolder", async (_, workbookId: string, oldName: string, newName: string) => {
+    try {
+      await workbookService.renameFolder(workbookId, oldName, newName);
+    } catch (error) {
+      console.error("Error renaming folder:", error);
+      throw error;
+    }
+  });
+
   ipcMain.handle("workbook:getAll", async () => {
     try {
       const workbooks = workbookService.getWorkbooks();

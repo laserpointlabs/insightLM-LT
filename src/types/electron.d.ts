@@ -1,7 +1,20 @@
 export interface ElectronAPI {
   getVersion: () => Promise<string>;
+  extensions?: {
+    setEnabled: (extensionId: string, enabled: boolean, server?: {
+      name: string;
+      description?: string;
+      command: string;
+      args: string[];
+      env?: Record<string, string>;
+      serverPath: string;
+    }) => Promise<void>;
+  };
   workbook: {
     create: (name: string) => Promise<any>;
+    createFolder: (workbookId: string, folderName: string) => Promise<void>;
+    deleteFolder: (workbookId: string, folderName: string) => Promise<void>;
+    renameFolder: (workbookId: string, oldName: string, newName: string) => Promise<void>;
     getAll: () => Promise<any[]>;
     get: (id: string) => Promise<any | null>;
     rename: (id: string, newName: string) => Promise<void>;
@@ -38,6 +51,13 @@ export interface ElectronAPI {
       relativePath: string,
       targetWorkbookId: string,
     ) => Promise<void>;
+    moveToFolder: (
+      sourceWorkbookId: string,
+      relativePath: string,
+      targetWorkbookId: string,
+      targetFolder?: string,
+      options?: { overwrite?: boolean; destFilename?: string },
+    ) => Promise<void>;
     getPath: (workbookId: string, relativePath: string) => Promise<string>;
     readBinary: (workbookId: string, relativePath: string) => Promise<string>;
   };
@@ -57,7 +77,37 @@ export interface ElectronAPI {
         role: "user" | "assistant" | "system";
         content: string;
       }>,
+      requestId?: string,
     ) => Promise<string>;
+    listModels?: () => Promise<{ models: Array<{ id: string; label?: string }>; error?: string }>;
+    onActivity?: (cb: (evt: any) => void) => () => void;
+  };
+
+  chat?: {
+    getThread: (contextId: string) => Promise<{ sessionId: string; contextId: string; messages: any[] }>;
+    append: (params: { contextId: string; role: "user" | "assistant"; content: string; meta?: any }) => Promise<{ message: any }>;
+    clear: (contextId: string) => Promise<{ sessionId: string; contextId: string; messages: any[] }>;
+  };
+
+  config?: {
+    get: () => Promise<any>;
+    updateApp: (updates: any) => Promise<any>;
+    updateLLM: (updates: any) => Promise<any>;
+  };
+  mcp: {
+    call: (serverName: string, method: string, params?: any) => Promise<any>;
+    dashboardQuery: (question: string, tileType?: string) => Promise<any>;
+    jupyterExecuteCell: (workbookId: string, notebookPath: string, cellIndex: number, code: string) => Promise<any>;
+  };
+  contextScope?: {
+    getMode: () => Promise<{ mode: "all" | "context" }>;
+    setMode: (mode: "all" | "context") => Promise<{ mode: "all" | "context" }>;
+  };
+
+  demos?: {
+    load: (demoId: "ac1000" | "trade-study") => Promise<{ demoId: string; workbookId: string; contextId: string | null }>;
+    resetDevData: () => Promise<{ ok: true }>;
+    onChanged?: (cb: (payload: any) => void) => () => void;
   };
 }
 

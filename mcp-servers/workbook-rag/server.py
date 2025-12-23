@@ -17,9 +17,84 @@ DATA_DIR = os.environ.get("INSIGHTLM_DATA_DIR", "")
 _document_cache: Dict[str, tuple[str, float]] = {}
 _cache_timestamp: Optional[float] = None
 
+def _prune_document_cache() -> None:
+    """Remove cache entries for files that no longer exist."""
+    global _document_cache
+    try:
+        dead_keys = []
+        for k in list(_document_cache.keys()):
+            try:
+                if not Path(k).exists():
+                    dead_keys.append(k)
+            except Exception:
+                dead_keys.append(k)
+        for k in dead_keys:
+            _document_cache.pop(k, None)
+    except Exception:
+        # Cache is best-effort only
+        pass
+
+def _compute_cache_stamp(workbooks_dir: Path) -> float:
+    """Compute a stamp that changes when workbook metadata changes.
+
+    We cannot rely on the parent directory mtime alone on all platforms/filesystems.
+    """
+    stamp = 0.0
+    try:
+        stamp = max(stamp, workbooks_dir.stat().st_mtime)
+    except Exception:
+        pass
+    try:
+        for meta in workbooks_dir.glob("*/workbook.json"):
+            try:
+                stamp = max(stamp, meta.stat().st_mtime)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return stamp
+
+def clear_cache(workbook_id: Optional[str] = None, file_path: Optional[str] = None) -> Dict[str, Any]:
+    """Clear cache entries.
+
+    Args:
+        workbook_id: If set, clears entries under this workbook folder only.
+        file_path: If set, clears a specific absolute file path (best-effort).
+    """
+    global _document_cache, _cache_timestamp
+    removed = 0
+
+    if file_path:
+        k = str(Path(file_path))
+        if k in _document_cache:
+            _document_cache.pop(k, None)
+            removed += 1
+        return {"cleared": removed, "scope": "file"}
+
+    if workbook_id:
+        try:
+            data_dir = Path(get_data_dir())
+            wb_dir = data_dir / "workbooks" / workbook_id
+            prefix = str(wb_dir)
+            for k in list(_document_cache.keys()):
+                if str(k).startswith(prefix):
+                    _document_cache.pop(k, None)
+                    removed += 1
+        except Exception:
+            # fallback: clear all
+            removed = len(_document_cache)
+            _document_cache.clear()
+        return {"cleared": removed, "scope": "workbook"}
+
+    removed = len(_document_cache)
+    _document_cache.clear()
+    _cache_timestamp = None
+    return {"cleared": removed, "scope": "all"}
+
 def get_data_dir() -> str:
     """Get application data directory"""
     if DATA_DIR:
+        print(f"DEBUG: Using INSIGHTLM_DATA_DIR: {DATA_DIR}", file=sys.stderr, flush=True)
         return DATA_DIR
 
     if sys.platform == "win32":
@@ -93,6 +168,231 @@ def extract_text_from_excel(file_path: Path) -> str:
         return f"Error extracting Excel: {e}"
 
 
+def extract_text_from_insight_sheet(file_path: Path) -> str:
+    """Extract text from Insight Sheet (.is) file with formulas visible"""
+    try:
+        content = file_path.read_text(encoding='utf-8')
+        data = json.loads(content)
+        
+        text_parts = []
+        text_parts.append(f"Spreadsheet: {file_path.name}")
+        
+        if 'metadata' in data:
+            metadata = data['metadata']
+            if 'name' in metadata:
+                text_parts.append(f"Name: {metadata['name']}")
+            if 'workbook_id' in metadata:
+                text_parts.append(f"Workbook ID: {metadata['workbook_id']}")
+        
+        text_parts.append("")  # Empty line
+        
+        # Process each sheet
+        sheets = data.get('sheets', [])
+        for sheet in sheets:
+            sheet_name = sheet.get('name', 'Sheet1')
+            sheet_id = sheet.get('id', 'sheet1')
+            cells = sheet.get('cells', {})
+            formats = sheet.get('formats', {})
+            
+            text_parts.append(f"=== Sheet: {sheet_name} ===")
+            
+            if not cells:
+                text_parts.append("(Empty sheet)")
+                text_parts.append("")
+                continue
+            
+            # Extract all cell data with formulas visible
+            cell_data = []
+            for cell_ref, cell_info in cells.items():
+                if isinstance(cell_info, dict):
+                    # Handle nested value structure from Luckysheet format
+                    # Format can be either:
+                    # 1. { "value": 123, "formula": "=A1*2" } (simple format)
+                    # 2. { "value": { "v": 123, "f": "=A1*2", "m": "123" } } (Luckysheet format)
+                    
+                    if 'value' in cell_info and isinstance(cell_info['value'], dict):
+                        # Luckysheet format: nested value object
+                        value_obj = cell_info['value']
+                        formula = value_obj.get('f', '')  # Formula in 'f' field
+                        value = value_obj.get('v', value_obj.get('m', ''))  # Value in 'v' or 'm' field
+                        
+                        if formula:
+                            # Formula cell - show formula AND calculated value
+                            cell_data.append(f"Cell {cell_ref}: {formula} (formula, calculated value: {value})")
+                        else:
+                            # Value cell
+                            cell_data.append(f"Cell {cell_ref}: {value}")
+                    else:
+                        # Simple format: { "value": 123, "formula": "=A1*2" }
+                        value = cell_info.get('value', '')
+                        formula = cell_info.get('formula', '')
+                        
+                        if formula:
+                            # Formula cell - show formula AND calculated value
+                            cell_data.append(f"Cell {cell_ref}: {formula} (formula, calculated value: {value})")
+                        else:
+                            # Value cell
+                            cell_data.append(f"Cell {cell_ref}: {value}")
+                else:
+                    # Simple value (direct value, not a dict)
+                    cell_data.append(f"Cell {cell_ref}: {cell_info}")
+            
+            # Sort cells by reference (A1, A2, B1, etc.)
+            def cell_sort_key(ref: str):
+                # Extract column (letters) and row (numbers)
+                match = re.match(r'([A-Z]+)(\d+)', ref)
+                if match:
+                    col = match.group(1)
+                    row = int(match.group(2))
+                    # Convert column to number (A=1, B=2, ..., Z=26, AA=27, etc.)
+                    col_num = sum((ord(c) - ord('A') + 1) * (26 ** i) for i, c in enumerate(reversed(col)))
+                    return (row, col_num)
+                return (0, 0)
+            
+            def get_cell_ref_from_line(line: str) -> str:
+                match = re.search(r'Cell ([A-Z]+\d+)', line)
+                return match.group(1) if match else 'A1'
+            
+            cell_data.sort(key=lambda x: cell_sort_key(get_cell_ref_from_line(x)))
+            
+            text_parts.extend(cell_data)
+            text_parts.append("")  # Empty line between sheets
+        
+        # Add formula dependencies summary
+        formula_cells = []
+        for sheet in sheets:
+            cells = sheet.get('cells', {})
+            for cell_ref, cell_info in cells.items():
+                if isinstance(cell_info, dict):
+                    # Extract formula from either format
+                    formula = None
+                    if 'value' in cell_info and isinstance(cell_info['value'], dict):
+                        # Luckysheet format: formula in value.f
+                        formula = cell_info['value'].get('f', '')
+                    else:
+                        # Simple format: formula in cell_info.formula
+                        formula = cell_info.get('formula', '')
+                    
+                    if formula:
+                        dependencies = extract_cell_references(formula)
+                        formula_cells.append(f"{cell_ref}: {formula} (depends on: {', '.join(dependencies)})")
+        
+        if formula_cells:
+            text_parts.append("=== Formulas ===")
+            text_parts.extend(formula_cells)
+        
+        # Extract conditional formatting rules
+        conditional_format_rules = []
+        conditional_formats = sheet.get('conditionalFormats', {})
+        if conditional_formats:
+            for rule_key, rule in conditional_formats.items():
+                if not isinstance(rule, dict):
+                    continue
+                    
+                # Rule structure varies, but common fields:
+                # - type: 'cellValue', 'formula', 'textContains', etc.
+                # - cellrange: cell range like "A1:A10" or [{r:0, c:0}, {r:0, c:0}]
+                # - condition: operator like '>', '<', '=', 'between', etc.
+                # - value: threshold value(s)
+                # - format: formatting object with bg (background), fc (font color), etc.
+                
+                rule_type = rule.get('type', rule.get('conditionType', 'unknown'))
+                cell_range = rule.get('cellrange', rule.get('range', rule_key))
+                
+                # Handle cell range format (could be string "A1:A10" or array)
+                if isinstance(cell_range, list) and len(cell_range) >= 2:
+                    # Convert array format to string
+                    start = cell_range[0]
+                    end = cell_range[1] if len(cell_range) > 1 else start
+                    if isinstance(start, dict) and 'r' in start and 'c' in start:
+                        # Convert row/col to cell reference
+                        start_col = chr(65 + start['c']) if start['c'] < 26 else 'A'  # Simple conversion
+                        start_row = start['r'] + 1
+                        end_col = chr(65 + end['c']) if end['c'] < 26 else 'A'
+                        end_row = end['r'] + 1
+                        cell_range = f"{start_col}{start_row}:{end_col}{end_row}"
+                
+                condition = rule.get('condition', rule.get('operator', ''))
+                value = rule.get('value', rule.get('threshold', ''))
+                format_info = rule.get('format', rule.get('style', {}))
+                
+                # Format the rule description based on type
+                if rule_type == 'cellValue' or rule_type == 'number':
+                    # Example: "Cell value > 100" -> red background
+                    if condition and value:
+                        condition_desc = f"value {condition} {value}"
+                    elif condition:
+                        condition_desc = f"value {condition}"
+                    else:
+                        condition_desc = f"value check"
+                elif rule_type == 'formula':
+                    # Formula-based condition
+                    formula = rule.get('formula', condition)
+                    condition_desc = f"formula: {formula}"
+                elif rule_type == 'textContains':
+                    condition_desc = f"text contains '{value}'" if value else "text contains"
+                elif rule_type == 'duplicate':
+                    condition_desc = "duplicate values"
+                elif rule_type == 'unique':
+                    condition_desc = "unique values"
+                else:
+                    condition_desc = condition if condition else f"{rule_type} condition"
+                
+                # Extract formatting details (color, style, etc.)
+                format_desc = []
+                if isinstance(format_info, dict):
+                    # Background color
+                    bg_color = format_info.get('bg', format_info.get('backgroundColor', format_info.get('backColor')))
+                    if bg_color:
+                        # Handle hex colors (#FF0000) or color names
+                        if isinstance(bg_color, str):
+                            format_desc.append(f"background: {bg_color}")
+                        elif isinstance(bg_color, dict) and 'rgb' in bg_color:
+                            format_desc.append(f"background: rgb({bg_color['rgb']})")
+                    
+                    # Font color
+                    font_color = format_info.get('fc', format_info.get('fontColor', format_info.get('foreColor')))
+                    if font_color:
+                        if isinstance(font_color, str):
+                            format_desc.append(f"font color: {font_color}")
+                        elif isinstance(font_color, dict) and 'rgb' in font_color:
+                            format_desc.append(f"font color: rgb({font_color['rgb']})")
+                    
+                    # Text style
+                    if format_info.get('bl', format_info.get('bold', False)):
+                        format_desc.append("bold")
+                    if format_info.get('it', format_info.get('italic', False)):
+                        format_desc.append("italic")
+                    if format_info.get('un', format_info.get('underline', False)):
+                        format_desc.append("underline")
+                
+                format_str = ", ".join(format_desc) if format_desc else "formatting applied"
+                conditional_format_rules.append(
+                    f"Conditional format on {cell_range}: when {condition_desc} -> {format_str}"
+                )
+        
+        if conditional_format_rules:
+            text_parts.append("=== Conditional Formatting ===")
+            text_parts.extend(conditional_format_rules)
+        
+        return '\n'.join(text_parts)
+    except json.JSONDecodeError as e:
+        return f"Error parsing Insight Sheet JSON: {e}"
+    except Exception as e:
+        return f"Error extracting Insight Sheet: {e}"
+
+
+def extract_cell_references(formula: str) -> List[str]:
+    """Extract cell references from a formula (e.g., A1, B2, etc.)"""
+    if not formula.startswith("="):
+        return []
+    
+    # Pattern to match cell references like A1, B2, AA10, etc.
+    pattern = r'\b([A-Z]+)(\d+)\b'
+    matches = re.findall(pattern, formula)
+    return [f"{col}{row}" for col, row in matches]
+
+
 def read_file(file_path: Path) -> str:
     """Read any file type"""
     ext = file_path.suffix.lower()
@@ -103,6 +403,9 @@ def read_file(file_path: Path) -> str:
         return extract_text_from_docx(file_path)
     elif ext in ['.xlsx', '.xls']:
         return extract_text_from_excel(file_path)
+    elif ext == '.is':
+        # Insight Sheet format - extract with formulas visible
+        return extract_text_from_insight_sheet(file_path)
     else:
         # Text file (includes .csv, .txt, .md, etc.)
         encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
@@ -114,33 +417,46 @@ def read_file(file_path: Path) -> str:
         return f"Could not decode file: {file_path}"
 
 
-def get_all_workbook_documents() -> List[Dict[str, Any]]:
-    """Scan all workbooks and return document metadata with content (cached)"""
+def get_all_workbook_documents(workbook_ids: List[str] = None) -> List[Dict[str, Any]]:
+    """Scan workbooks and return document metadata with content (cached).
+
+    If workbook_ids is provided, only those workbook directory names are scanned.
+    """
     global _document_cache, _cache_timestamp
 
+    workbook_id_allowlist = set(workbook_ids) if workbook_ids else None
     documents = []
     data_dir = Path(get_data_dir())
     workbooks_dir = data_dir / "workbooks"
 
+    print(f"DEBUG: Looking for workbooks in: {workbooks_dir}", file=sys.stderr, flush=True)
+    print(f"DEBUG: Workbooks dir exists: {workbooks_dir.exists()}", file=sys.stderr, flush=True)
+
     if not workbooks_dir.exists():
+        print(f"DEBUG: Workbooks directory not found: {workbooks_dir}", file=sys.stderr, flush=True)
         return []
 
-    # Check if cache is still valid (re-scan if workbooks dir changed)
+    # Prune deleted files from cache so we never return "legacy" content.
+    _prune_document_cache()
+
+    # Check if cache is still valid (re-scan if workbook metadata changed).
     try:
-        current_mtime = workbooks_dir.stat().st_mtime
-        if _cache_timestamp is not None and current_mtime <= _cache_timestamp:
+        current_stamp = _compute_cache_stamp(workbooks_dir)
+        if _cache_timestamp is not None and current_stamp <= _cache_timestamp:
             # Cache is valid, but we still need to rebuild the documents list from cache
             pass
         else:
             # Invalidate cache if directory changed
             _document_cache.clear()
-            _cache_timestamp = current_mtime
+            _cache_timestamp = current_stamp
     except:
         _document_cache.clear()
         _cache_timestamp = None
 
     for workbook_dir in workbooks_dir.iterdir():
         if not workbook_dir.is_dir():
+            continue
+        if workbook_id_allowlist is not None and workbook_dir.name not in workbook_id_allowlist:
             continue
 
         metadata_path = workbook_dir / "workbook.json"
@@ -334,12 +650,12 @@ def extract_context_chunks(content: str, key_terms: List[str], chunk_size: int =
     return chunks
 
 
-def search_workbooks_with_content(query: str, limit: int = 5) -> str:
+def search_workbooks_with_content(query: str, limit: int = 5, workbook_ids: List[str] = None) -> str:
     """Search workbook documents using text matching and return FULL content.
     Returns only files that match the query (score >= 3) plus up to 2 relevant sibling files per workbook.
     Limits to 5 files per workbook to avoid overwhelming results.
     """
-    documents = get_all_workbook_documents()
+    documents = get_all_workbook_documents(workbook_ids)
 
     if not documents:
         return "No workbook documents found."
@@ -371,11 +687,24 @@ def search_workbooks_with_content(query: str, limit: int = 5) -> str:
         filename_lower = doc["filename"].lower()
 
         # Check if document contains at least one key term (required for inclusion)
+        # Also check for partial filename matches (e.g., "spreadsheet-2025-12-12" matches "spreadsheet-2025-12-12T19-46-01.is")
         has_key_term = False
         for term in key_terms:
             if term in content_lower or term in filename_lower:
                 has_key_term = True
                 break
+        
+        # Special handling: if query contains a filename pattern (e.g., "spreadsheet-2025-12-12T19-41-01"),
+        # also match similar filenames (same date prefix)
+        if not has_key_term:
+            # Extract date prefix from query (e.g., "spreadsheet-2025-12-12" from "spreadsheet-2025-12-12T19-41-01")
+            date_prefix_match = re.search(r'([a-z0-9_-]+-\d{4}-\d{2}-\d{2})', query_lower)
+            if date_prefix_match:
+                date_prefix = date_prefix_match.group(1)
+                # Check if filename starts with this prefix
+                if filename_lower.startswith(date_prefix):
+                    has_key_term = True
+                    score += 10  # Boost score for filename prefix match
 
         # Skip documents that don't contain any key terms
         if not has_key_term:
@@ -492,8 +821,11 @@ def read_workbook_file(workbook_id: str, file_path: str) -> str:
     return read_file(full_path)
 
 
-def list_all_files() -> List[Dict[str, Any]]:
-    """List all files in all workbooks"""
+def list_all_files(workbook_ids: List[str] = None) -> List[Dict[str, Any]]:
+    """List all files in workbooks.
+
+    If workbook_ids is provided, only those workbook directory names are included.
+    """
     files = []
     data_dir = Path(get_data_dir())
     workbooks_dir = data_dir / "workbooks"
@@ -501,8 +833,12 @@ def list_all_files() -> List[Dict[str, Any]]:
     if not workbooks_dir.exists():
         return []
 
+    workbook_id_allowlist = set(workbook_ids) if workbook_ids else None
+
     for workbook_dir in workbooks_dir.iterdir():
         if not workbook_dir.is_dir():
+            continue
+        if workbook_id_allowlist is not None and workbook_dir.name not in workbook_id_allowlist:
             continue
 
         metadata_path = workbook_dir / "workbook.json"
@@ -535,48 +871,267 @@ def handle_request(request: dict) -> dict:
     params = request.get('params', {})
 
     try:
-        if method == 'rag/search':
+        # MCP protocol initialization
+        if method == 'initialize':
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {
+                    'protocolVersion': '2024-11-05',
+                    'capabilities': {
+                        'tools': {
+                            'listChanged': True
+                        }
+                    },
+                    'serverInfo': {
+                        'name': 'workbook-rag',
+                        'version': '1.0.0'
+                    }
+                }
+            }
+        
+        # MCP tools/list - expose available tools
+        elif method == 'tools/list':
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {
+                    'tools': [
+                        {
+                            'name': 'rag_search_content',
+                            'description': 'Search document CONTENT (not just filenames) across all workbooks. This searches inside PDFs, Word docs, spreadsheets, and text files. Returns full content of matching files with context chunks.',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'query': {
+                                        'type': 'string',
+                                        'description': 'What to search for (e.g., "BSEO", "authentication", "expiration dates", "NDA terms", or filename patterns)'
+                                    },
+                                    'limit': {
+                                        'type': 'number',
+                                        'description': 'Maximum number of files to return (default: 5)'
+                                    },
+                                    'workbook_ids': {
+                                        'type': 'array',
+                                        'items': { 'type': 'string' },
+                                        'description': 'Optional: limit search to these workbook IDs (directory names)'
+                                    }
+                                },
+                                'required': ['query']
+                            }
+                        },
+                        {
+                            'name': 'rag_list_files',
+                            'description': 'List all files in all workbooks with their metadata (workbook ID, workbook name, filename, path)',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'workbook_ids': {
+                                        'type': 'array',
+                                        'items': { 'type': 'string' },
+                                        'description': 'Optional: limit listing to these workbook IDs (directory names)'
+                                    }
+                                },
+                                'required': []
+                            }
+                        },
+                        {
+                            'name': 'rag_read_file',
+                            'description': 'Read the full contents of a specific file from a workbook',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'workbook_id': {
+                                        'type': 'string',
+                                        'description': 'The ID of the workbook (directory name, e.g., "ac1000-main-project")'
+                                    },
+                                    'file_path': {
+                                        'type': 'string',
+                                        'description': 'The relative path to the file within the workbook (e.g., "documents/file.txt")'
+                                    }
+                                },
+                                'required': ['workbook_id', 'file_path']
+                            }
+                        }
+                        ,
+                        {
+                            'name': 'rag_clear_cache',
+                            'description': 'Clear the server-side document content cache (useful after deletes/moves to ensure no stale results)',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'workbook_id': {
+                                        'type': 'string',
+                                        'description': 'Optional: clear cache entries only for this workbook id'
+                                    },
+                                    'file_path': {
+                                        'type': 'string',
+                                        'description': 'Optional: clear cache entry for this absolute file path'
+                                    }
+                                },
+                                'required': []
+                            }
+                        }
+                    ]
+                }
+            }
+        
+        # MCP tools/call - handle tool execution
+        elif method == 'tools/call':
+            tool_name = params.get('name', '')
+            tool_args = params.get('arguments', {})
+            
+            if tool_name == 'rag_search_content':
+                query = tool_args.get('query', '')
+                limit = tool_args.get('limit', 5)
+                workbook_ids = tool_args.get('workbook_ids', None)
+                results = search_workbooks_with_content(query, limit, workbook_ids)
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'result': {'content': results}
+                }
+            
+            elif tool_name == 'rag_list_files':
+                workbook_ids = tool_args.get('workbook_ids', None)
+                files = list_all_files(workbook_ids)
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'result': files
+                }
+            
+            elif tool_name == 'rag_read_file':
+                workbook_id = tool_args.get('workbook_id', '')
+                file_path = tool_args.get('file_path', '')
+                content = read_workbook_file(workbook_id, file_path)
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'result': {'content': content}
+                }
+
+            elif tool_name == 'rag_clear_cache':
+                workbook_id = tool_args.get('workbook_id', None)
+                file_path = tool_args.get('file_path', None)
+                result = clear_cache(workbook_id=workbook_id, file_path=file_path)
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'result': result
+                }
+            
+            else:
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'error': {
+                        'code': -32601,
+                        'message': f'Unknown tool: {tool_name}'
+                    }
+                }
+        
+        # Backward compatible: legacy rag/* methods
+        elif method == 'rag/search':
             # Backward compatible: returns file metadata only
             query = params.get('query', '')
             limit = params.get('limit', 20)
             results = search_workbooks(query, limit)
-            return {'result': results}
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': results
+            }
 
         elif method == 'rag/search_content':
             # New: returns full content of matching files
             query = params.get('query', '')
             limit = params.get('limit', 5)
-            results = search_workbooks_with_content(query, limit)
-            return {'result': {'content': results}}
+            workbook_ids = params.get('workbook_ids', None)
+            results = search_workbooks_with_content(query, limit, workbook_ids)
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {'content': results}
+            }
 
         elif method == 'rag/read_file':
             workbook_id = params.get('workbook_id', '')
             file_path = params.get('file_path', '')
             content = read_workbook_file(workbook_id, file_path)
-            return {'result': {'content': content}}
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {'content': content}
+            }
 
         elif method == 'rag/list_files':
-            files = list_all_files()
-            return {'result': files}
+            workbook_ids = params.get('workbook_ids', None)
+            files = list_all_files(workbook_ids)
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': files
+            }
 
         elif method == 'rag/health':
-            return {'result': {'status': 'healthy', 'mode': 'on-demand-with-content-search'}}
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'result': {'status': 'healthy', 'mode': 'on-demand-with-content-search'}
+            }
 
         else:
-            return {'error': f'Unknown method: {method}'}
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'error': {'code': -32601, 'message': f'Unknown method: {method}'}
+            }
 
     except Exception as e:
-        return {'error': str(e)}
+        return {
+            'jsonrpc': '2.0',
+            'id': request.get('id'),
+            'error': {'code': -32603, 'message': str(e)}
+        }
 
 
 if __name__ == '__main__':
+    # Send initialization message on startup (like workbook-dashboard)
+    init_response = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {
+                "name": "workbook-rag",
+                "version": "1.0.0"
+            },
+            "capabilities": {
+                "tools": {
+                    "listChanged": True
+                }
+            }
+        }
+    }
+    print(json.dumps(init_response), flush=True)
+    
+    # Handle requests
     for line in sys.stdin:
         try:
             request = json.loads(line.strip())
             response = handle_request(request)
-            print(json.dumps(response))
-            sys.stdout.flush()
+            if response:
+                print(json.dumps(response))
+                sys.stdout.flush()
         except Exception as e:
-            error_response = {'error': str(e)}
+            error_response = {
+                'jsonrpc': '2.0',
+                'id': request.get('id') if 'request' in locals() else None,
+                'error': {
+                    'code': -32603,
+                    'message': str(e)
+                }
+            }
             print(json.dumps(error_response))
             sys.stdout.flush()

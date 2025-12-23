@@ -4,6 +4,9 @@ import { useWorkbookStore } from "../../store/workbookStore";
 import { dashboardService } from "../../services/dashboardService";
 import { DashboardGrid } from "../Dashboard/DashboardGrid";
 import { InputDialog } from "../InputDialog";
+import { notifyError } from "../../utils/notify";
+import { testIds } from "../../testing/testIds";
+import { MentionItem, MentionTextInput } from "../MentionTextInput";
 
 interface DashboardViewerProps {
   dashboardId: string;
@@ -16,7 +19,7 @@ export function DashboardViewer({ dashboardId }: DashboardViewerProps) {
     updateQuery,
     loadDashboards,
   } = useDashboardStore();
-  const { workbooks } = useWorkbookStore();
+  const { workbooks, setWorkbooks, setLoading, setError } = useWorkbookStore();
   const [question, setQuestion] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [inputDialog, setInputDialog] = useState<{
@@ -34,7 +37,73 @@ export function DashboardViewer({ dashboardId }: DashboardViewerProps) {
     loadDashboards();
   }, [loadDashboards]);
 
+  // Dashboards rely on the workbook list for parsing + @ mentions.
+  // Unlike the Workbooks sidebar view, this viewer may be opened first,
+  // so we must ensure the workbook store is populated.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!window.electronAPI?.workbook) return;
+      if (workbooks.length) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const allWorkbooks = await window.electronAPI.workbook.getAll();
+        const normalized = Array.isArray(allWorkbooks)
+          ? allWorkbooks.map((w: any) => ({
+              ...w,
+              archived: w.archived ?? false,
+              documents: Array.isArray(w.documents)
+                ? w.documents.map((d: any) => ({ ...d, archived: d.archived ?? false }))
+                : [],
+            }))
+          : [];
+        if (!cancelled) setWorkbooks(normalized);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load workbooks");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [setError, setLoading, setWorkbooks, workbooks.length]);
+
   const dashboard = dashboards.find((d) => d.id === dashboardId);
+
+  const mentionItems: MentionItem[] = (() => {
+    const items: MentionItem[] = [];
+    for (const wb of workbooks.filter((w) => !w.archived)) {
+      items.push({
+        kind: "workbook",
+        id: wb.id,
+        label: wb.name,
+        insertText: `workbook://${wb.id}/`,
+        searchText: wb.name,
+      });
+      for (const folderName of wb.folders || []) {
+        items.push({
+          kind: "folder",
+          id: `${wb.id}:${folderName}`,
+          label: `${wb.name}/${folderName}`,
+          insertText: `workbook://${wb.id}/documents/${folderName}/`,
+          searchText: `${wb.name} ${folderName}`,
+        });
+      }
+      for (const doc of wb.documents || []) {
+        items.push({
+          kind: "file",
+          id: `${wb.id}:${doc.path}`,
+          label: `${wb.name}/${doc.filename}`,
+          insertText: `workbook://${wb.id}/${doc.path}`,
+          searchText: `${wb.name} ${doc.filename} ${doc.path}`,
+        });
+      }
+    }
+    return items;
+  })();
 
   const handleAddQuery = async () => {
     if (!question.trim() || !dashboard) return;
@@ -89,9 +158,7 @@ export function DashboardViewer({ dashboardId }: DashboardViewerProps) {
 
       setQuestion("");
     } catch (error) {
-      alert(
-        `Failed to create query: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+      notifyError(error instanceof Error ? error.message : "Failed to create query", "Dashboards");
     } finally {
       setIsCreating(false);
     }
@@ -166,6 +233,7 @@ export function DashboardViewer({ dashboardId }: DashboardViewerProps) {
             disabled={isCreating}
             className="rounded bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Refresh all queries"
+            data-testid={testIds.dashboards.viewer.refreshAll}
           >
             ↻ Refresh All
           </button>
@@ -174,19 +242,29 @@ export function DashboardViewer({ dashboardId }: DashboardViewerProps) {
 
       <div className="mb-4">
         <div className="flex gap-2">
-          <input
-            type="text"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && handleAddQuery()}
-            placeholder='Ask a question like "How many NDAs do we have?" or "How many NDAs are expiring within 90 days?"'
-            className="flex-1 rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            disabled={isCreating}
-          />
+          <div className="flex-1">
+            <MentionTextInput
+              value={question}
+              onChange={setQuestion}
+              disabled={isCreating}
+              placeholder='Ask a question like "How many NDAs do we have?" or type @ to pick a workbook/file…'
+              className="w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              inputTestId={testIds.dashboards.viewer.addQuestionInput}
+              menuTestId={testIds.dashboards.viewer.addQuestionMentionMenu}
+              itemTestId={(it) => testIds.dashboards.viewer.addQuestionMentionItem(it.kind, it.id)}
+              mentionItems={mentionItems}
+              onEnterWhenMenuOpen={() => {}}
+              onEnter={() => {
+                // Mirror previous Enter-to-submit behavior, but only when the mention menu is closed.
+                handleAddQuery();
+              }}
+            />
+          </div>
           <button
             onClick={handleAddQuery}
             disabled={isCreating || !question.trim()}
             className="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid={testIds.dashboards.viewer.addQuery}
           >
             {isCreating ? "Creating..." : "Add Query"}
           </button>

@@ -6,6 +6,14 @@ dist-electron/
 # Build outputs
 *.log
 *.local
+.vite/
+
+# Runtime / test artifacts (local dirs)
+logs/
+
+# App/runtime test data (do not commit)
+data/test-*/
+data/**/test-*/
 
 # Environment
 .env
@@ -40,3 +48,25 @@ env.bak.5/
 env.bak.6/
 env.bak.7/
 env.bak.8/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+.cache/
+*.egg-info/
+dist/
+build/
+*.egg

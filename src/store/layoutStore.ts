@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type WorkbenchViewId = "dashboards" | "workbooks" | "chat";
+export type WorkbenchViewId = "dashboards" | "contexts" | "workbooks" | "chat";
 
 interface LayoutStore {
   sidebarWidth: number; // Width of left sidebar in pixels
@@ -39,6 +39,7 @@ const loadLayout = (): {
         chatHeight: parsed.chatHeight ?? DEFAULT_CHAT_HEIGHT,
         viewHeights: parsed.viewHeights ?? {
           dashboards: DEFAULT_VIEW_HEIGHT,
+          contexts: DEFAULT_VIEW_HEIGHT,
           workbooks: DEFAULT_VIEW_HEIGHT,
           chat: DEFAULT_VIEW_HEIGHT,
         },
@@ -53,6 +54,7 @@ const loadLayout = (): {
     chatHeight: DEFAULT_CHAT_HEIGHT,
     viewHeights: {
       dashboards: DEFAULT_VIEW_HEIGHT,
+      contexts: DEFAULT_VIEW_HEIGHT,
       workbooks: DEFAULT_VIEW_HEIGHT,
       chat: DEFAULT_VIEW_HEIGHT,
     },
@@ -130,6 +132,7 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
   resetLayout: () => {
     const defaultViewHeights = {
       dashboards: DEFAULT_VIEW_HEIGHT,
+      contexts: DEFAULT_VIEW_HEIGHT,
       workbooks: DEFAULT_VIEW_HEIGHT,
       chat: DEFAULT_VIEW_HEIGHT,
     };

@@ -6,7 +6,14 @@ interface CollapsibleViewProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   children: ReactNode;
+  /**
+   * Header content shown on the right side even when collapsed.
+   * Use this for persistent status indicators (e.g. Context scoping).
+   */
+  headerAccessory?: ReactNode;
   actionButton?: ReactNode;
+  collapsedActionButton?: ReactNode;
+  testId?: string;
 }
 
 export function CollapsibleView({
@@ -14,7 +21,10 @@ export function CollapsibleView({
   isCollapsed,
   onToggleCollapse,
   children,
+  headerAccessory,
   actionButton,
+  collapsedActionButton,
+  testId,
 }: CollapsibleViewProps) {
   return (
     <div className="flex h-full flex-col border-b border-gray-200">
@@ -23,15 +33,18 @@ export function CollapsibleView({
         <button
           onClick={onToggleCollapse}
           className="flex items-center gap-1 text-xs font-semibold text-gray-700 uppercase tracking-wide hover:text-gray-900"
+          data-testid={testId}
+          aria-expanded={!isCollapsed}
         >
           <ChevronRightIcon
             className={`h-3 w-3 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
           />
           {title}
         </button>
-        {!isCollapsed && actionButton && (
+        {(headerAccessory || actionButton || collapsedActionButton) && (
           <div className="flex items-center gap-0.5">
-            {actionButton}
+            {headerAccessory}
+            {!isCollapsed ? actionButton : collapsedActionButton}
           </div>
         )}
       </div>

@@ -112,15 +112,49 @@ async function callMCPServer(query, testDataDir) {
       cwd: path.join(rootDir, 'mcp-servers', 'workbook-rag'),
       env: {
         ...process.env,
-        INSIGHTLM_DATA_DIR: testDataDir
+        INSIGHTLM_DATA_DIR: testDataDir,
+        DEBUG: 'true'  // Enable debug mode
       }
     });
 
     let output = '';
     let stderr = '';
+    let initReceived = false;
 
     proc.stdout.on('data', (data) => {
       output += data.toString();
+
+      // Check if we have a complete message and it's the init message
+      const lines = output.split('\n').filter(l => l.trim() && l.startsWith('{'));
+      for (const line of lines) {
+        try {
+          const msg = JSON.parse(line);
+          if (msg.result && msg.result.protocolVersion && !initReceived) {
+            // This is the init message, mark it as received
+            initReceived = true;
+            console.log('Init message received, sending tool call...');
+
+            // Now send the tool call request
+            const request = {
+              jsonrpc: '2.0',
+              id: 2,
+              method: 'tools/call',
+              params: {
+                name: 'rag_search_content',
+                arguments: { query, limit: 5 }
+              }
+            };
+            proc.stdin.write(JSON.stringify(request) + '\n');
+            break;
+          } else if (msg.id === 2 && initReceived) {
+            // This is our tool call response
+            resolve(msg);
+            return;
+          }
+        } catch (e) {
+          // Not a complete JSON message yet
+        }
+      }
     });
 
     proc.stderr.on('data', (data) => {
@@ -129,26 +163,14 @@ async function callMCPServer(query, testDataDir) {
 
     proc.on('error', reject);
 
-    const request = {
-      method: 'rag/search_content',
-      params: { query, limit: 5 }
-    };
-
-    proc.stdin.write(JSON.stringify(request) + '\n');
-    proc.stdin.end();
+    // Set a timeout
+    setTimeout(() => {
+      reject(new Error('Timeout waiting for MCP response'));
+    }, 10000);
 
     proc.on('close', () => {
-      try {
-        const lines = output.split('\n').filter(l => l.trim() && l.startsWith('{'));
-        if (lines.length === 0) {
-          reject(new Error('No JSON response. stderr: ' + stderr));
-          return;
-        }
-
-        const response = JSON.parse(lines[0]);
-        resolve(response);
-      } catch (error) {
-        reject(error);
+      if (!initReceived) {
+        reject(new Error('Server did not send initialization message. stderr: ' + stderr));
       }
     });
   });
@@ -187,7 +209,7 @@ async function testQuery(query, expectedSources, testDataDir) {
       return false;
     }
 
-    const content = response.result?.content || '';
+    const content = response.result?.content || response.result || '';
     const sources = trackFilesFromRAGResponse(content);
 
     console.log(`Sources tracked: ${sources.length}`);

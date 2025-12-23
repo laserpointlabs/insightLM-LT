@@ -1,0 +1,22 @@
+---
+description: UI work must be automation-safe (stable testids + deterministic smoke)
+globs:
+  - "src/**/*.{ts,tsx}"
+  - "tests/**/*.mjs"
+alwaysApply: false
+---
+
+- Use **stable `data-testid` selectors** for any UI control that automation or future agents will click/type.
+  - Add IDs to `src/testing/testIds.ts` and reference them from components (no inline string literals).
+- For UI automation, follow **selector-only** rules:
+  - Click/fill via `data-testid` selectors only (avoid text or CSS selectors).
+  - Prefer polling helpers (`waitForSelector`, `waitForGone`) over fixed sleeps.
+  - For dynamic IDs, use **set-diff** or parse IDs from `data-testid` rather than relying on ordering.
+- For LLM-adjacent UI (chat/dashboards):
+  - Do not assert exact prose output; assert structural invariants (`data-result-type`, `data-graph-points`, etc.).
+  - If a visualization can be empty, render an explicit placeholder and stable attributes so automation can detect it.
+
+References:
+- `docs/Automation/AUTOMATION_SMOKE_TESTING.md`
+- `docs/Automation/ELECTRON_MCP_UI_AUTOMATION.md`
+- `tests/automation-smoke-ui.mjs`

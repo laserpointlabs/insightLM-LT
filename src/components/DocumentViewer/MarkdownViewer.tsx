@@ -194,10 +194,13 @@ export function MarkdownViewer({
 
   const renderPreview = () => (
     <div className="h-full overflow-auto bg-white p-4">
-      <ReactMarkdown
-        className="prose prose-sm max-w-none"
-        remarkPlugins={[remarkGfm]}
-        components={{
+      {editorContent.trim() === "" ? (
+        <div className="text-sm text-gray-400 italic">Empty document</div>
+      ) : (
+        <ReactMarkdown
+          className="prose prose-sm max-w-none"
+          remarkPlugins={[remarkGfm]}
+          components={{
             code({ inline, className, children, ...props }) {
               const match = /language-(\w+)/.exec(className || "");
               const language = match ? match[1] : "";
@@ -268,9 +271,10 @@ export function MarkdownViewer({
               );
             },
           }}
-      >
-        {editorContent}
-      </ReactMarkdown>
+        >
+          {editorContent}
+        </ReactMarkdown>
+      )}
     </div>
   );
 

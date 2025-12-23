@@ -1,0 +1,95 @@
+name: Packaged UI Smoke (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      cdpHost:
+        description: "CDP host (usually 127.0.0.1)"
+        required: false
+        default: "127.0.0.1"
+      cdpPort:
+        description: "CDP port (Electron main sets 9222)"
+        required: false
+        default: "9222"
+      cdpWaitSeconds:
+        description: "Seconds to wait for CDP port to open"
+        required: false
+        default: "45"
+
+jobs:
+  packaged-smoke:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      # Parity with release workflow (helps if the app renders any canvases during smoke).
+      - name: Install GTK/Cairo (for canvas)
+        run: choco install -y gtk-runtime
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (tsc + react)
+        run: npm run build
+
+      - name: Package unpacked (electron-builder --dir)
+        env:
+          CI: true
+        run: npx electron-builder --dir --config electron-builder.json
+
+      - name: Launch packaged app + run UI smoke
+        shell: pwsh
+        env:
+          ELECTRON_DEBUG_HOST: ${{ inputs.cdpHost }}
+          ELECTRON_DEBUG_PORT: ${{ inputs.cdpPort }}
+        run: |
+          $exe = Join-Path $PWD "out\win-unpacked\insightLM-LT.exe"
+          if (!(Test-Path $exe)) {
+            Write-Host "Expected packaged exe not found: $exe"
+            Write-Host "Contents of out/:"
+            Get-ChildItem -Path "out" -Recurse -Depth 3 | Select-Object FullName
+            exit 1
+          }
+
+          Write-Host "Starting packaged app: $exe"
+          $proc = Start-Process -FilePath $exe -PassThru
+
+          try {
+            $hostName = "${{ inputs.cdpHost }}"
+            $port = [int]"${{ inputs.cdpPort }}"
+            $wait = [int]"${{ inputs.cdpWaitSeconds }}"
+
+            # Wait for CDP to come up
+            $deadline = (Get-Date).AddSeconds($wait)
+            $ready = $false
+            while ((Get-Date) -lt $deadline) {
+              $r = Test-NetConnection -ComputerName $hostName -Port $port
+              if ($r.TcpTestSucceeded) { $ready = $true; break }
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $ready) {
+              Write-Host "CDP did not come up on $hostName`:$port in time."
+              exit 1
+            }
+
+            npm run test:automation:smoke
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          finally {
+            if ($proc -and -not $proc.HasExited) {
+              Write-Host "Stopping packaged app (pid=$($proc.Id))"
+              Stop-Process -Id $proc.Id -Force
+            }
+          }
+

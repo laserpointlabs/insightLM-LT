@@ -1,4 +1,5 @@
 import { useWorkbenchStore } from "../store/workbenchStore";
+import { testIds } from "../testing/testIds";
 
 export function ActivityBar() {
   const { activeWorkbenchId, workbenches, setActiveWorkbench } = useWorkbenchStore();
@@ -91,6 +92,7 @@ export function ActivityBar() {
                 : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
             }`}
             title={workbench.name}
+            data-testid={testIds.activityBar.item(workbench.id)}
           >
             {getIcon(workbench.icon)}
           </button>

@@ -1,11 +1,104 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import mermaid from "mermaid";
 import { useDocumentStore } from "../../store/documentStore";
+import { notifyError } from "../../utils/notify";
 
 interface ChatMessageProps {
   role: "user" | "assistant";
   content: string;
+}
+
+// Initialize Mermaid once (module-level)
+let mermaidInitialized = false;
+
+function MermaidDiagram({ chart }: { chart: string }) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [svg, setSvg] = React.useState<string>("");
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!mermaidInitialized) {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "default",
+        securityLevel: "loose",
+        fontFamily: "inherit",
+        suppressErrorRendering: true,
+      });
+      mermaidInitialized = true;
+    }
+
+    const renderDiagram = async () => {
+      try {
+        const cleanChart = chart.trim();
+        if (!cleanChart) {
+          setError("Empty mermaid diagram");
+          return;
+        }
+
+        const id = `mermaid-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const { svg } = await mermaid.render(id, cleanChart);
+
+        // Ensure SVG has a white background (same approach as MarkdownViewer)
+        const svgWithWhiteBg = svg.replace(/<svg([^>]*)>/, (match, attrs) => {
+          if (attrs.includes('style=')) {
+            return match.replace(/style="([^"]*)"/, (_styleMatch, styleValue) => {
+              const updatedStyle = styleValue.includes("background")
+                ? styleValue.replace(/background[^;]*;?/g, "").trim()
+                : styleValue;
+              return `style="${updatedStyle}; background: white;"`;
+            });
+          }
+          return `<svg${attrs} style="background: white;">`;
+        });
+
+        setSvg(svgWithWhiteBg);
+        setError(null);
+      } catch (err) {
+        console.error("Mermaid rendering error:", err);
+        setError(err instanceof Error ? err.message : "Failed to render diagram");
+        setSvg("");
+      }
+    };
+
+    renderDiagram();
+  }, [chart]);
+
+  if (error) {
+    return (
+      <div className="my-2 rounded border border-gray-300 bg-gray-50 p-2">
+        <p className="text-xs text-gray-500 italic">⚠ Mermaid syntax error (hover for details)</p>
+        <details className="mt-1">
+          <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600">Show error details</summary>
+          <div className="mt-2 rounded border border-gray-200 bg-white p-2">
+            <p className="text-xs text-red-600">{error}</p>
+            <pre className="mt-2 overflow-x-auto text-xs text-gray-600">{chart}</pre>
+          </div>
+        </details>
+      </div>
+    );
+  }
+
+  if (!svg) {
+    return (
+      <div
+        ref={containerRef}
+        className="my-2 rounded-lg border border-gray-200 bg-white p-4 text-center text-sm text-gray-400"
+      >
+        Loading diagram...
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="my-2 flex justify-center rounded-lg border border-gray-200 bg-white p-4"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
 }
 
 export function ChatMessage({ role, content }: ChatMessageProps) {
@@ -14,11 +107,10 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
   // Replace workbook:// links with a special marker before ReactMarkdown processes them
   // This prevents ReactMarkdown from creating <a> tags that Electron intercepts
   const processedContent = React.useMemo(() => {
-    if (role !== 'assistant') return content;
+    if (role !== "assistant") return content;
 
     // Replace workbook:// links with a special format that we'll handle manually
-    return content.replace(/\[([^\]]+)\]\(workbook:\/\/([^\)]+)\)/g, (match, linkText, workbookPath) => {
-      console.log(`[ChatMessage] Found workbook link in content: ${match}`);
+    return content.replace(/\[([^\]]+)\]\(workbook:\/\/([^\)]+)\)/g, (_match, linkText, workbookPath) => {
       // Store the workbook path in a data attribute format we can parse
       return `[${linkText}](__workbook_link__${workbookPath}__)`;
     });
@@ -33,7 +125,6 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
       const link = target.closest('a[href^="__workbook_link__"]');
       if (link) {
         const href = link.getAttribute('href');
-        console.log(`[ChatMessage] Global click handler caught workbook link!`, href);
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -44,13 +135,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
           const workbookId = decodeURIComponent(urlParts[0]);
           const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
-          console.log(`[ChatMessage] Global handler opening:`, { workbookId, filePath });
           openDocument({
             workbookId,
             path: filePath,
             filename: filePath.split('/').pop() || filePath,
           }).catch((error) => {
-            console.error("[ChatMessage] Global handler openDocument failed:", error);
+            notifyError(error instanceof Error ? error.message : "Failed to open document", "Chat");
           });
         }
 
@@ -61,7 +151,6 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
       const workbookLink = target.closest('a[href^="workbook://"]');
       if (workbookLink) {
         const href = workbookLink.getAttribute('href');
-        console.log(`[ChatMessage] Global click handler caught workbook:// link!`, href);
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -71,13 +160,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
           const workbookId = decodeURIComponent(urlParts[0]);
           const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
-          console.log(`[ChatMessage] Global handler opening:`, { workbookId, filePath });
           openDocument({
             workbookId,
             path: filePath,
             filename: filePath.split('/').pop() || filePath,
           }).catch((error) => {
-            console.error("[ChatMessage] Global handler openDocument failed:", error);
+            notifyError(error instanceof Error ? error.message : "Failed to open document", "Chat");
           });
         }
 
@@ -96,7 +184,7 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
 
   if (role === "user") {
     return (
-      <div className="ml-4 whitespace-pre-wrap rounded bg-blue-100 p-2 text-sm">
+      <div className="whitespace-pre-wrap rounded-xl bg-blue-600 px-3 py-2 text-sm text-white shadow-sm">
         {content}
       </div>
     );
@@ -104,14 +192,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
 
   // Render assistant messages as markdown
   return (
-    <div className="mr-4 rounded bg-gray-100 p-2 text-sm">
-      <div className="prose prose-sm dark:prose-invert max-w-none [&_small]:not-prose">
+    <div className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-900 shadow-sm">
+      <div className="prose prose-sm max-w-none [&_small]:not-prose">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
             a: ({ href, children }) => {
-              console.log(`[ChatMessage] Rendering link component, href:`, href);
-
               // Handle our special marker format
               if (href?.startsWith('__workbook_link__')) {
                 const workbookPath = href.replace('__workbook_link__', '').replace('__', '');
@@ -119,41 +205,23 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                 const workbookId = decodeURIComponent(urlParts[0]);
                 const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
-                console.log(`[ChatMessage] Parsed workbook link (marker format) - workbookId: ${workbookId}, filePath: ${filePath}`);
-
                 const handleClick = (e: React.MouseEvent) => {
-                  console.log(`[ChatMessage] handleClick called!`, {
-                    type: e.type,
-                    target: e.target,
-                    currentTarget: e.currentTarget,
-                    defaultPrevented: e.defaultPrevented,
-                    isPropagationStopped: e.isPropagationStopped(),
-                  });
-
                   e.preventDefault();
                   e.stopPropagation();
                   e.nativeEvent.stopImmediatePropagation();
-
-                  console.log(`[ChatMessage] After preventDefault - defaultPrevented: ${e.defaultPrevented}, isPropagationStopped: ${e.isPropagationStopped()}`);
-                  console.log(`[ChatMessage] Calling openDocument with:`, { workbookId, path: filePath, filename: filePath.split('/').pop() || filePath });
 
                   openDocument({
                     workbookId,
                     path: filePath,
                     filename: filePath.split('/').pop() || filePath,
                   })
-                  .then(() => {
-                    console.log(`[ChatMessage] openDocument SUCCESS - file should be open now`);
-                  })
                   .catch((error) => {
-                    console.error("[ChatMessage] openDocument FAILED:", error);
-                    alert(
-                      `Failed to open document: ${error instanceof Error ? error.message : "Unknown error"}`,
+                    notifyError(
+                      error instanceof Error ? error.message : "Failed to open document",
+                      "Chat",
                     );
                   });
                 };
-
-                console.log(`[ChatMessage] Returning span element for workbook link`);
 
                 // Check if this is in a sources section (contains emoji)
                 const isInSources = String(children).includes('📄');
@@ -165,17 +233,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                     role="button"
                     tabIndex={0}
                     className={`${isInSources ? 'text-[10px] text-gray-600 hover:text-gray-800 leading-tight' : 'text-blue-600 hover:text-blue-800 underline'} cursor-pointer font-normal inline-flex items-center gap-1`}
-                    onClick={(e) => {
-                      console.log(`[ChatMessage] onClick event fired on span!`, e);
-                      handleClick(e);
-                    }}
+                    onClick={handleClick}
                     onMouseDown={(e) => {
-                      console.log(`[ChatMessage] onMouseDown fired!`);
                       e.preventDefault();
                       e.stopPropagation();
                     }}
                     onMouseUp={(e) => {
-                      console.log(`[ChatMessage] onMouseUp fired!`);
                       e.preventDefault();
                       e.stopPropagation();
                     }}
@@ -204,23 +267,10 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                 const workbookId = decodeURIComponent(urlParts[0]);
                 const filePath = urlParts.slice(1).map(part => decodeURIComponent(part)).join('/');
 
-                console.log(`[ChatMessage] Parsed workbook link - workbookId: ${workbookId}, filePath: ${filePath}`);
-
                 const handleClick = (e: React.MouseEvent) => {
-                  console.log(`[ChatMessage] handleClick called!`, {
-                    type: e.type,
-                    target: e.target,
-                    currentTarget: e.currentTarget,
-                    defaultPrevented: e.defaultPrevented,
-                    isPropagationStopped: e.isPropagationStopped(),
-                  });
-
                   e.preventDefault();
                   e.stopPropagation();
                   e.nativeEvent.stopImmediatePropagation();
-
-                  console.log(`[ChatMessage] After preventDefault - defaultPrevented: ${e.defaultPrevented}, isPropagationStopped: ${e.isPropagationStopped()}`);
-                  console.log(`[ChatMessage] Calling openDocument with:`, { workbookId, path: filePath, filename: filePath.split('/').pop() || filePath });
 
                   // Match exactly how WorkbooksView opens documents
                   openDocument({
@@ -228,18 +278,13 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                     path: filePath,
                     filename: filePath.split('/').pop() || filePath,
                   })
-                  .then(() => {
-                    console.log(`[ChatMessage] openDocument SUCCESS - file should be open now`);
-                  })
                   .catch((error) => {
-                    console.error("[ChatMessage] openDocument FAILED:", error);
-                    alert(
-                      `Failed to open document: ${error instanceof Error ? error.message : "Unknown error"}`,
+                    notifyError(
+                      error instanceof Error ? error.message : "Failed to open document",
+                      "Chat",
                     );
                   });
                 };
-
-                console.log(`[ChatMessage] Returning span element for workbook link`);
 
                 // Check if this is in a sources section (contains emoji)
                 const isInSources = String(children).includes('📄');
@@ -251,17 +296,12 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                     role="button"
                     tabIndex={0}
                     className={`${isInSources ? 'text-[10px] text-gray-600 hover:text-gray-800 leading-tight' : 'text-blue-600 hover:text-blue-800 underline'} cursor-pointer font-normal inline-flex items-center gap-1`}
-                    onClick={(e) => {
-                      console.log(`[ChatMessage] onClick event fired on span!`, e);
-                      handleClick(e);
-                    }}
+                    onClick={handleClick}
                     onMouseDown={(e) => {
-                      console.log(`[ChatMessage] onMouseDown fired!`);
                       e.preventDefault();
                       e.stopPropagation();
                     }}
                     onMouseUp={(e) => {
-                      console.log(`[ChatMessage] onMouseUp fired!`);
                       e.preventDefault();
                       e.stopPropagation();
                     }}
@@ -284,7 +324,6 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
                 );
               }
 
-              console.log(`[ChatMessage] Returning regular <a> tag for non-workbook link`);
               return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
             },
             table: ({ children }) => (
@@ -302,21 +341,57 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
             td: ({ children }) => (
               <td className="border border-gray-300 px-2 py-1">{children}</td>
             ),
-            code: ({ children, className }) => {
-              const isInline = !className;
+            code: ({ inline, className, children, ...props }) => {
+              const match = /language-(\w+)/.exec(className || "");
+              const language = match ? match[1] : "";
+
+              const codeString = Array.isArray(children)
+                ? children.map((c) => (typeof c === "string" ? c : String(c))).join("")
+                : String(children);
+              const trimmedCode = codeString.replace(/\n$/, "");
+
+              if (!inline && language === "mermaid") {
+                return <MermaidDiagram chart={trimmedCode} />;
+              }
+
+              const isInline = inline || !className;
               return isInline ? (
-                <code className="rounded bg-gray-200 px-1 text-xs">
+                <code className="rounded bg-gray-200 px-1 text-xs" {...props}>
                   {children}
                 </code>
               ) : (
-                <code className={className}>{children}</code>
+                <code className={className} {...props}>
+                  {children}
+                </code>
               );
             },
-            pre: ({ children }) => (
-              <pre className="my-2 overflow-x-auto rounded bg-gray-800 p-2 text-xs text-gray-100">
-                {children}
-              </pre>
-            ),
+            pre: ({ children, ...props }) => {
+              // If this pre wraps a mermaid diagram, don't use the dark code block chrome.
+              let hasMermaid = false;
+              React.Children.forEach(children, (child) => {
+                if (!React.isValidElement(child)) return;
+                const cn = child.props?.className;
+                if (typeof cn === "string") {
+                  if (cn.includes("language-mermaid")) hasMermaid = true;
+                  if (cn.includes("bg-white") && cn.includes("rounded-lg")) hasMermaid = true;
+                }
+                if (child.props?.dangerouslySetInnerHTML) hasMermaid = true;
+              });
+
+              if (hasMermaid) {
+                return (
+                  <div className="my-2" {...props}>
+                    {children}
+                  </div>
+                );
+              }
+
+              return (
+                <pre className="my-2 overflow-x-auto rounded bg-gray-800 p-2 text-xs text-gray-100" {...props}>
+                  {children}
+                </pre>
+              );
+            },
             hr: () => (
               <hr className="my-1 border-t border-gray-300" />
             ),

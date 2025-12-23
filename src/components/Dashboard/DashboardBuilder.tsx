@@ -4,6 +4,7 @@ import { useWorkbookStore } from "../../store/workbookStore";
 import { dashboardService } from "../../services/dashboardService";
 import { DashboardQueryCard } from "./DashboardQueryCard";
 import { InputDialog } from "../InputDialog";
+import { notifyError } from "../../utils/notify";
 
 export function DashboardBuilder() {
   const {
@@ -52,7 +53,7 @@ export function DashboardBuilder() {
             setSelectedDashboardId(dashboard.id);
           } catch (error) {
             console.error("Failed to create dashboard:", error);
-            alert(`Failed to create dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
+            notifyError(error instanceof Error ? error.message : "Failed to create dashboard", "Dashboards");
           }
         }
       },
@@ -75,9 +76,7 @@ export function DashboardBuilder() {
 
       setQuestion("");
     } catch (error) {
-      alert(
-        `Failed to create query: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+      notifyError(error instanceof Error ? error.message : "Failed to create query", "Dashboards");
     } finally {
       setIsCreating(false);
     }
