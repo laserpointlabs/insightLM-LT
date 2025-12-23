@@ -80,7 +80,7 @@ Before using the RAG server, you need to index your workbooks:
 
 ```bash
 # Set your OpenAI API key
-export REDACTED"
+export OPENAI_API_KEY="your-api-key-here"
 
 # Set your data directory (where workbooks are stored)
 export INSIGHTLM_DATA_DIR="C:\Users\YourName\AppData\Roaming\insightLM-LT"

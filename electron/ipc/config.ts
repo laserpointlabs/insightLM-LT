@@ -62,7 +62,7 @@ export function setupConfigIPC(configService: ConfigService, llmService: LLMServ
       store.profiles[targetProvider] = {
         ...store.profiles[targetProvider],
         model: typeof updates.model === "string" ? updates.model : store.profiles[targetProvider]?.model,
-        apiKey: typeof updates.apiKey === "string" ? updates.REDACTED
+        apiKey: typeof updates.apiKey === "string" ? updates.apiKey : store.profiles[targetProvider]?.apiKey,
         baseUrl: typeof updates.baseUrl === "string" ? updates.baseUrl : store.profiles[targetProvider]?.baseUrl,
       };
     }

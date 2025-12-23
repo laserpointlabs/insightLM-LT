@@ -17,9 +17,9 @@ If you want to test the chat feature, set up your LLM provider:
 
 ```bash
 # Set environment variable
-set REDACTED  # Windows
+set OPENAI_API_KEY=your-api-key-here  # Windows
 # or
-export REDACTED  # Linux/Mac
+export OPENAI_API_KEY=your-api-key-here  # Linux/Mac
 ```
 
 Then edit `config/llm.yaml` to select OpenAI and reference your env var:

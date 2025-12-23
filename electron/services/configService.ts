@@ -297,7 +297,7 @@ export class ConfigService {
     store.activeProvider = provider;
     store.profiles[provider] = {
       ...store.profiles[provider],
-      REDACTED
+      apiKey: config.apiKey,
       model: config.model,
       baseUrl: config.baseUrl,
     };

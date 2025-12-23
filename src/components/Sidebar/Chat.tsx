@@ -836,17 +836,17 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
       const nextProfiles = {
         openai: {
           model: String(profiles?.openai?.model || "gpt-4o"),
-          REDACTED || ""),
+          apiKey: String(profiles?.openai?.apiKey || ""),
           baseUrl: "",
         },
         claude: {
           model: String(profiles?.claude?.model || "claude-3-5-sonnet-20241022"),
-          REDACTED || ""),
+          apiKey: String(profiles?.claude?.apiKey || ""),
           baseUrl: "",
         },
         ollama: {
           model: String(profiles?.ollama?.model || "llama3.2:1b"),
-          REDACTED || ""),
+          apiKey: String(profiles?.ollama?.apiKey || ""),
           baseUrl: String(profiles?.ollama?.baseUrl || "http://localhost:11434"),
         },
       } as const;
@@ -858,7 +858,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
       const effectiveProvider = store?.activeProvider ? activeProvider : fallbackProvider;
       const eff = (nextProfiles as any)[effectiveProvider] || {
         model: String(llm.model || ""),
-        REDACTED || ""),
+        apiKey: String(llm.apiKey || ""),
         baseUrl: String(llm.baseUrl || ""),
       };
 
@@ -867,7 +867,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         loading: false,
         provider: effectiveProvider,
         model: String(eff.model || ""),
-        REDACTED || ""),
+        apiKey: String(eff.apiKey || ""),
         baseUrl: String(eff.baseUrl || ""),
         error: null,
       }));
@@ -926,7 +926,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         [provider]: {
           ...llmProfiles[provider],
           model: llmForm.model,
-          REDACTED
+          apiKey: llmForm.apiKey,
           baseUrl: llmForm.baseUrl,
         },
       } as any;
@@ -942,17 +942,17 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         setLlmProfiles({
           openai: {
             model: String(store.profiles?.openai?.model || "gpt-4o"),
-            REDACTED || ""),
+            apiKey: String(store.profiles?.openai?.apiKey || ""),
             baseUrl: "",
           },
           claude: {
             model: String(store.profiles?.claude?.model || "claude-3-5-sonnet-20241022"),
-            REDACTED || ""),
+            apiKey: String(store.profiles?.claude?.apiKey || ""),
             baseUrl: "",
           },
           ollama: {
             model: String(store.profiles?.ollama?.model || "llama3.2:1b"),
-            REDACTED || ""),
+            apiKey: String(store.profiles?.ollama?.apiKey || ""),
             baseUrl: String(store.profiles?.ollama?.baseUrl || "http://localhost:11434"),
           },
         } as any);
@@ -1039,7 +1039,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                         ...p,
                         provider: nextProvider,
                         model: profile?.model || p.model,
-                        REDACTED || "",
+                        apiKey: profile?.apiKey || "",
                         baseUrl: profile?.baseUrl || "",
                       }));
                       // Clear stale model list when switching providers; user can Refresh.
