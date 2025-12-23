@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2025-12-20 - Jupyter MCP path + persistence hardening (workbook-safe)
+
+#### Added
+- **Jupyter MCP notebook persistence**
+  - `execute_cell` can persist the executed cell + outputs into a notebook file (and updates workbook metadata) so opening the `.ipynb` shows the executed cell output.
+- **Jupyter MCP Windows workbook path support**
+  - `create_notebook` now supports `workbook://<id>/documents/...` paths (prevents WinError 123 on Windows).
+- **Testing**
+  - Added/extended `npm run test:jupyter:path` to cover `workbook://` notebook creation and persisted execution output.
+
+#### Fixed
+- **Guardrails against “fake execution” and mistaken workbook creation**
+  - Prevent common LLM misfire where it tries to `create_workbook` using a `.ipynb` file name / path.
+  - Prevent notebook “fake execution” by writing outputs directly (execution should come from `execute_cell`).
+
 ### 2025-12-19 - Hotfix: `.is` / viewer crash hardening (no more white screen)
 
 #### Fixed

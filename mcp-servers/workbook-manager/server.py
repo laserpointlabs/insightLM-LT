@@ -384,6 +384,15 @@ def handle_request(request: Dict[str, Any]) -> Dict[str, Any]:
             
             if tool_name == 'create_workbook':
                 name = tool_args.get('name', '')
+                # Guardrail: the LLM sometimes confuses "workbook" with "file" and tries to
+                # create a workbook named like a path or notebook filename. Prevent that.
+                if isinstance(name, str):
+                    n = name.strip()
+                    if n.lower().endswith(".ipynb") or "workbook://" in n.lower() or "/" in n or "\\" in n:
+                        raise ValueError(
+                            'Invalid workbook name. This looks like a file path or notebook filename. '
+                            'Use create_notebook (workbook://<id>/documents/<name>.ipynb) or create_file_in_workbook instead.'
+                        )
                 # Minimal implementation: create workbook directory + workbook.json
                 workbooks_dir = get_workbooks_dir()
                 workbooks_dir.mkdir(parents=True, exist_ok=True)

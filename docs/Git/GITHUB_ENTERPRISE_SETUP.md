@@ -49,8 +49,10 @@ Replace `YOUR_TOKEN` with your actual Personal Access Token (e.g., `ghp_...`).
 
 **Example:**
 ```powershell
-git remote set-url origin https://ghp_REDACTED@github.com/AVIAN-LLC/insightLM-LT.git
+git remote set-url origin https://YOUR_TOKEN@github.com/AVIAN-LLC/insightLM-LT.git
 ```
+
+> **Security note:** Do **not** paste real tokens into docs or commit them to git history. Prefer Git Credential Manager or SSH keys so the token is stored securely outside the repository.
 
 ### Step 4: Verify Remote Configuration
 

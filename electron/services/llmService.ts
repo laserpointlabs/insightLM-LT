@@ -565,8 +565,16 @@ export class LLMService {
           durationMs: Date.now() - start,
         });
       } catch (e) {
+        // Fail-soft: It's common for the user/LLM to reference a file that will be created later
+        // in the same request (e.g., "create workbook://.../documents/new.ipynb"). Treat missing
+        // files as a non-fatal "not loaded yet" state so the Activity stream doesn't look broken.
+        const msg = e instanceof Error ? e.message : "Failed to load";
+        const isMissing =
+          /File not found/i.test(msg) ||
+          /ENOENT/i.test(msg);
+
         blocks.push(
-          `- ${ref.raw}\n  (Failed to load: ${e instanceof Error ? e.message : "unknown error"})`,
+          `- ${ref.raw}\n  (${isMissing ? "Not found (may be created later in this request)" : `Failed to load: ${msg}`})`,
         );
         const start = this.toolStartTimes.get(stepId) || Date.now();
         this.emitActivity({
@@ -574,9 +582,9 @@ export class LLMService {
           stepId,
           toolName: "load_workbook_ref",
           serverName: "core",
-          ok: false,
+          ok: isMissing ? true : false,
           durationMs: Date.now() - start,
-          error: e instanceof Error ? e.message : "Failed to load",
+          error: isMissing ? undefined : msg,
         });
       }
     }
@@ -645,6 +653,10 @@ DO NOT use list_all_workbook_files or read_workbook_file directly without first 
 
 IMPORTANT: Do NOT include a "Sources:" section in your response. The system will automatically add source references at the end.
 
+NOTEBOOKS (.ipynb):
+- If notebook-related tools are available (e.g. create/execute), use them to create and run notebooks.
+- If the user asks to "run" code, prefer an execution tool (do not fabricate results by writing outputs into a notebook file).
+
 CONTEXT SCOPING:
 - If there is an active Context, tools that list/search files and workbooks are automatically scoped to that Context's workbooks.
 - If there is no active Context, tools operate across all workbooks.
@@ -674,17 +686,37 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
       }
 
       this.toolStartTimes.set(stepId, Date.now());
-      this.emitActivity({
-        kind: "tool_start",
-        stepId,
-        toolName,
-        serverName,
-        argsSummary: this.safeArgsSummary(args),
-      });
-
       // Load active context scope once per tool execution burst.
       // This is used to scope core list/search tools and (when supported) to scope RAG search/list tools.
       const scope = await this.getActiveContextScope();
+
+      // Guardrail: the LLM sometimes confuses "create_workbook" with "create notebook/file".
+      // Block obviously-invalid workbook names so the model is forced to retry with the correct tool.
+      if (toolName === "create_workbook") {
+        const n = String((args as any)?.name || "").trim();
+        const looksLikeFile =
+          n.toLowerCase().endsWith(".ipynb") ||
+          n.toLowerCase().startsWith("workbook://") ||
+          n.includes("/") ||
+          n.includes("\\") ||
+          n.toLowerCase().startsWith("documents/");
+        if (looksLikeFile) {
+          const start = this.toolStartTimes.get(stepId) || Date.now();
+          this.emitActivity({
+            kind: "tool_end",
+            stepId,
+            toolName,
+            serverName,
+            ok: false,
+            durationMs: Date.now() - start,
+            error:
+              `Invalid create_workbook name "${n}". ` +
+              `This looks like a file path. Use create_notebook (workbook://<id>/documents/<name>.ipynb) ` +
+              `or create_file_in_workbook instead.`,
+          });
+          return `Error executing create_workbook: Invalid workbook name "${n}" (looks like a file path).`;
+        }
+      }
 
       // If the workbook-rag server supports scoping, inject workbook_ids for active context.
       // This keeps rag_search_content within the active context and prevents cross-context leakage.
@@ -695,6 +727,18 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
       ) {
         args = { ...args, workbook_ids: Array.from(scope.workbookIds) };
       }
+
+      // NOTE (decoupling):
+      // Do not special-case extension-managed tools (e.g. Jupyter). Any path normalization and
+      // tool-specific persistence should happen inside the tool provider / MCP server implementation.
+
+      this.emitActivity({
+        kind: "tool_start",
+        stepId,
+        toolName,
+        serverName,
+        argsSummary: this.safeArgsSummary(args),
+      });
 
       // Core tools are executed internally
       if (serverName === "core") {
@@ -720,13 +764,48 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           parameters: args,
           timeout: 60000, // 60 second timeout for tool execution
           metadata: {
-            requestId: `llm-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+            requestId: `llm-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            // When scoped to a single workbook, propagate it so tool providers can deterministically
+            // map relative notebook paths (documents/...) into workbooks/<id>/documents/...
+            workbookId: scope.workbookIds?.size === 1 ? Array.from(scope.workbookIds)[0] : undefined
           }
         };
 
         const result = await this.toolProviderRegistry.executeTool(executionContext);
 
         if (result.success) {
+          // Generic source tracking from tool results:
+          // If a tool returns a filesystem path under <dataDir>/workbooks/<id>/..., record it
+          // so the response footer includes a clickable workbook:// reference.
+          try {
+            const maybeResult = result?.result;
+            const fsPath =
+              (maybeResult && typeof maybeResult === "object" && (maybeResult as any).fs_path) ||
+              (maybeResult && typeof maybeResult === "object" && (maybeResult as any).persisted_notebook_fs_path) ||
+              null;
+            if (typeof fsPath === "string" && fsPath) {
+              const normalized = fsPath.replace(/\\/g, "/");
+              const idx = normalized.toLowerCase().lastIndexOf("/workbooks/");
+              if (idx >= 0) {
+                const tail = normalized.slice(idx + "/workbooks/".length);
+                const parts = tail.split("/").filter(Boolean);
+                const workbookId = parts[0];
+                const filePath = parts.slice(1).join("/");
+                if (workbookId && filePath) {
+                  const wb = await this.workbookService.getWorkbook(workbookId);
+                  const filename = filePath.split("/").pop() || filePath;
+                  this.filesReadInCurrentChat.push({
+                    workbookId,
+                    workbookName: wb?.name || workbookId,
+                    filePath,
+                    filename,
+                  });
+                }
+              }
+            }
+          } catch {
+            // fail-soft
+          }
           // Handle rag_search_content specially for file tracking
           if (toolName === "rag_search_content" && result.result?.content) {
             const content = typeof result.result.content === 'string' ? result.result.content : JSON.stringify(result.result.content);
@@ -971,6 +1050,31 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
             ? args.fileName
             : `documents/${args.fileName}`;
 
+          // Prevent "fake execution": for .ipynb written via create_file_in_workbook,
+          // strip execution_count + outputs so the only trusted execution path is execute_cell.
+          let contentToWrite = String(args.content ?? "");
+          if (fileName.toLowerCase().endsWith(".ipynb")) {
+            try {
+              const nb = JSON.parse(contentToWrite);
+              if (Array.isArray(nb?.cells)) {
+                nb.cells = nb.cells.map((c: any) => {
+                  if (!c || typeof c !== "object") return c;
+                  if (c.cell_type === "code") {
+                    return {
+                      ...c,
+                      execution_count: null,
+                      outputs: [],
+                    };
+                  }
+                  return c;
+                });
+              }
+              contentToWrite = JSON.stringify(nb);
+            } catch {
+              // If it's not valid JSON, leave it as-is (fail-soft).
+            }
+          }
+
           // Create file with content
           const workbookPath = (this.workbookService as any)["workbooksDir"];
           const filePath = path.join(workbookPath, args.workbookId, fileName);
@@ -978,7 +1082,7 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
           }
-          fs.writeFileSync(filePath, args.content, "utf-8");
+          fs.writeFileSync(filePath, contentToWrite, "utf-8");
 
           // Update workbook metadata
           const metadataPath = path.join(

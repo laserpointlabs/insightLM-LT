@@ -109,13 +109,17 @@ export class MCPToolProvider implements IToolProvider {
       // Execute the tool via MCP
       console.log(`[MCPToolProvider] Executing tool ${context.toolName} via server ${serverName}`);
 
+      // Normalize common app-specific URL-ish args into server-friendly relative paths.
+      // Keep this fail-soft (never throw here) to avoid breaking unrelated tools.
+      const normalizedParameters = this.normalizeToolArgs(context.parameters, context.metadata);
+
       // MCP tools are called with "tools/call" method
       const result = await this.mcpService.sendRequest(
         serverName,
         "tools/call",
         {
           name: context.toolName,
-          arguments: context.parameters
+          arguments: normalizedParameters
         },
         context.timeout || 30000
       );
@@ -155,6 +159,69 @@ export class MCPToolProvider implements IToolProvider {
           endTime: Date.now()
         }
       };
+    }
+  }
+
+  /**
+   * Best-effort normalization for tool parameters.
+   * Today, this mainly supports mapping `workbook://<id>/<path>` to a relative
+   * filesystem path (`workbooks/<id>/<path>`) for servers that expect paths
+   * rooted under INSIGHTLM_DATA_DIR.
+   */
+  private normalizeToolArgs(parameters: Record<string, any>, metadata?: Record<string, any>): Record<string, any> {
+    try {
+      if (!parameters || typeof parameters !== 'object') return parameters;
+
+      // Clone shallowly to avoid mutating shared references.
+      const out: Record<string, any> = { ...parameters };
+      const scopedWorkbookId = typeof metadata?.workbookId === "string" ? metadata.workbookId : null;
+
+      // Convention: many tools accept a `path` parameter.
+      if (typeof out.path === 'string') {
+        const p = out.path.trim();
+        if (p.toLowerCase().startsWith('workbook://')) {
+          const raw = p.replace(/\\/g, '/'); // normalize slashes
+          const tail = raw.slice('workbook://'.length);
+          const parts = tail.split('/').filter(Boolean);
+          const workbookId = decodeURIComponent(parts[0] || '').trim();
+          const rel = parts.slice(1).join('/');
+          if (workbookId && rel) {
+            // Use POSIX separators so Python Path() handles it consistently.
+            out.path = `workbooks/${workbookId}/${decodeURIComponent(rel)}`;
+          }
+        } else if (scopedWorkbookId && p.replace(/\\/g, "/").startsWith("documents/")) {
+          // If caller is scoped to one workbook, map notebook paths into that workbook.
+          // This prevents writes to <dataDir>/documents/... which the UI does not treat as workbook files.
+          const rel = p.replace(/\\/g, "/");
+          out.path = `workbooks/${scopedWorkbookId}/${rel}`;
+        }
+      }
+
+      // Some tools use notebook_path (execute_cell persistence) or file_path-like args.
+      const normalizeMaybeWorkbookPath = (key: string) => {
+        if (typeof out[key] !== "string") return;
+        const p = String(out[key]).trim();
+        if (!p) return;
+        const norm = p.replace(/\\/g, "/");
+        if (norm.toLowerCase().startsWith("workbook://")) {
+          const tail = norm.slice("workbook://".length);
+          const parts = tail.split("/").filter(Boolean);
+          const workbookId = decodeURIComponent(parts[0] || "").trim();
+          const rel = parts.slice(1).join("/");
+          if (workbookId && rel) out[key] = `workbooks/${workbookId}/${decodeURIComponent(rel)}`;
+          return;
+        }
+        if (scopedWorkbookId && norm.startsWith("documents/")) {
+          out[key] = `workbooks/${scopedWorkbookId}/${norm}`;
+        }
+      };
+
+      normalizeMaybeWorkbookPath("notebook_path");
+
+      return out;
+    } catch {
+      // Fail-soft: return original args untouched.
+      return parameters;
     }
   }
 
