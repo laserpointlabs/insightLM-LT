@@ -6,6 +6,7 @@ dist-electron/
 # Build outputs
 *.log
 *.local
+.vite/
 
 # Runtime / test artifacts (local dirs)
 logs/
