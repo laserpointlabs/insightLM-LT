@@ -119,5 +119,3 @@ We’ve already had to do this once: old commits contained leaked tokens/keys an
 - Add a CI secret scan (also recommended).
 
 If you want, we can add a simple pre-commit hook that rejects commits containing common token patterns.
-
-
