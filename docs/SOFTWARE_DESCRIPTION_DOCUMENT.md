@@ -54,6 +54,7 @@ This document’s job is to help new team members catch up quickly and to guide 
 
 - **Teams (planning)** as a first-class capability (moderator + SMEs + rapporteur, convergence/C3, repeatable plan artifacts)
 - Additional workbenches beyond File/Insight (Data/Analysis/Event) as real experiences
+- **Data Workbench (datasets + refresh + events)**: a first-class place to define datasets from remote sources (web, SQL, RDF, etc.), keep them updated, and emit events that can trigger downstream workflows (notebook reruns, dashboard refresh)
 - Expanded security posture documentation (toward Navy/DoD review needs)
 
 ---
@@ -139,6 +140,8 @@ This document describes a system that is intentionally **simple on the surface**
 
 ## Table of contents (long-form)
 
+This Table of Contents is the intended structure. Some sections are drafted out of order while we work, but the numbering reflects where the content ultimately lives. If a section exists only as a heading or short outline, it is a placeholder we will fill in later.
+
 ### 0. History & lineage (how we got here)
 0.1 Origins: learning LLMs and building intuition  
 0.2 ReqFLO (“RecFlow”): requirements extraction + analysis  
@@ -204,69 +207,7 @@ This document describes a system that is intentionally **simple on the surface**
 8.6 How to add a new feature safely (Definition of Done)  
 8.7 Measuring “Team Planning” quality: why Teams must outperform single-shot  
 8.8 Probabilistic responses and convergence (UQ mindset)  
-
----
-
-## 8.7 Measuring “Team Planning” quality (draft)
-
-Team planning is powerful, but it also introduces an important engineering requirement:
-
-> If we claim Teams are better than single-shot, we must be able to **prove it** in repeatable tests.
-
-The core reason is trust: teams are only valuable if the user can rely on them to produce higher-quality, more complete, and more defensible plans.
-
-### Convergence as a requirement (C3)
-
-Team planning introduces a new failure mode that single-shot answers don’t have: **non-convergence**.
-
-We therefore treat convergence as a measurable property:
-
-- **C3 (Conversational Convergence Criteria)**: the explicit stopping rules that decide when the team has converged (or failed to converge) and how to proceed.
-
-Example outcomes C3 must support (conceptual):
-
-- **Converged**: team agrees on the plan structure + key decisions → publish plan artifact.
-- **Partially converged**: team agrees on structure but has unresolved disagreements → publish plan + “open disputes” section.
-- **Failed to converge**: time/round budget reached with persistent conflict → publish best-effort plan + escalation prompt (or reroute to a different team).
-
-### What “better” means (testable claims)
-
-We treat a planning team as “better” when it increases one or more of:
-
-- **coverage**: it identifies more relevant considerations, risks, and steps
-- **structure**: it produces outputs that follow a predictable schema (plan, assumptions, open questions, responsibilities)
-- **consensus**: it converges on a stable set of recommendations
-- **auditability**: it produces a durable artifact (the “plan”) that can be reviewed later
-
-### How we test it (directional)
-
-At minimum, testing must include:
-
-- **A/B runs**: same prompt + same context; compare team planning vs single-shot outputs
-- **deterministic invariants**: assert structure and key fields, not prose
-- **fixture-driven tasks**: use known documents/data as input to avoid flakiness
-
-Longer term, we can build a scorecard for “plan quality” with human review loops, but the MVP requirement is: **repeatable tests that show Teams produce better structured outputs**.
-
-## 8.8 Probabilistic responses and convergence (UQ mindset) - draft
-
-LLM outputs are probabilistic. That does not mean they are "hallucinating" in a mystical sense. It means we are sampling a stochastic process, and if we only run it once, we should expect variance, including occasional low-quality results even when the prompt and context are reasonable.
-
-For complex problems, the correct posture is closer to uncertainty quantification (UQ) than to one-shot Q and A. Practically, that means we should be able to run the same workflow many times (with controlled variation), collect the resulting answers or plans, and then converge on an outcome using explicit criteria. This concept applies to single-model runs, Teams, and any multi-step tool workflow. If we cannot repeat and measure convergence, we cannot claim the output is decision-grade.
-
-Two related ideas matter for real decision support:
-
-First, convergence may not be to a single answer. Some problems naturally stabilize into a small set of competing recommendations. That is not a failure. It is useful signal, because it tells the user the decision space has multiple local optima.
-
-Second, we care about robustness, not just optimality. Some answers look "best" but are sensitive to small changes in assumptions or input data. Other answers may look slightly worse but remain stable across variation. A future capability of InsightLM is to help users see that difference explicitly by treating repeated runs as data and summarizing sensitivity versus robustness.
-
-## 8.9 Capability validation suites (ANSYS-style verification, but for InsightLM) - draft
-
-InsightLM-LT will only be trusted if its capabilities are validated systematically. In traditional engineering software, this is normal. Tools like ANSYS ship with large verification and validation libraries that cover a wide range of scenarios and expected outcomes. It is a lot of work, but it is also how you earn the right to use the tool for real decisions.
-
-We expect to build the equivalent here: a growing library of end-to-end tests and scenario packs that exercise the product in realistic workflows. This includes not only UI automation and regression tests, but also capability validation in specific domains (for example, acquisition analysis, sensitivity studies, and other structured decision workflows). Over time, this library becomes a durable capture of "how the tool is used" and "what good looks like."
-
-This work cannot be finished all at once, and it should not block early iteration. But it must be treated as a major part of building the product, not as an afterthought. If someone says "just turn it on," the correct response is that trust comes from verified behavior, and verified behavior requires a serious test suite that grows with the tool.
+8.9 Capability validation suites (ANSYS-style verification, but for InsightLM)  
 
 ### 9. Use cases (end-to-end stories)
 9.1 UC-01: Create workbook → add documents → view/edit  
@@ -275,6 +216,9 @@ This work cannot be finished all at once, and it should not block early iteratio
 9.4 UC-04: Enable Jupyter extension → execute a cell  
 9.5 UC-05: Work offline / partial feature availability (fail-soft)  
 9.6 UC-06: Plan with a Team (moderated) → produce a structured plan artifact  
+9.7 UC-07: Data Workbench dataset refresh → event → notebook workflow rerun → dashboard update (future use case)  
+9.8 UC-08: Conceptualization from a requirements document (CDD) (future use case)  
+9.9 Potential additional use cases (titles + one-liners)  
 
 ### 10. Security (practical, review-ready)
 10.1 Security boundaries: Electron main vs renderer  
@@ -891,6 +835,180 @@ As a simple mental picture, you can imagine tools like:
 - a domain tool that does "run a margin of safety calculation from an analysis artifact" (best isolated and implemented as an MCP server tool that can be tested and versioned independently).
 
 ---
+
+## 7. Data model and persistence (practical, user-oriented) - draft
+
+This section describes where InsightLM-LT stores user data on disk and what persistence guarantees exist (for example, whether chat history survives restarts, how workbook structures map to folders, and what "archive" means in practice). It is intentionally practical: readers should come away knowing what is safe to back up, what can be moved, and what the app reconstructs automatically.
+
+### 7.1 Where data lives on disk (default locations)
+
+InsightLM-LT stores its workspace data under a single "data directory" configured in `config/app.yaml`. If that config is missing or cannot be read, the default location on Windows is `%APPDATA%/insightLM-LT` (which resolves to the user’s roaming AppData directory). This directory is the root for persisted workbooks, chat threads, archives, and user-writable configuration files. The practical takeaway is simple: if you want to back up or move "everything InsightLM knows locally", start by backing up this data directory.
+
+The application also maintains a user-writable configuration subdirectory under the data directory. For example, `llm.yaml` is created (and seeded from the packaged defaults when available) under `<dataDir>/config/llm.yaml`, which keeps provider settings inspectable and portable without requiring an IDE or a registry.
+
+### 7.2 Workbooks and documents (folder layout + metadata)
+
+Workbooks are persisted as folders under `<dataDir>/workbooks/<workbookId>/`. Each workbook folder contains a `workbook.json` metadata file plus a `documents/` folder that holds the actual user files. The workbook id is a UUID, which allows stable identity even when a workbook is renamed. Inside `workbook.json`, each document entry has a stable `docId` plus a canonicalized `path` that is stored in a folder-aware, POSIX-style form under `documents/` (for example, `documents/trade/decision_matrix.is`).
+
+On load, workbook metadata is normalized to stay consistent and robust. The service canonicalizes paths, fills in missing ids, and drops stale entries whose backing files are missing. It also performs a reconciliation pass that discovers files that exist on disk under `documents/` but are missing from `workbook.json`, which is important for workflows where tools create artifacts out-of-band (for example, notebook execution producing results files). The practical meaning is that "what is on disk" and "what is in the workbook index" are continuously brought back into alignment.
+
+### 7.3 Chat persistence (single-thread per context)
+
+Chat history is persisted as JSON sessions under `<dataDir>/chats/`. InsightLM-LT uses a deterministic "single-thread per context" model for the sidebar chat: when the active context changes, the app loads the chat thread for that context id. The session id is derived from the context id in a filesystem-safe way (for example, `context-<contextId>` with unsafe characters replaced), and the persisted file is `<dataDir>/chats/<sessionId>.json`.
+
+Each message is stored with a deterministic sequence number (`seq`) and a stable message id (`m<seq>`), which makes the thread stable across reloads and resilient to older session formats. The practical meaning is that your chat history survives restarts, and it is stored as readable JSON that can be backed up as part of the data directory.
+
+### 7.4 Archive behavior (what "archive" means physically)
+
+Archiving is implemented as a physical move on disk, not a hidden flag in a database. When a workbook is archived, its entire folder `<dataDir>/workbooks/<workbookId>/` is moved to `<dataDir>/archive/<workbookId>/`, and `workbook.json` is updated to mark the workbook as archived. Unarchiving moves the folder back.
+
+Individual files can also be archived within a workbook. In that case, the file is moved into a per-workbook archive folder at `<dataDir>/workbooks/<workbookId>/archive/`, and the corresponding document entry in `workbook.json` is marked as archived. Unarchiving moves the file back into `documents/` and updates the stored document path. The practical meaning is that archived material stays local and recoverable, and the UI can clearly separate active working sets from archived artifacts without deleting anything.
+
+### 7.5 Projects (possible future layer) - draft
+
+Today, InsightLM-LT behaves like a single local workspace rooted at the configured data directory, and the primary organizing concepts are workbooks and contexts. A possible future layer is the idea of a "project" that a user explicitly opens, where a project would contain a bounded set of workbooks and its own persisted state. The key reason to consider projects is user mental model and containment: if the project boundary is small enough, a user can stay in scope mode All inside that project and still get a clean, decision-grade working set.
+
+If we add projects, they should not replace contexts. A project would be a storage and lifecycle boundary (what is open, what is backed up together, what is shared or moved as a unit). In the simplest and most practical framing, Projects may exist primarily for portability and backup packaging, not for day-to-day usability. A context would remain the scoping and view mechanism inside the currently open project (how the user focuses the system and the LLM). In that framing, projects and contexts overlap in purpose, but they operate at different layers and can coexist without blowing up the current context model.
+
+## 8. Testing & quality (a first-class feature) - draft
+
+Testing is not a side activity in InsightLM-LT. It is part of the product’s core value proposition because the app is used to make decisions. We therefore prefer deterministic UX patterns over cleverness, and we invest early in automation-safe behaviors (stable `data-testid` selectors, explicit empty states, and non-ambiguous dialogs) so that the app can be tested the same way a user uses it. This also shapes how we integrate AI and tools: anything that must be correct must be backed by deterministic tool execution, and anything that cannot be made deterministic must be treated probabilistically and validated through repetition and convergence criteria.
+
+## 8.1 Testing philosophy: deterministic UX over cleverness - draft
+
+The testing philosophy is simple: if a workflow matters, we must be able to drive it end-to-end and assert the outcome without fragile UI hooks. That means the UI must expose stable selectors and predictable states, and the system must degrade gracefully when optional capabilities are missing (for example, an MCP server that is disabled or crashed). This is why we treat automation design (test ids, dialogs, empty states, and deterministic interactions) as a first-class engineering constraint, not something bolted on after features ship.
+
+Practically, this means we design UI flows so they can be validated with the same user-level actions every time: stable `data-testid` attributes for interactive elements, explicit empty states instead of ambiguous blank panels, and deterministic dialogs for confirmations and collisions (no hidden side effects and no relying on timing). When we do this, we can build a trustworthy smoke suite that proves the workflows people actually use, and we can evolve features without breaking everything downstream.
+
+## 8.7 Measuring “Team Planning” quality (draft)
+
+Team planning is powerful, but it also introduces an important engineering requirement:
+
+> If we claim Teams are better than single-shot, we must be able to **prove it** in repeatable tests.
+
+The core reason is trust: teams are only valuable if the user can rely on them to produce higher-quality, more complete, and more defensible plans.
+
+### Convergence as a requirement (C3)
+
+Team planning introduces a new failure mode that single-shot answers don’t have: **non-convergence**.
+
+We therefore treat convergence as a measurable property:
+
+- **C3 (Conversational Convergence Criteria)**: the explicit stopping rules that decide when the team has converged (or failed to converge) and how to proceed.
+
+Example outcomes C3 must support (conceptual):
+
+- **Converged**: team agrees on the plan structure + key decisions → publish plan artifact.
+- **Partially converged**: team agrees on structure but has unresolved disagreements → publish plan + “open disputes” section.
+- **Failed to converge**: time/round budget reached with persistent conflict → publish best-effort plan + escalation prompt (or reroute to a different team).
+
+### What “better” means (testable claims)
+
+We treat a planning team as “better” when it increases one or more of:
+
+- **coverage**: it identifies more relevant considerations, risks, and steps
+- **structure**: it produces outputs that follow a predictable schema (plan, assumptions, open questions, responsibilities)
+- **consensus**: it converges on a stable set of recommendations
+- **auditability**: it produces a durable artifact (the “plan”) that can be reviewed later
+
+### How we test it (directional)
+
+At minimum, testing must include:
+
+- **A/B runs**: same prompt + same context; compare team planning vs single-shot outputs
+- **deterministic invariants**: assert structure and key fields, not prose
+- **fixture-driven tasks**: use known documents/data as input to avoid flakiness
+
+Longer term, we can build a scorecard for “plan quality” with human review loops, but the MVP requirement is: **repeatable tests that show Teams produce better structured outputs**.
+
+## 8.8 Probabilistic responses and convergence (UQ mindset) - draft
+
+LLM outputs are probabilistic. That does not mean they are "hallucinating" in a mystical sense. It means we are sampling a stochastic process, and if we only run it once, we should expect variance, including occasional low-quality results even when the prompt and context are reasonable.
+
+For complex problems, the correct posture is closer to uncertainty quantification (UQ) than to one-shot Q and A. Practically, that means we should be able to run the same workflow many times (with controlled variation), collect the resulting answers or plans, and then converge on an outcome using explicit criteria. This concept applies to single-model runs, Teams, and any multi-step tool workflow. If we cannot repeat and measure convergence, we cannot claim the output is decision-grade.
+
+Two related ideas matter for real decision support:
+
+First, convergence may not be to a single answer. Some problems naturally stabilize into a small set of competing recommendations. That is not a failure. It is useful signal, because it tells the user the decision space has multiple local optima.
+
+Second, we care about robustness, not just optimality. Some answers look "best" but are sensitive to small changes in assumptions or input data. Other answers may look slightly worse but remain stable across variation. A future capability of InsightLM is to help users see that difference explicitly by treating repeated runs as data and summarizing sensitivity versus robustness.
+
+## 8.9 Capability validation suites (ANSYS-style verification, but for InsightLM) - draft
+
+InsightLM-LT will only be trusted if its capabilities are validated systematically. In traditional engineering software, this is normal. Tools like ANSYS ship with large verification and validation libraries that cover a wide range of scenarios and expected outcomes. It is a lot of work, but it is also how you earn the right to use the tool for real decisions.
+
+We expect to build the equivalent here: a growing library of end-to-end tests and scenario packs that exercise the product in realistic workflows. This includes not only UI automation and regression tests, but also capability validation in specific domains (for example, acquisition analysis, sensitivity studies, and other structured decision workflows). Over time, this library becomes a durable capture of "how the tool is used" and "what good looks like."
+
+This work cannot be finished all at once, and it should not block early iteration. But it must be treated as a major part of building the product, not as an afterthought. If someone says "just turn it on," the correct response is that trust comes from verified behavior, and verified behavior requires a serious test suite that grows with the tool.
+
+## 9. Use cases (end-to-end stories) - draft
+
+This section captures user workflows as end-to-end stories. The goal is not to describe every button, but to make the expected behavior testable. A use case should read like a user walkthrough and map cleanly to deterministic assertions (what appears, what is created, what persists, and what errors are handled explicitly).
+
+### 9.1 UC-01: Create workbook → add documents → view/edit (draft)
+
+A user creates a workbook for a real effort (for example, a trade study). The workbook immediately appears in the Workbooks view and becomes the container for documents and folders. The user then adds documents either by importing existing files or by creating new ones inside the workbook. When a document is opened, it appears as a tab in the main Document Viewer area and is rendered using an appropriate viewer (Markdown, CSV, PDF, text, or an extension-provided handler for specialized types). If the user edits a text-like document, the app tracks unsaved changes explicitly and saves deterministically (for example, via Ctrl+S), and any name collisions or moves are resolved through explicit dialogs rather than silent overwrites. When the user restarts the app, the workbook structure remains on disk, and the app can reconstruct the working state from the persisted workbook metadata and files.
+
+### 9.2 UC-02: Ask a question in chat with scoped context (draft)
+
+A user selects a Context and sets scope mode to Scoped so that only the workbooks in that context are treated as in-scope for the workflow. The user opens the Chat view and sees the persisted thread associated with that active context. The user asks a question that is meant to be answered against their local materials (for example, “Summarize the key requirements and open risks in this workbook”). The system sends the user message through the LLM runtime with the current scoping rules applied, and the chat UI shows an explicit activity stream as tools are used (for example, listing files, reading a document, or running a deterministic formatter).
+
+If the user switches to a different Context, the chat thread changes with it because chat persistence is keyed to context id. If the user changes scope mode from Scoped to All, the system does not “forget” the context, but it expands what is considered in scope for subsequent requests. The user can reference specific items intentionally using mention and reference mechanisms rather than relying on implied memory, and the result remains a durable conversation history that can be replayed, reviewed, and used as part of the decision record.
+
+### 9.4 UC-04: Enable Jupyter extension → execute a cell (draft)
+
+A user enables the Jupyter extension from the Extensions UI. Enabling an extension is not just a UI toggle. It is a capability gate that can start or stop an extension-managed MCP server. In the Jupyter case, enabling starts a local `python` subprocess (the `jupyter-server`) with `INSIGHTLM_DATA_DIR` set so the server can locate and operate on the user’s local workspace data.
+
+The user then opens a notebook file (`.ipynb`) from a workbook. Because the Jupyter extension registers a file handler for `.ipynb`, the notebook opens in a specialized Notebook Viewer tab rather than the default text viewer. When the user clicks Run on a code cell, the Notebook Viewer calls `window.electronAPI.mcp.jupyterExecuteCell(...)`, which routes the request to the running MCP server. The server executes the code deterministically and returns structured outputs, and the viewer writes those outputs back into the notebook document as standard Jupyter cell outputs. If execution fails (for example, server unavailable or code error), the UI should show an explicit error state rather than silently inventing results.
+
+Once the notebook produces results, the user promotes those results into a publishable surface by creating a dashboard that points at the artifacts created by the study. Practically, this means the notebook writes durable files into the workbook (for example, `results/summary.json`, `results/study_report.md`, tables as CSV, or a rendered figure), and those files become first-class documents that the user can open, review, and reference. The user then creates a dashboard tile whose query is designed to read and summarize those result artifacts, producing a stable card/table/graph that can be refreshed later without rerunning the entire notebook. This is the intended full workflow loop: run analysis in a notebook, persist the evidence in the workbook, and present decision-grade output in a dashboard.
+
+#### 9.4.1 UC-04 extension: Run an entire notebook as a workflow tool (draft / future direction)
+
+Cell-level execution is the smallest useful unit, but many real studies are notebooks that are meant to be re-run as a whole as inputs change. A common pattern is a "finished" analysis notebook that reads new data (or a refreshed dataset), regenerates intermediate artifacts, and produces a final summary. In that workflow, the user does not want to click Run on cells manually. They want a single "run notebook" action that deterministically executes a defined sequence and updates the outputs and generated files.
+
+This implies a higher-level tool than `execute cell`: a tool that runs an entire notebook (or a defined subset) as a workflow, produces updated artifacts under the workbook (for example, `results/` outputs), and returns a structured run report (what ran, what changed, what failed). Once that exists, the LLM and the UI both gain access to a repeatable workflow primitive. The LLM can request "run the notebook and then refresh the dashboard tile" as an explicit sequence, and the user can trigger the same refresh without needing to understand the internal mechanics. This is also where validation matters: running a notebook-as-workflow should be deterministic in what it touches, explicit about failures, and compatible with the same fail-soft contract as other tool servers.
+
+### 9.5 UC-05: Work offline / partial feature availability (fail-soft) (draft)
+
+A user can continue doing real work even when parts of the system are unavailable. Because workbooks and documents are local-first, the user can still create, browse, and edit local files when offline. If an LLM provider is unreachable (for example, no internet for a hosted provider, or a local provider not running), chat requests should fail in a visible, deterministic way (a clear error message) without destabilizing the rest of the app.
+
+The same principle applies to optional tool servers. If an extension-managed MCP server is disabled or crashes, the app should continue operating with reduced capability. The user can still open documents, view notebooks as files, and manage workbooks, but actions that require the missing server (for example, executing a notebook cell) should surface as “capability unavailable” rather than as a crash or silent corruption. This is a core contract of InsightLM-LT: missing components degrade workflows explicitly, they do not break the workspace.
+
+### 9.7 UC-07: Data Workbench dataset refresh → event → notebook workflow rerun → dashboard update (future use case) (draft)
+
+This is a future workflow that ties together three planned concepts: datasets as first-class objects, events as triggers, and notebooks as refreshable workflows. A user defines a dataset in a Data Workbench by pointing to a remote source (for example, a SQL query, an RDF endpoint, or a web scrape) and giving it a stable name, a refresh policy, and a stored representation inside the project workspace. The system keeps a record of provenance and refresh status so the dataset can be inspected and trusted as an input, not treated as hidden magic.
+
+When the dataset updates (manually, on a schedule, or through a monitored change signal), the Data Workbench emits a structured event like "dataset X updated." That event can trigger dependent workflows. For example, a notebook that is declared to depend on dataset X can be rerun as a notebook-as-workflow operation, producing updated result artifacts under the workbook (summary JSON, tables, and narrative reports). Finally, dashboards that point at those artifacts can be refreshed to present the updated outputs as a publishable decision surface.
+
+The scoping goal for this future capability is to keep it inspectable and deterministic. Users must be able to see what changed, what re-ran, what artifacts were produced, and what failed. A dataset refresh should not silently rewrite the decision record. It should produce explicit versions or snapshots so results remain auditable and comparable over time.
+
+### 9.8 UC-08: Conceptualization from a requirements document (CDD) (future use case) (draft)
+
+This is a future workflow that captures one of the original motivations behind InsightLM: turning a pile of narrative documents into a structured decision context that can be analyzed. A user starts with a capability development document (CDD) or similar requirements-heavy artifact and brings it into a workbook. The user then runs a "requirements extraction" workflow that produces a structured requirements artifact as a first-class document (for example, a sheet/table that can be searched, filtered, and referenced). The goal at this stage is not to build a full requirements management system, but to get to a clean first-level set of requirements with traceable sources.
+
+Next, the user runs a "conceptualization" workflow against those requirements using a simple ontology-driven frame. Conceptually, the ontology answers questions like: a requirement constrains a system, systems are realized by components, components participate in processes, processes realize functions, and components have interfaces and constraints. For each requirement, the system asks the LLM to propose candidate concepts in those terms (what components might exist, what processes they participate in, what functions they realize, and what constraints and interfaces are implied). The output is a structured conceptualization artifact per requirement, not free-form prose, so it can be reviewed, compared, and used in downstream analysis.
+
+Because this is inherently probabilistic, a decision-grade version of this workflow should be able to run with convergence criteria rather than as a one-shot. That means running conceptualization multiple times, clustering the candidate concepts, and converging on a small set of stable solution families per requirement, including explicit disagreements or alternatives. Over time, this capability likely becomes a packaged set of extensions, for example a Requirements extension plus a Conceptualization extension, so users can enable the workflow when needed without bloating the core app.
+
+### 9.9 Potential additional use cases (titles + one-liners) (draft)
+
+These are intentionally broad. They are not commitments, but they help keep the product grounded in real workflows across domains. Each item is written as a "what a user would do" one-liner so it can later be expanded into a full end-to-end use case with testable behavior.
+
+- **Vendor capability mapping for acquisition**: Ingest CDDs, vendor claims, and test reports, then produce a traceable gap map from requirements to evidence and open risks.
+- **Program decision memo builder**: Turn a messy set of notes, emails, and briefings into a structured decision memo with assumptions, COAs, and cited sources.
+- **Trade study workbook + dashboard publish loop**: Run a repeatable study (notebook/sheets), persist artifacts, and publish decision-grade tiles to a dashboard for refresh and review.
+- **Reliability case (FMECA-lite) starter**: Extract failure modes and mitigations from design docs and generate a first-pass structured risk register.
+- **Requirements to test matrix (early V and V)**: Extract requirements, generate candidate verification methods, and produce a test matrix with coverage and gaps.
+- **Competitive intel dossier (local-first)**: Build a bounded context from public sources and internal notes, then produce a sourced “what we know, what we don’t” report.
+- **Incident postmortem package**: Collect logs, tickets, chat transcripts, and runbooks into one context view and produce a timeline, contributing factors, and actions.
+- **SOP and checklist generation for operations**: Convert policy documents and tribal knowledge into checklists and role-based SOPs with versioned artifacts.
+- **Compliance evidence binder**: Assemble required artifacts, map them to controls, and generate an audit-ready binder with traceable links.
+- **Trading research notebook to watch dashboard**: Define datasets, run strategy research notebooks on refresh, and publish summary metrics and exceptions to a dashboard.
+- **Portfolio decision journal**: Persist hypotheses, evidence, and outcome tracking so reviews are grounded in what was known at the time.
+- **Medical literature review to decision brief**: Build a knowledge pack of vetted references, scope a question, and produce a structured brief with uncertainty notes.
+- **Manufacturing process capability snapshot**: Tie specs, measurements, and NCRs into a dashboard that highlights drift, constraints, and corrective actions.
+- **R and D technology readiness storyline**: Track TRL claims against evidence, tests, and gaps, then publish a refreshable readiness dashboard.
 
 ## 10. Security (practical, review-ready) - draft
 
