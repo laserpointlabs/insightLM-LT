@@ -453,6 +453,10 @@ InsightLM-LT’s thesis is straightforward:
 
 ### 1.3 Design principles (draft)
 
+- **Prune to a canvas (simplicity is earned)**
+  - Early in a design, it is normal for things to look messy because you are exploring many possible directions at once. The core InsightLM-LT approach is to explore, then prune aggressively until what remains is a small, stable canvas that people can actually use every day. The “simplicity” people see at the end is not because the problem was simple. It is because the complexity was pushed to the right boundaries (extensions and tools) and the core was forced to stay clean.
+  - A helpful metaphor is a painting canvas: the app is the canvas, and extensions are the paints and brushes. The goal is not to ship a massive stack. The goal is to ship a stable surface where different users can add the right capabilities for their domain without turning the product into a tangled monolith.
+
 - **Context management first**
   - The system must help users form and maintain a clear context view and prevent “everything everywhere all at once.”
   - Scoping is a first-class control (ALL vs SCOPED).
@@ -880,6 +884,26 @@ The testing philosophy is simple: if a workflow matters, we must be able to driv
 
 Practically, this means we design UI flows so they can be validated with the same user-level actions every time: stable `data-testid` attributes for interactive elements, explicit empty states instead of ambiguous blank panels, and deterministic dialogs for confirmations and collisions (no hidden side effects and no relying on timing). When we do this, we can build a trustworthy smoke suite that proves the workflows people actually use, and we can evolve features without breaking everything downstream.
 
+## 8.2 Selector contract: `data-testid` + central `testIds` (draft)
+
+InsightLM-LT treats stable selectors as part of the UI contract. Interactive elements that matter to workflows should have deterministic `data-testid` attributes, and those ids should be centralized so they do not drift across refactors. This is not about making tests easier for developers. It is about making the product automation-safe, which means the team can prove that critical workflows still work without relying on brittle visual cues or text matching.
+
+## 8.3 CDP UI smoke (tests like a user; no screenshots) (draft)
+
+The primary smoke test approach is user-level automation through Chrome DevTools Protocol (CDP). The intent is to drive the app the way a user would, click the same buttons, type into the same fields, and then assert outcomes through stable selectors and explicit state. The contract is "no screenshots required." If a test needs screenshots to determine success, the UX is likely not deterministic enough for a decision tool.
+
+## 8.4 Integration tests (MCP decoupling suite) (draft)
+
+The integration layer focuses on the boundaries that make the architecture safe and modular: tool discovery, tool routing, and fail-soft behavior when servers are missing. A core requirement is that the app can start and remain usable even when optional servers are not available, and that the UI surfaces that capability loss explicitly. These tests prove that the system is decoupled rather than a single ball of twine.
+
+## 8.5 Unit tests (Vitest) (draft)
+
+Unit tests exist to keep the lowest-level behavior stable: parsing, formatting, small reducers/stores, and utility logic that should remain deterministic. Unit tests are not a replacement for smoke tests because they do not validate the user workflow, but they help keep core logic correct and maintainable as the product grows.
+
+## 8.6 How to add a new feature safely (Definition of Done) (draft)
+
+New capability is "done" when it is automation-safe and fail-soft. Practically, that means the UI has stable selectors, empty and error states are explicit, and any risky operation uses deterministic dialogs rather than implicit behavior. If the feature depends on tools or servers, it must degrade cleanly when those dependencies are missing, and it must have at least one deterministic end-to-end smoke path that exercises the feature the way a user will.
+
 ## 8.7 Measuring “Team Planning” quality (draft)
 
 Team planning is powerful, but it also introduces an important engineering requirement:
@@ -925,6 +949,8 @@ Longer term, we can build a scorecard for “plan quality” with human review l
 
 LLM outputs are probabilistic. That does not mean they are "hallucinating" in a mystical sense. It means we are sampling a stochastic process, and if we only run it once, we should expect variance, including occasional low-quality results even when the prompt and context are reasonable.
 
+We therefore do not treat an LLM as a deterministic analysis engine. When correctness matters, the system should rely on deterministic tool execution, and when a question is complex, the workflow should be run more than once and converged explicitly rather than trusting a single pass.
+
 For complex problems, the correct posture is closer to uncertainty quantification (UQ) than to one-shot Q and A. Practically, that means we should be able to run the same workflow many times (with controlled variation), collect the resulting answers or plans, and then converge on an outcome using explicit criteria. This concept applies to single-model runs, Teams, and any multi-step tool workflow. If we cannot repeat and measure convergence, we cannot claim the output is decision-grade.
 
 Two related ideas matter for real decision support:
@@ -955,6 +981,12 @@ A user selects a Context and sets scope mode to Scoped so that only the workbook
 
 If the user switches to a different Context, the chat thread changes with it because chat persistence is keyed to context id. If the user changes scope mode from Scoped to All, the system does not “forget” the context, but it expands what is considered in scope for subsequent requests. The user can reference specific items intentionally using mention and reference mechanisms rather than relying on implied memory, and the result remains a durable conversation history that can be replayed, reviewed, and used as part of the decision record.
 
+### 9.3 UC-03: Build a dashboard tile from a deterministic fixture (draft)
+
+A user wants a repeatable, refreshable output surface rather than a one-off chat answer. They create a dashboard and add a query that is intentionally grounded in a deterministic fixture document (for example, a known JSON or CSV file stored in the workbook). The query is written so the tile can be refreshed against the same underlying artifact, and the result is shown as a stable card/table/graph with explicit empty and error states.
+
+The key behavior is that the dashboard becomes a durable reporting surface. When the fixture changes (for example, a notebook workflow regenerates `results/summary.json`), the user can refresh the dashboard and see the updated output without re-authoring the question. If the tool pathway required for the query is unavailable, the dashboard should fail-soft with a clear "capability unavailable" state rather than producing silent nonsense.
+
 ### 9.4 UC-04: Enable Jupyter extension → execute a cell (draft)
 
 A user enables the Jupyter extension from the Extensions UI. Enabling an extension is not just a UI toggle. It is a capability gate that can start or stop an extension-managed MCP server. In the Jupyter case, enabling starts a local `python` subprocess (the `jupyter-server`) with `INSIGHTLM_DATA_DIR` set so the server can locate and operate on the user’s local workspace data.
@@ -974,6 +1006,12 @@ This implies a higher-level tool than `execute cell`: a tool that runs an entire
 A user can continue doing real work even when parts of the system are unavailable. Because workbooks and documents are local-first, the user can still create, browse, and edit local files when offline. If an LLM provider is unreachable (for example, no internet for a hosted provider, or a local provider not running), chat requests should fail in a visible, deterministic way (a clear error message) without destabilizing the rest of the app.
 
 The same principle applies to optional tool servers. If an extension-managed MCP server is disabled or crashes, the app should continue operating with reduced capability. The user can still open documents, view notebooks as files, and manage workbooks, but actions that require the missing server (for example, executing a notebook cell) should surface as “capability unavailable” rather than as a crash or silent corruption. This is a core contract of InsightLM-LT: missing components degrade workflows explicitly, they do not break the workspace.
+
+### 9.6 UC-06: Plan with a Team (moderated) → produce a structured plan artifact (future use case) (draft)
+
+This is a future workflow that reflects the core "Teams are where planning happens" intent. A user starts with an ambiguous or multi-domain problem and assembles the relevant workspace context (workbooks, key documents, and any pinned references). The user then invokes a Team planning run that includes a moderator to keep the discussion on target, multiple SMEs to propose and critique options, and a rapporteur to produce a durable artifact rather than an unstructured transcript.
+
+The output is a structured plan artifact that is saved back into the workspace as a first-class document. At minimum, it should include plan steps, assumptions, constraints, open questions, and a section that captures disagreements or alternative COAs when consensus does not converge cleanly. The system should also record enough trace metadata to make the artifact reviewable later (what sources were referenced, what tools ran, what convergence criteria were applied). This is where C3 becomes operational: the run ends because explicit convergence rules are met, not because the model "feels done."
 
 ### 9.7 UC-07: Data Workbench dataset refresh → event → notebook workflow rerun → dashboard update (future use case) (draft)
 
@@ -1093,7 +1131,50 @@ This subsection will be expanded as we complete a first pass, but typical items 
 
 ---
 
-## References (existing repo docs that this SDD will unify)
+## 11. Appendix
+
+### A. Glossary (expanded)
+
+This appendix is a quick-reference glossary. It is intentionally short and user-facing. For deeper conceptual framing, see Section 2.
+
+- **Workbook**: a top-level container for organizing files and folders for an effort.
+- **Document**: a file inside a workbook that can be viewed and sometimes edited, depending on type.
+- **Dashboard**: a named set of refreshable tiles (tables, counters, graphs) driven by queries over workspace artifacts.
+- **Context**: a named selection of workbooks used to focus the workspace and control what is considered in scope.
+- **Scope mode (All vs Scoped)**: the toggle that decides whether the active context is enforced (Scoped) or whether all workbooks are in scope (All).
+- **World context / context view / context window**: world context is everything that exists, the context view is what the user makes eligible, and the context window is what is actually passed to the LLM for a single step.
+- **Tool**: a callable capability with a clear schema and deterministic inputs and outputs.
+- **MCP server**: a local subprocess that exposes tools via MCP so the runtime can execute deterministic operations out-of-process.
+- **Extension**: a packaged unit of capability that can contribute UI, file handlers, and optional MCP server lifecycle behavior.
+- **File handler**: an extension-provided viewer/editor that owns rendering for specific file types (for example, `.ipynb`).
+- **Team**: a repeatable planning workflow with a moderator, SMEs, and a rapporteur that produces a structured plan artifact.
+- **C3 (Conversational Convergence Criteria)**: explicit stopping rules for Team runs, including non-convergence outcomes.
+- **Fail-soft**: missing capabilities degrade explicitly (clear errors and empty states) rather than crashing the app.
+- **Deterministic UX**: UI behaviors that are predictable and automation-safe (explicit dialogs, empty states, stable selectors).
+
+### B. “Where is it in the code?” mapping (pointers, not code)
+
+This is an onboarding map for engineers. It does not embed code. It points you to the files that own each major capability so you can start reading in the right place.
+
+- **Electron main process entry and IPC orchestration**: `electron/main.ts`
+- **Curated renderer API surface (security boundary)**: `electron/preload.ts`
+- **MCP server lifecycle and JSON-RPC transport**: `electron/services/mcpService.ts`
+- **Tool registration and routing**: `electron/services/toolRegistry.ts`, `electron/services/toolProviderRegistry.ts`
+- **LLM runtime orchestration (prompting, tool calls, scoping)**: `electron/services/llmService.ts`
+- **Dashboards execution pathway**: `electron/services/dashboardService.ts`, `electron/services/dashboardPromptService.ts`
+- **Workbooks persistence and metadata normalization**: `electron/services/workbookService.ts`
+- **Archive behavior**: `electron/services/archiveService.ts`, `electron/ipc/archive.ts`
+- **Chat persistence (single-thread per context)**: `electron/services/chatService.ts`, `electron/ipc/chat.ts`
+- **Canvas shell and navigation**: `src/App.tsx` (and surrounding layout components)
+- **Sidebar core views**: `src/components/Sidebar/WorkbooksView.tsx`, `src/components/Sidebar/ContextsView.tsx`, `src/components/Sidebar/Chat.tsx`, `src/components/Sidebar/DashboardView.tsx`
+- **Main tabbed viewer**: `src/components/DocumentViewer/DocumentViewer.tsx`
+- **Dashboard viewer surface**: `src/components/DocumentViewer/DashboardViewer.tsx`
+- **Core state stores**: `src/store/workbookStore.ts`, `src/store/documentStore.ts`, `src/store/dashboardStore.ts`
+- **Extension manifests and enable/disable UI**: `src/extensions/*/manifest.ts`, `src/components/Extensions/ExtensionToggle.tsx`
+- **Jupyter notebook viewer and wiring**: `src/extensions/jupyter/NotebookViewer.tsx`, `mcp-servers/jupyter-server/server.py`
+- **Automation conventions and smoke testing docs**: `docs/Automation/*`
+
+### C. References (existing repo docs that this SDD will unify)
 
 - `README.md` - product summary and dev workflow
 - `insightlm_spec.md` - architecture specification and roadmap discussion
