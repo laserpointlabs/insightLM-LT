@@ -392,7 +392,6 @@ export function SpreadsheetViewer({
       // Mark all scripts as loaded
       globalScriptsState.scripts.add('https://code.jquery.com/jquery-3.6.0.min.js');
       globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/jquery-mousewheel@3.1.13/jquery.mousewheel.min.js');
-      globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/plugins/js/plugin.js');
       globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/luckysheet.umd.js');
       setScriptsLoaded(true);
       return;
@@ -633,7 +632,35 @@ export function SpreadsheetViewer({
       mainScript.setAttribute('data-luckysheet-script', 'main');
       // Mark in global state BEFORE appending to prevent race conditions
       globalScriptsState.scripts.add(mainUrl);
+
+      // Luckysheet UMD should attach to window. If an AMD loader is present (requirejs),
+      // Luckysheet/jQuery bundles may attempt to register anonymous modules and throw
+      // ("Can only have one anonymous define call per script file"). To avoid this,
+      // temporarily disable AMD during this script load.
+      const w: any = window as any;
+      const savedDefine = w.define;
+      const savedRequire = w.require;
+      const savedRequirejs = w.requirejs;
+      try {
+        if (savedDefine && savedDefine.amd) {
+          w.define = undefined;
+          w.require = undefined;
+          w.requirejs = undefined;
+        }
+      } catch {
+        // ignore
+      }
       mainScript.onload = () => {
+        // Restore AMD globals (if any) after load.
+        try {
+          if (savedDefine && savedDefine.amd) {
+            w.define = savedDefine;
+            w.require = savedRequire;
+            w.requirejs = savedRequirejs;
+          }
+        } catch {
+          // ignore
+        }
         // Small delay to ensure AMD loader has processed it
         setTimeout(() => {
           globalScriptsState.loaded = true;
@@ -649,6 +676,16 @@ export function SpreadsheetViewer({
         }, 100);
       };
       mainScript.onerror = () => {
+        // Restore AMD globals (if any) after error.
+        try {
+          if (savedDefine && savedDefine.amd) {
+            w.define = savedDefine;
+            w.require = savedRequire;
+            w.requirejs = savedRequirejs;
+          }
+        } catch {
+          // ignore
+        }
         globalScriptsState.loading = false;
         globalScriptsState.scripts.delete(mainUrl); // Remove on error
         console.error('Failed to load Luckysheet main script');
@@ -749,14 +786,16 @@ export function SpreadsheetViewer({
       
       if ((window as any).jQuery && (window as any).jQuery.fn && (window as any).jQuery.fn.mousewheel) {
         console.log('jQuery mousewheel already loaded');
-        loadPluginScript();
+        // Luckysheet UMD is sufficient for our current needs; avoid plugin.js because it bundles an AMD loader
+        // and can cause duplicate module/anonymous define errors in the browser console.
+        loadMainScript();
       } else if (isScriptLoaded(mousewheelUrl)) {
         // Script tag exists, wait for it to load (but jQuery must be ready first)
         console.log('Mousewheel script tag found, waiting for it to load...');
         const checkMousewheel = setInterval(() => {
           if ((window as any).jQuery && (window as any).jQuery.fn && (window as any).jQuery.fn.mousewheel) {
             clearInterval(checkMousewheel);
-            loadPluginScript();
+            loadMainScript();
           }
         }, 50);
         
@@ -788,19 +827,19 @@ export function SpreadsheetViewer({
           mousewheelScript.onload = () => {
             globalScriptsState.scripts.add(mousewheelUrl);
             console.log('Mousewheel script loaded successfully');
-            loadPluginScript();
+            loadMainScript();
           };
           mousewheelScript.onerror = () => {
             globalScriptsState.loading = false;
             console.warn('Failed to load jQuery mousewheel plugin, continuing anyway');
             // Continue even if mousewheel fails - some features may not work
-            loadPluginScript();
+            loadMainScript();
           };
           document.body.appendChild(mousewheelScript);
           loadedScripts.add(mousewheelUrl);
         } else {
           // Script already exists, proceed
-          loadPluginScript();
+          loadMainScript();
         }
       }
     }

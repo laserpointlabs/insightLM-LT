@@ -112,7 +112,7 @@ def get_data_dir() -> str:
 def extract_text_from_pdf(file_path: Path) -> str:
     """Extract text from PDF"""
     try:
-        from pypdf import PdfReader
+        from pypdf import PdfReader  # type: ignore[import-not-found]
         reader = PdfReader(str(file_path))
         text_parts = []
         for page in reader.pages:
@@ -127,7 +127,7 @@ def extract_text_from_pdf(file_path: Path) -> str:
 def extract_text_from_docx(file_path: Path) -> str:
     """Extract text from DOCX"""
     try:
-        from docx import Document
+        from docx import Document  # type: ignore[import-not-found]
         doc = Document(str(file_path))
         text_parts = []
         for paragraph in doc.paragraphs:
@@ -417,7 +417,184 @@ def read_file(file_path: Path) -> str:
         return f"Could not decode file: {file_path}"
 
 
-def get_all_workbook_documents(workbook_ids: List[str] = None) -> List[Dict[str, Any]]:
+def _iter_grep_matches(
+    content: str,
+    pattern: str,
+    *,
+    regex: bool,
+    case_sensitive: bool,
+    max_matches: int,
+) -> List[Dict[str, Any]]:
+    """Find matches in content with best-effort line/col and a small snippet.
+
+    Notes:
+    - Works for any extracted text, not only "true" text files.
+    - Results are deterministic (scan left-to-right).
+    """
+    if not pattern:
+        return []
+
+    matches: List[Dict[str, Any]] = []
+    content_str = content if isinstance(content, str) else str(content)
+
+    if regex:
+        flags = re.MULTILINE
+        if not case_sensitive:
+            flags |= re.IGNORECASE
+
+        try:
+            compiled = re.compile(pattern, flags)
+        except re.error as e:
+            raise ValueError(f"Invalid regex: {e}")
+
+        for m in compiled.finditer(content_str):
+            if len(matches) >= max_matches:
+                break
+            start = m.start()
+            end = m.end()
+            matches.append({"start": start, "end": end})
+    else:
+        haystack = content_str if case_sensitive else content_str.lower()
+        needle = pattern if case_sensitive else pattern.lower()
+        i = 0
+        nlen = len(needle)
+        if nlen == 0:
+            return []
+
+        while True:
+            if len(matches) >= max_matches:
+                break
+            idx = haystack.find(needle, i)
+            if idx == -1:
+                break
+            matches.append({"start": idx, "end": idx + nlen})
+            i = idx + (1 if nlen == 0 else nlen)
+
+    # Enrich with line/col + snippet (best-effort)
+    if not matches:
+        return matches
+
+    # Precompute line starts for O(log n) mapping via linear scan (content sizes are small enough)
+    # We keep it simple and deterministic.
+    line_starts = [0]
+    for idx, ch in enumerate(content_str):
+        if ch == "\n":
+            line_starts.append(idx + 1)
+
+    def _line_col(pos: int) -> tuple[int, int]:
+        # Find rightmost line_start <= pos (linear scan acceptable; line_starts size bounded by content)
+        line = 0
+        for j, s in enumerate(line_starts):
+            if s <= pos:
+                line = j
+            else:
+                break
+        col = pos - line_starts[line]
+        return (line + 1, col + 1)  # 1-based
+
+    SNIPPET_RADIUS = 80
+    enriched: List[Dict[str, Any]] = []
+    for m in matches:
+        start = int(m["start"])
+        end = int(m["end"])
+        line, col = _line_col(start)
+        snippet_start = max(0, start - SNIPPET_RADIUS)
+        snippet_end = min(len(content_str), end + SNIPPET_RADIUS)
+        snippet = content_str[snippet_start:snippet_end]
+        if snippet_start > 0:
+            snippet = "..." + snippet
+        if snippet_end < len(content_str):
+            snippet = snippet + "..."
+        enriched.append(
+            {
+                "start": start,
+                "end": end,
+                "line": line,
+                "col": col,
+                "snippet": snippet,
+            }
+        )
+
+    return enriched
+
+
+def grep_workbooks(
+    pattern: str,
+    *,
+    regex: bool = False,
+    case_sensitive: bool = False,
+    max_results: int = 50,
+    max_matches_per_file: int = 20,
+    workbook_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Grep-like search across workbook documents (workbooks only).
+
+    Returns structured results suitable for LLM tool usage.
+    """
+    if max_results <= 0:
+        return {"pattern": pattern, "regex": regex, "case_sensitive": case_sensitive, "results": [], "truncated": False}
+
+    # Defensive caps
+    MAX_PATTERN_LEN = 500
+    if pattern is None:
+        pattern = ""
+    if len(pattern) > MAX_PATTERN_LEN:
+        raise ValueError(f"Pattern too long (max {MAX_PATTERN_LEN} chars)")
+
+    if max_matches_per_file <= 0:
+        max_matches_per_file = 1
+
+    docs = get_all_workbook_documents(workbook_ids)
+    results: List[Dict[str, Any]] = []
+    truncated = False
+
+    # Deterministic ordering: workbook_id, then path
+    docs.sort(key=lambda d: (d.get("workbook_id", ""), d.get("path", ""), d.get("filename", "")))
+
+    for doc in docs:
+        if len(results) >= max_results:
+            truncated = True
+            break
+
+        content = doc.get("content", "")
+        if not content:
+            continue
+
+        matches = _iter_grep_matches(
+            content,
+            pattern,
+            regex=bool(regex),
+            case_sensitive=bool(case_sensitive),
+            max_matches=int(max_matches_per_file),
+        )
+        if not matches:
+            continue
+
+        results.append(
+            {
+                "workbook_id": doc.get("workbook_id", ""),
+                "workbook_name": doc.get("workbook_name", ""),
+                "filename": doc.get("filename", ""),
+                "path": doc.get("path", ""),
+                "full_path": doc.get("filepath", ""),
+                "match_count": len(matches),
+                "matches": matches,
+            }
+        )
+
+    return {
+        "pattern": pattern,
+        "regex": bool(regex),
+        "case_sensitive": bool(case_sensitive),
+        "max_results": int(max_results),
+        "max_matches_per_file": int(max_matches_per_file),
+        "workbook_ids": workbook_ids,
+        "results": results,
+        "truncated": truncated,
+    }
+
+
+def get_all_workbook_documents(workbook_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """Scan workbooks and return document metadata with content (cached).
 
     If workbook_ids is provided, only those workbook directory names are scanned.
@@ -650,7 +827,7 @@ def extract_context_chunks(content: str, key_terms: List[str], chunk_size: int =
     return chunks
 
 
-def search_workbooks_with_content(query: str, limit: int = 5, workbook_ids: List[str] = None) -> str:
+def search_workbooks_with_content(query: str, limit: int = 5, workbook_ids: Optional[List[str]] = None) -> str:
     """Search workbook documents using text matching and return FULL content.
     Returns only files that match the query (score >= 3) plus up to 2 relevant sibling files per workbook.
     Limits to 5 files per workbook to avoid overwhelming results.
@@ -821,7 +998,7 @@ def read_workbook_file(workbook_id: str, file_path: str) -> str:
     return read_file(full_path)
 
 
-def list_all_files(workbook_ids: List[str] = None) -> List[Dict[str, Any]]:
+def list_all_files(workbook_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """List all files in workbooks.
 
     If workbook_ids is provided, only those workbook directory names are included.
@@ -972,6 +1149,42 @@ def handle_request(request: dict) -> dict:
                                 'required': []
                             }
                         }
+                        ,
+                        {
+                            'name': 'rag_grep',
+                            'description': 'Grep-like pattern search across workbook documents (workbooks only). Returns structured match locations + snippets. Use regex=false for literal strings; regex=true for regular expressions.',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {
+                                    'pattern': {
+                                        'type': 'string',
+                                        'description': 'Pattern to search for. Interpreted literally by default unless regex=true.'
+                                    },
+                                    'regex': {
+                                        'type': 'boolean',
+                                        'description': 'If true, treat pattern as a regular expression. Default: false.'
+                                    },
+                                    'case_sensitive': {
+                                        'type': 'boolean',
+                                        'description': 'If true, match case-sensitively. Default: false.'
+                                    },
+                                    'max_results': {
+                                        'type': 'number',
+                                        'description': 'Maximum number of files to return (default: 50).'
+                                    },
+                                    'max_matches_per_file': {
+                                        'type': 'number',
+                                        'description': 'Maximum matches to return per file (default: 20).'
+                                    },
+                                    'workbook_ids': {
+                                        'type': 'array',
+                                        'items': { 'type': 'string' },
+                                        'description': 'Optional: limit grep to these workbook IDs (directory names).'
+                                    }
+                                },
+                                'required': ['pattern']
+                            }
+                        }
                     ]
                 }
             }
@@ -1015,6 +1228,27 @@ def handle_request(request: dict) -> dict:
                 workbook_id = tool_args.get('workbook_id', None)
                 file_path = tool_args.get('file_path', None)
                 result = clear_cache(workbook_id=workbook_id, file_path=file_path)
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request.get('id'),
+                    'result': result
+                }
+
+            elif tool_name == 'rag_grep':
+                pattern = tool_args.get('pattern', '')
+                regex = tool_args.get('regex', False)
+                case_sensitive = tool_args.get('case_sensitive', False)
+                max_results = tool_args.get('max_results', 50)
+                max_matches_per_file = tool_args.get('max_matches_per_file', 20)
+                workbook_ids = tool_args.get('workbook_ids', None)
+                result = grep_workbooks(
+                    pattern,
+                    regex=bool(regex),
+                    case_sensitive=bool(case_sensitive),
+                    max_results=int(max_results),
+                    max_matches_per_file=int(max_matches_per_file),
+                    workbook_ids=workbook_ids,
+                )
                 return {
                     'jsonrpc': '2.0',
                     'id': request.get('id'),

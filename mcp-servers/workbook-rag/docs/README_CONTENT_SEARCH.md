@@ -12,6 +12,7 @@ The content search RAG system provides semantic search across workbook documents
 ✅ **Sibling Files** - Includes all files from matching workbooks for better context
 ✅ **Caching** - In-memory cache with mtime checks for performance
 ✅ **Simple** - No vector database needed, just text matching
+✅ **Grep-style Search** - Deterministic pattern matching (literal or regex) returning match locations + snippets
 
 ## How It Works
 
@@ -47,6 +48,20 @@ Searches document content and returns full content of matching files.
 - Relevance scores
 - Sibling files from same workbooks
 
+#### `tools/call` → `rag_grep`
+Grep-like pattern search across workbook documents (workbooks only). Returns structured match locations + snippets.
+
+**Parameters:**
+- `pattern` (required): String pattern to search for.
+- `regex` (optional, default `false`): If true, interpret `pattern` as a regular expression.
+- `case_sensitive` (optional, default `false`)
+- `max_results` (optional): Max files returned (defaults to 50)
+- `max_matches_per_file` (optional): Max matches per file (defaults to 20)
+- `workbook_ids` (optional): Limit grep to specific workbook IDs
+
+**Notes:**
+- Prefer `regex=false` for safety/determinism unless you explicitly need regex features like `\\d+`, `\\s+`, etc.
+
 ## Testing
 
 Run the content search tests:
@@ -60,6 +75,13 @@ Or directly:
 ```bash
 cd mcp-servers/workbook-rag
 python test_content_search_simple.py
+```
+
+Run grep tool tests:
+
+```bash
+python tests/test_grep.py
+python tests/benchmark_grep.py
 ```
 
 ## Integration
@@ -119,4 +141,3 @@ The LLM is instructed to use `rag_search_content` when:
 - Hybrid search (keyword + semantic)
 - Incremental indexing
 - Reranking for better relevance
-
