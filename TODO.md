@@ -118,6 +118,7 @@ Notes: Need to work on CRUD operataions by llm
 ### Extensions
 - [ ] Jupyter integration polish (kernel selection, error surfacing)
 - [ ] Spreadsheet integration polish (import/export, stable sheet ids)
+  - [ ] Cleanup: remove now-unused Luckysheet `loadPluginScript()` code path in `src/extensions/spreadsheet/SpreadsheetViewer.tsx` (we intentionally stopped loading `plugin.js` to avoid AMD/jQuery define collisions)
 
 ### QA / Testing
 - [ ] Add UI-level smoke tests for Workbooks move/rename/delete (automation selectors)
