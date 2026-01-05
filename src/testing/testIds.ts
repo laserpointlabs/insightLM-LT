@@ -231,6 +231,8 @@ export const testIds = {
     content: "document-viewer-content",
     error: "document-viewer-error",
     errorClose: "document-viewer-error-close",
+    loadError: "document-viewer-load-error",
+    loadErrorClose: "document-viewer-load-error-close",
     saveBar: "document-savebar",
     saveButton: "document-save",
   },

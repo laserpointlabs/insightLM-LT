@@ -218,31 +218,78 @@ class JupyterKernelManager:
         if not isinstance(cwd, str) or not cwd.strip():
             raise ValueError("cwd must be a non-empty string")
 
+        # Ensure the directory exists (kernel cannot chdir into a missing folder).
+        try:
+            Path(cwd).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise RuntimeError(f"Failed to prepare cwd directory {cwd!r}: {e}")
+
         # Escape backslashes for Windows paths inside a raw string literal.
         safe = cwd.replace("\\", "\\\\")
+        ok_marker = "__INSIGHTLM_CWD_OK__="
+        err_marker = "__INSIGHTLM_CWD_ERR__="
         preamble = (
             "import os\n"
-            f"os.chdir(r\"{safe}\")\n"
-            "print(os.getcwd())\n"
+            "import traceback\n"
+            "try:\n"
+            f"    os.chdir(r\"{safe}\")\n"
+            f"    print(\"{ok_marker}\" + os.getcwd())\n"
+            "except Exception as e:\n"
+            f"    print(\"{err_marker}\" + repr(e))\n"
+            "    raise\n"
         )
 
         kc = self.kernel_clients[kernel_id]
         msg_id = kc.execute(preamble)
 
-        # Drain iopub until idle; capture stdout to confirm cwd.
+        # Drain iopub until idle; capture stdout/stderr + execute_result to confirm cwd.
+        # NOTE: Some kernels emit iopub stream messages without parent_header.msg_id.
+        # We intentionally DO NOT filter by parent msg_id here; this is a short, isolated preamble.
         observed = ""
+        errors = []
         while True:
-            msg = kc.get_iopub_msg(timeout=5)
-            if msg.get("parent_header", {}).get("msg_id") != msg_id:
-                continue
+            msg = kc.get_iopub_msg(timeout=10)
             msg_type = msg.get("header", {}).get("msg_type")
-            if msg_type == "stream" and msg.get("content", {}).get("name") == "stdout":
+            if msg_type == "stream":
                 observed += str(msg.get("content", {}).get("text") or "")
+            elif msg_type == "execute_result":
+                try:
+                    txt = msg.get("content", {}).get("data", {}).get("text/plain", "")
+                    observed += str(txt or "")
+                except Exception:
+                    pass
+            elif msg_type == "error":
+                try:
+                    errors.append(
+                        {
+                            "ename": msg.get("content", {}).get("ename"),
+                            "evalue": msg.get("content", {}).get("evalue"),
+                            "traceback": msg.get("content", {}).get("traceback"),
+                        }
+                    )
+                except Exception:
+                    errors.append({"error": "unknown"})
             if msg_type == "status" and msg.get("content", {}).get("execution_state") == "idle":
                 break
 
-        # Strict verification (case-insensitive on Windows).
-        if cwd.lower() not in observed.lower():
+        low = observed.lower()
+        if err_marker.lower() in low:
+            raise RuntimeError(f"Failed to set kernel cwd to {cwd!r}; observed={observed!r}")
+        if errors:
+            raise RuntimeError(f"Failed to set kernel cwd to {cwd!r}; errors={errors!r}; observed={observed!r}")
+
+        # Strict verification (case-insensitive on Windows), using the explicit marker.
+        if ok_marker.lower() not in low:
+            raise RuntimeError(f"Failed to set kernel cwd to {cwd!r}; observed={observed!r}")
+        # Pull the first printed path after the marker and normalize.
+        try:
+            after = observed.split(ok_marker, 1)[1]
+            printed = after.strip().splitlines()[0].strip().strip("'").strip('"')
+        except Exception:
+            printed = ""
+        want = os.path.normcase(os.path.normpath(cwd))
+        got = os.path.normcase(os.path.normpath(printed)) if printed else ""
+        if not got or got != want:
             raise RuntimeError(f"Failed to set kernel cwd to {cwd!r}; observed={observed!r}")
 
     def execute_cell(self, kernel_id: str, code: str) -> Dict[str, Any]:

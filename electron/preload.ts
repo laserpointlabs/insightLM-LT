@@ -1,5 +1,27 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+// Smoke/dev reset behavior:
+// In automation runs we intentionally delete workbooks/docs, so restoring persisted tabs can
+// immediately try to open now-missing files and spam "file:read not found" errors.
+// Keep this logic in preload (before React boots) so it's deterministic.
+try {
+  const cleanTabs =
+    String(process.env.INSIGHTLM_CLEAN_TABS_ON_START || "").toLowerCase() === "1" ||
+    String(process.env.INSIGHTLM_CLEAN_TABS_ON_START || "").toLowerCase() === "true";
+  if (cleanTabs) {
+    const g: any = globalThis as any;
+    g.addEventListener?.("DOMContentLoaded", () => {
+      try {
+        g.localStorage?.removeItem?.("insightlm.openTabs.v1");
+      } catch {
+        // ignore
+      }
+    });
+  }
+} catch {
+  // ignore
+}
+
 try {
   contextBridge.exposeInMainWorld("electronAPI", {
   getVersion: () => ipcRenderer.invoke("app:getVersion"),

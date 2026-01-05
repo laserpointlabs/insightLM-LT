@@ -386,7 +386,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           newLoadingSet.delete(docKey);
           set((state) => ({
             openDocuments: state.openDocuments.map((d) =>
-              d.id === tempDoc.id ? { ...d, content } : d,
+              d.id === tempDoc.id ? { ...d, content, loadError: undefined } : d,
             ),
             loadingDocuments: newLoadingSet,
           }));
@@ -394,9 +394,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           console.error("Failed to load document:", error);
           const newLoadingSet = new Set(get().loadingDocuments);
           newLoadingSet.delete(docKey);
+          const msg = `Error loading file: ${error instanceof Error ? error.message : "Unknown error"}`;
           set((state) => ({
             openDocuments: state.openDocuments.map((d) =>
-              d.id === tempDoc.id ? { ...d, content: `Error loading file: ${error instanceof Error ? error.message : 'Unknown error'}` } : d,
+              d.id === tempDoc.id ? { ...d, content: "", loadError: msg } : d,
             ),
             loadingDocuments: newLoadingSet,
           }));
@@ -567,3 +568,33 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       return { openDocuments: nextOpenDocs, loadingDocuments: nextLoading };
     }),
 }));
+
+// When dev data is reset, the on-disk files are deleted but the renderer may still have persisted tabs
+// pointing at now-missing documents. Clear persisted tabs + close open docs so we don't show misleading
+// "failed to parse notebook" states.
+try {
+  if (typeof window !== "undefined") {
+    window.addEventListener("demos:changed", (evt: any) => {
+      const t = evt?.detail?.type;
+      if (t !== "dev_data_reset") return;
+      try {
+        localStorage.removeItem(OPEN_TABS_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+      try {
+        useDocumentStore.setState({
+          openDocuments: [],
+          loadingDocuments: new Set(),
+          editingDocuments: new Set(),
+          unsavedChanges: new Map(),
+          lastOpenedDocId: null,
+        });
+      } catch {
+        // ignore
+      }
+    });
+  }
+} catch {
+  // ignore
+}

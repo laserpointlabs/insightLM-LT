@@ -11,6 +11,7 @@
  */
 
 import { spawn } from "child_process";
+import electronPath from "electron";
 
 const CDP_HOST = "127.0.0.1";
 const CDP_PORT = 9222;
@@ -43,6 +44,34 @@ function runCmd(cmd, args, opts = {}) {
   });
 }
 
+async function killProcessTree(proc) {
+  try {
+    if (!proc || proc.killed) return;
+    const pid = proc.pid;
+    if (!pid) {
+      try {
+        proc.kill();
+      } catch {}
+      return;
+    }
+    if (process.platform === "win32") {
+      // Kill the entire process tree; Electron often leaves child processes that keep files locked.
+      await runCmd("taskkill", ["/PID", String(pid), "/T", "/F"]);
+      return;
+    }
+    // Best-effort non-Windows
+    try {
+      proc.kill("SIGTERM");
+    } catch {}
+    await sleep(500);
+    try {
+      if (!proc.killed) proc.kill("SIGKILL");
+    } catch {}
+  } catch {
+    // ignore
+  }
+}
+
 async function main() {
   if (await isPortOpen()) {
     console.error(`❌ CDP is already reachable on ${CDP_HOST}:${CDP_PORT}. Close any running insightLM-LT instance first.`);
@@ -57,13 +86,19 @@ async function main() {
   const env = {
     ...process.env,
     INSIGHTLM_FORCE_PROD_UI: "1",
+    // Run smoke in the dedicated smoke dataDir (config/app.smoke.yaml),
+    // so automation doesn't pollute a developer's normal dev data folder.
+    INSIGHTLM_APP_CONFIG_FILE: process.env.INSIGHTLM_APP_CONFIG_FILE || "app.smoke.yaml",
+    // Prevent stale persisted tabs from trying to open deleted smoke artifacts on boot.
+    INSIGHTLM_CLEAN_TABS_ON_START: "1",
     NODE_ENV: "production",
   };
 
   console.log("Starting Electron (prod renderer mode)...");
-  const electronProc = spawn("npx", ["electron", "."], {
+  // Spawn the Electron binary directly (avoid npx/cmd wrappers so we can reliably kill the process tree on Windows).
+  const electronProc = spawn(electronPath, ["."], {
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: false,
     env,
   });
 
@@ -80,9 +115,7 @@ async function main() {
     });
     process.exit(smokeCode);
   } finally {
-    try {
-      if (!electronProc.killed) electronProc.kill();
-    } catch {}
+    await killProcessTree(electronProc);
   }
 }
 

@@ -51,6 +51,16 @@ async function runAllDecouplingTests() {
   const testResults = [];
 
   try {
+    // Phase 0: Jupyter notebook cwd (%pwd) regression
+    // This is a standalone server-level integration test (spawns python server.py directly),
+    // and does NOT couple the core app to any MCP server. It simply ensures the jupyter-server
+    // honors workbook:// paths and correctly sets kernel cwd across notebook switches.
+    const jupyterPathResult = await runTest(
+      'test-jupyter-server-workbook-url-path.mjs',
+      'Phase 0 - Jupyter workbook:// cwd (%pwd) Regression'
+    );
+    testResults.push(jupyterPathResult);
+
     // Phase 1: MCP Tool Discovery
     const phase1Result = await runTest('test-mcp-tool-discovery.mjs', 'Phase 1 - MCP Tool Discovery');
     testResults.push(phase1Result);

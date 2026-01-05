@@ -102,13 +102,76 @@ async function main() {
     2002
   );
 
-  // Execute a cell and persist into the same notebook (either via notebook_path or server last-created fallback).
+  // Execute a cell and persist into the same notebook.
   await sendRequest(
     proc,
     "tools/call",
     { name: "execute_cell", arguments: { code: "2 + 2", kernel_name: "python3", notebook_path: workbookUrl } },
     2003
   );
+
+  // Verify cwd is set to the notebook's directory by running %pwd (this is the real user repro).
+  const pwdRes1 = await sendRequest(
+    proc,
+    "tools/call",
+    { name: "execute_cell", arguments: { code: "%pwd", kernel_name: "python3", notebook_path: workbookUrl } },
+    20031
+  );
+  const out1 = Array.isArray(pwdRes1?.outputs) ? pwdRes1.outputs : (pwdRes1?.result?.outputs || []);
+  const expectedDir1 = path.join(tmpDataDir, "workbooks", wid, "documents");
+  const tmpBase = path.basename(tmpDataDir);
+  const pwd1Raw =
+    (out1 || []).find((o) => o?.output_type === "execute_result")?.data?.["text/plain"] ||
+    (out1 || []).find((o) => o?.output_type === "stream")?.text ||
+    "";
+  let pwd1 = String(pwd1Raw || "").trim().replace(/^['"]|['"]$/g, "");
+  // `%pwd` often comes back as a Python repr string with escaped backslashes.
+  pwd1 = pwd1.replace(/\\\\/g, "\\");
+  const pwd1Norm = String(pwd1 || "").replace(/\//g, "\\").toLowerCase();
+  const expectedTail1 = path.join(tmpBase, "workbooks", wid, "documents").replace(/\//g, "\\").toLowerCase();
+  if (!pwd1Norm.includes(expectedTail1)) {
+    proc.kill();
+    throw new Error(`Expected %pwd output to include ${expectedTail1} but got ${pwd1Norm}; outputs=${JSON.stringify(out1 || [])}`);
+  }
+
+  // Force a cwd switch by running against a different workbook's notebook directory (exercises set_cwd()).
+  const wid2 = "2b8f0c3e-2a62-4d92-9c8c-1a0c6f79a111";
+  const rel2 = "documents/other_notebook.ipynb";
+  const workbookUrl2 = `workbook://${wid2}/${rel2}`;
+  const wbDir2 = path.join(tmpDataDir, "workbooks", wid2);
+  fs.mkdirSync(path.join(wbDir2, "documents"), { recursive: true });
+  fs.writeFileSync(
+    path.join(wbDir2, "workbook.json"),
+    JSON.stringify({ id: wid2, name: "Test WB 2", documents: [], updated: new Date().toISOString() }, null, 2),
+    "utf-8"
+  );
+  await sendRequest(
+    proc,
+    "tools/call",
+    { name: "create_notebook", arguments: { path: workbookUrl2, kernel_name: "python3" } },
+    20032
+  );
+  const pwdRes2 = await sendRequest(
+    proc,
+    "tools/call",
+    { name: "execute_cell", arguments: { code: "%pwd", kernel_name: "python3", notebook_path: workbookUrl2 } },
+    20033
+  );
+  const out2 = Array.isArray(pwdRes2?.outputs) ? pwdRes2.outputs : (pwdRes2?.result?.outputs || []);
+  const expectedDir2 = path.join(tmpDataDir, "workbooks", wid2, "documents");
+  const pwd2Raw =
+    (out2 || []).find((o) => o?.output_type === "execute_result")?.data?.["text/plain"] ||
+    (out2 || []).find((o) => o?.output_type === "stream")?.text ||
+    "";
+  let pwd2 = String(pwd2Raw || "").trim().replace(/^['"]|['"]$/g, "");
+  // `%pwd` often comes back as a Python repr string with escaped backslashes.
+  pwd2 = pwd2.replace(/\\\\/g, "\\");
+  const pwd2Norm = String(pwd2 || "").replace(/\//g, "\\").toLowerCase();
+  const expectedTail2 = path.join(tmpBase, "workbooks", wid2, "documents").replace(/\//g, "\\").toLowerCase();
+  if (!pwd2Norm.includes(expectedTail2)) {
+    proc.kill();
+    throw new Error(`Expected %pwd output to include ${expectedTail2} but got ${pwd2Norm}; outputs=${JSON.stringify(out2 || [])}`);
+  }
 
   // Execute again WITHOUT notebook_path; should FAIL (strict: no fallbacks allowed).
   let missingPathFailed = false;
@@ -129,21 +192,24 @@ async function main() {
   }
 
   // Verify the notebook contains an executed cell with output "4".
+  // (We may have appended additional cells afterward, e.g. %pwd checks.)
   const nb = JSON.parse(fs.readFileSync(expectedPath, "utf-8"));
   const cells = Array.isArray(nb?.cells) ? nb.cells : [];
-  const last = cells[cells.length - 1] || {};
-  const source = Array.isArray(last.source) ? last.source.join("") : String(last.source || "");
-  if (!source.includes("2 + 2")) {
+  const cell22 = cells.find((c) => {
+    const src = Array.isArray(c?.source) ? c.source.join("") : String(c?.source || "");
+    return src.includes("2 + 2");
+  });
+  if (!cell22) {
     proc.kill();
-    throw new Error(`Expected last cell source to include "2 + 2" but got: ${source}`);
+    throw new Error(`Expected notebook to include a cell with source "2 + 2" but it was not found`);
   }
-  const outs = Array.isArray(last.outputs) ? last.outputs : [];
+  const outs = Array.isArray(cell22.outputs) ? cell22.outputs : [];
   const has4 =
     outs.some((o) => o?.output_type === "execute_result" && String(o?.data?.["text/plain"] || "").includes("4")) ||
     outs.some((o) => o?.output_type === "stream" && String(o?.text || "").includes("4"));
   if (!has4) {
     proc.kill();
-    throw new Error(`Expected outputs to include 4; outputs=${JSON.stringify(outs)}`);
+    throw new Error(`Expected outputs to include 4 for the "2 + 2" cell; outputs=${JSON.stringify(outs)}`);
   }
 
   // Verify workbook.json was updated to include the new file.

@@ -15,6 +15,8 @@ import { LLMService, LLMMessage } from "./services/llmService";
 import { DemoService } from "./services/demoService";
 import { setupUpdater } from "./updater";
 import { seedDemoWorkbooksIfNeeded } from "./services/demoSeedService";
+import * as yaml from "js-yaml";
+import { expandPath } from "./services/configService";
 
 let mainWindow: BrowserWindow | null = null;
 let mcpService!: MCPService;
@@ -232,10 +234,25 @@ app.whenReady().then(async () => {
   const appConfig = configService.loadAppConfig();
   const llmConfig = configService.loadLLMConfig();
 
-  // Seed demo workbooks on first run (safe: only when workbooks dir is empty and no seed marker exists).
-  // This powers the out-of-box video/demo experience (includes UAV trade study workbook).
+  // Seed demo workbooks into the dedicated "org" dataDir on first run.
+  // This keeps a canonical demo source that can be copied into dev/smoke/current workspaces via Demos menu,
+  // without polluting the user's active dataDir (and without tests writing into real workspaces).
   try {
-    seedDemoWorkbooksIfNeeded(appConfig.dataDir);
+    const projectConfigDir = path.join(process.cwd(), "config");
+    const configDir =
+      fs.existsSync(projectConfigDir) ? projectConfigDir : (process.resourcesPath ? path.join(process.resourcesPath, "config") : projectConfigDir);
+    const orgCfgPath = path.join(configDir, "app.org.yaml");
+    let orgDataDir = "";
+    try {
+      const raw = fs.readFileSync(orgCfgPath, "utf-8");
+      const parsed: any = yaml.load(raw);
+      orgDataDir = typeof parsed?.dataDir === "string" ? parsed.dataDir : "";
+    } catch {
+      orgDataDir = "";
+    }
+    orgDataDir = expandPath(orgDataDir && orgDataDir.trim() ? orgDataDir.trim() : "%APPDATA%/insightLM-LT-org");
+
+    seedDemoWorkbooksIfNeeded(orgDataDir);
   } catch (e) {
     console.warn("[Seed] Demo workbook seed failed (continuing):", e instanceof Error ? e.message : e);
   }

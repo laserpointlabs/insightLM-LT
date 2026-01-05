@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as yaml from "js-yaml";
 import { app, BrowserWindow, dialog } from "electron";
+import { expandPath } from "./configService";
 
 type DemoId = "ac1000" | "trade-study";
 
@@ -77,7 +78,8 @@ export class DemoService {
     const p = path.join(getConfigDir(), "app.org.yaml");
     const cfg = readYamlFile<{ dataDir?: string }>(p);
     if (cfg?.dataDir && typeof cfg.dataDir === "string" && cfg.dataDir.trim()) {
-      return cfg.dataDir.trim();
+      // Keep consistent with ConfigService: support %APPDATA% and ${VARS}.
+      return expandPath(cfg.dataDir.trim());
     }
 
     // Fallback: legacy default location (what ConfigService uses when app.yaml is missing).
@@ -152,6 +154,14 @@ export class DemoService {
       const src = path.join(this.getOrgDataDir(), "workbooks", wid);
       const dst = path.join(this.params.dataDir, "workbooks", wid);
       fs.mkdirSync(path.dirname(dst), { recursive: true });
+      // If the "org" demo source is missing but the workbook already exists locally, don't fail.
+      // This can happen in dev if demos were seeded directly into the active dataDir.
+      if (!fs.existsSync(src)) {
+        if (fs.existsSync(dst)) continue;
+        throw new Error(
+          `Demo source workbook not found.\n\nExpected:\n${src}\n\nTry: Demos → Reset Dev Data… (re-seeds demos)`,
+        );
+      }
       copyDirRecursive(src, dst);
     }
 
@@ -173,7 +183,8 @@ export class DemoService {
 
   async resetDevData(): Promise<{ ok: true }> {
     const dataDir = this.params.dataDir;
-    const toDelete = ["workbooks", "dashboards", "contexts", "chats", "rag_db"];
+    // Clear all user-generated content and the demo seed marker so we can re-seed cleanly.
+    const toDelete = ["workbooks", "dashboards", "contexts", "chats", "rag_db", ".seed"];
     for (const name of toDelete) {
       const p = path.join(dataDir, name);
       try {
@@ -190,6 +201,16 @@ export class DemoService {
       } catch {
         // ignore
       }
+    }
+
+    // Avoid noisy ENOENT reads on first dashboard load.
+    try {
+      const dashboardsFile = path.join(dataDir, "dashboards", "dashboards.json");
+      if (!fs.existsSync(dashboardsFile)) {
+        fs.writeFileSync(dashboardsFile, JSON.stringify([], null, 2), "utf-8");
+      }
+    } catch {
+      // ignore
     }
 
     this.params.setScopeMode?.("context");

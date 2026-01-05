@@ -96,6 +96,8 @@ export interface OpenDocument {
   path?: string; // Optional for dashboards
   filename: string;
   content?: string;
+  /** If set, the document failed to load from disk (e.g. file missing). */
+  loadError?: string;
   type?: "document" | "dashboard" | "config" | "chat"; // Document type
   dashboardId?: string; // For dashboard documents
   configKey?: "llm"; // For config documents
@@ -260,6 +262,29 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
           <div className="text-center">
             <div className="text-gray-500 mb-2">Loading document...</div>
             <div className="text-xs text-gray-400">{activeDoc.filename}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // If loading failed, show an explicit error state (do not pass error strings into viewers like NotebookViewer).
+    if (activeDoc.loadError) {
+      return (
+        <div className="p-4" data-testid={testIds.documentViewer.loadError}>
+          <div className="text-sm font-semibold text-red-600">Failed to load file</div>
+          <div className="mt-1 text-xs text-gray-600">{activeDoc.filename}</div>
+          <pre className="mt-2 max-h-40 overflow-auto rounded bg-gray-50 p-2 text-xs text-gray-800">
+            {String(activeDoc.loadError)}
+          </pre>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-100"
+              data-testid={testIds.documentViewer.loadErrorClose}
+              onClick={() => activeDocId && onClose(activeDocId)}
+            >
+              Close tab
+            </button>
           </div>
         </div>
       );

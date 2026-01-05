@@ -267,6 +267,20 @@ async function run() {
     const bootOk = await waitForSelector(evaluate, "body", 20000);
     if (!bootOk) fail("App did not render a <body> in time");
 
+    // Ensure each run starts from a clean slate (smoke config uses a dedicated dataDir).
+    // This prevents automation artifacts from polluting normal dev/demo data.
+    await evaluate(`
+      (async () => {
+        if (window.electronAPI?.demos?.resetDevData) {
+          await window.electronAPI.demos.resetDevData();
+          try { localStorage.removeItem("insightlm.openTabs.v1"); } catch {}
+          return true;
+        }
+        return false;
+      })()
+    `);
+    await sleep(300);
+
     // Enable automation mode (force-show hover-only controls).
     await evaluate(`
       (async () => {
@@ -361,6 +375,28 @@ async function run() {
 
     // Expand Workbooks and create a workbook.
     await ensureExpanded(evaluate, "sidebar-workbooks-header");
+
+    // Verify demos can be loaded after reset (and don't depend on hardcoded org paths).
+    // This is important for dev resets: the user expects AC-1000 + Trade Study to work immediately.
+    await evaluate(`
+      (async () => {
+        if (window.electronAPI?.demos?.load) {
+          await window.electronAPI.demos.load("ac1000");
+          await window.electronAPI.demos.load("trade-study");
+          return true;
+        }
+        return false;
+      })()
+    `);
+    // Allow the renderer to refresh the workbooks tree after demo load notifications.
+    await sleep(800);
+
+    // Assert demo workbooks are present.
+    const acMainId = "ac1000-main-project";
+    const acItem = 'div[data-testid="workbooks-item-' + acMainId + '"]';
+    const acOk = await waitForSelector(evaluate, acItem, 30000);
+    if (!acOk) fail("AC-1000 demo workbook did not appear after demos.load('ac1000')");
+    console.log("✅ Verified demos.load('ac1000') makes AC-1000 workbook available");
 
     // If demo seeding is enabled (fresh install), verify the seeded UAV Trade Study workbook exists.
     // This is optional so existing dev machines with pre-existing workbooks don't fail the smoke.

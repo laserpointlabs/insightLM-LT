@@ -1,2 +1,2 @@
-dataDir: "%APPDATA%/insightLM-LT-dev"
+dataDir: "%APPDATA%/insightLM-LT"
 llmProvider: openai

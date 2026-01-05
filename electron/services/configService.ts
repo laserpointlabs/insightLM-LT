@@ -28,13 +28,13 @@ export type LLMConfigStore = {
   profiles: Record<LLMProvider, LLMProfile>;
 };
 
-function expandEnvVars(str: string): string {
+export function expandEnvVars(str: string): string {
   return str.replace(/\$\{(\w+)\}/g, (match, varName) => {
     return process.env[varName] || match;
   });
 }
 
-function expandPath(pathStr: string): string {
+export function expandPath(pathStr: string): string {
   const expanded = expandEnvVars(pathStr);
   if (expanded.includes("%APPDATA%")) {
     const appData =
@@ -160,7 +160,8 @@ export class ConfigService {
     if (this.appConfig) return this.appConfig;
 
     try {
-      const configPath = path.join(getConfigDir(), "app.yaml");
+      const configFile = String(process.env.INSIGHTLM_APP_CONFIG_FILE || "app.yaml").trim() || "app.yaml";
+      const configPath = path.join(getConfigDir(), configFile);
       const content = fs.readFileSync(configPath, "utf-8");
       const config = yaml.load(content) as AppConfig;
 
