@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { CSVViewer } from "./CSVViewer";
 import { PDFViewer } from "./PDFViewer";
@@ -206,17 +206,29 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     }
   };
 
-  // Automatically select the most recently opened document
+  // Keep track of the lastOpenedDocId we've already applied so that unrelated document list updates
+  // (e.g. content updates after Ctrl+S) don't unexpectedly switch the active tab.
+  const lastAppliedOpenedDocIdRef = useRef<string | null>(null);
+
+  // Automatically select the most recently opened document (ONLY when lastOpenedDocId changes).
   useEffect(() => {
-    if (lastOpenedDocId && documents.some((d) => d.id === lastOpenedDocId)) {
-      // Always select the last opened document, even if it's already active
-      // This ensures clicking an already-open document brings it to front
-      setActiveDocId(lastOpenedDocId);
-    } else if (documents.length > 0 && !activeDocId) {
-      // Fallback: select first document if none selected
-      setActiveDocId(documents[0].id);
-    }
+    if (!lastOpenedDocId) return;
+    if (lastOpenedDocId === lastAppliedOpenedDocIdRef.current) return;
+    if (!documents.some((d) => d.id === lastOpenedDocId)) return;
+
+    lastAppliedOpenedDocIdRef.current = lastOpenedDocId;
+    setActiveDocId(lastOpenedDocId);
   }, [lastOpenedDocId, documents]);
+
+  // Ensure activeDocId always points at a real tab.
+  useEffect(() => {
+    if (activeDocId && documents.some((d) => d.id === activeDocId)) return;
+    if (documents.length === 0) {
+      if (activeDocId) setActiveDocId(null);
+      return;
+    }
+    setActiveDocId(documents[documents.length - 1].id);
+  }, [documents, activeDocId]);
 
   const renderDocument = () => {
     if (!activeDoc) {

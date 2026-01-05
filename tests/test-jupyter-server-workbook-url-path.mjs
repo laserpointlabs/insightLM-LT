@@ -110,13 +110,25 @@ async function main() {
     2003
   );
 
+  // Execute again WITHOUT notebook_path; should FAIL (strict: no fallbacks allowed).
+  let missingPathFailed = false;
+  try {
+    await sendRequest(proc, "tools/call", { name: "execute_cell", arguments: { code: "3 + 3", kernel_name: "python3" } }, 2004);
+  } catch (e) {
+    missingPathFailed = String(e?.message || e).toLowerCase().includes("notebook_path");
+  }
+  if (!missingPathFailed) {
+    proc.kill();
+    throw new Error("Expected execute_cell without notebook_path to fail with a notebook_path error");
+  }
+
   const expectedPath = path.join(tmpDataDir, "workbooks", wid, "documents", "test_notebook.ipynb");
   if (!fs.existsSync(expectedPath)) {
     proc.kill();
     throw new Error(`Expected notebook to exist at: ${expectedPath}`);
   }
 
-  // Verify the notebook now contains a trailing executed cell with output "4".
+  // Verify the notebook contains an executed cell with output "4".
   const nb = JSON.parse(fs.readFileSync(expectedPath, "utf-8"));
   const cells = Array.isArray(nb?.cells) ? nb.cells : [];
   const last = cells[cells.length - 1] || {};

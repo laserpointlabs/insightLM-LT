@@ -412,9 +412,9 @@ InsightLM-LT is the current “lightweight desktop” incarnation of these lesso
 
 We now have local source repos for:
 
-- ReqFLO (`C:\Users\JohnDeHart\Documents\GitHub\reqFLO`)
-- Discus (`C:\Users\JohnDeHart\Documents\GitHub\discus*`)
-- DADM/Datums (`C:\Users\JohnDeHart\Documents\GitHub\dadm`)
+- ReqFLO (`C:\Users\<yourUser>\Documents\GitHub\reqFLO`)
+- Discus (`C:\Users\<yourUser>\Documents\GitHub\discus*`)
+- DADM/Datums (`C:\Users\<yourUser>\Documents\GitHub\dadm`)
 - ODRAS (`\\wsl.localhost\Ubuntu\home\jdehart\working\ODRAS`)
 
 The remaining inputs that would make this lineage even stronger (optional, but high value) are:

@@ -492,7 +492,10 @@ async function run() {
     await waitForSelector(evaluate, 'input[data-testid="input-dialog-input"]', 20000);
     const wbName = `Auto Smoke WB ${Date.now()}`;
     await setInputValue(evaluate, 'input[data-testid="input-dialog-input"]', wbName);
-    await clickSelector(evaluate, 'button[data-testid="input-dialog-ok"]');
+    // Fail-soft: on some builds the dialog may auto-submit quickly; only click OK if still present.
+    const okBtn = 'button[data-testid="input-dialog-ok"]';
+    const okPresent = await evaluate(`!!document.querySelector(${jsString(okBtn)})`);
+    if (okPresent) await clickSelector(evaluate, okBtn);
     // Ensure the dialog actually closed before looking for new rows.
     await waitForGone(evaluate, 'input[data-testid="input-dialog-input"]', 20000);
 
@@ -533,6 +536,180 @@ async function run() {
       fail("Could not discover created workbook id in UI (workbook may not have been created or list did not refresh)");
     }
     console.log(`✅ Created workbook "${wbName}" (${workbookId})`);
+
+    // Create a new notebook via the Jupyter workbook action, open it, run `%pwd`, and assert
+    // cwd resolves to the notebook's directory (no fallbacks).
+    await clickSelector(evaluate, `span[data-testid="workbooks-toggle-${workbookId}"]`);
+    await sleep(250);
+    const notebookDocTid = await (async () => {
+      const actionBtn = `button[data-testid="workbooks-action-jupyter.create-notebook-${workbookId}"]`;
+      const hasAction = await waitForSelector(evaluate, actionBtn, 20000);
+      if (!hasAction) fail(`Missing Jupyter create notebook action button: ${actionBtn}`);
+
+      const before = await evaluate(`
+        (() => Array.from(document.querySelectorAll('[data-testid^="workbooks-doc-${workbookId}-"]'))
+          .map(el => String(el.getAttribute("data-testid") || ""))
+          .filter(Boolean)
+        )()
+      `);
+
+      await clickSelector(evaluate, actionBtn);
+
+      const start = Date.now();
+      while (Date.now() - start < 20000) {
+        const after = await evaluate(`
+          (() => Array.from(document.querySelectorAll('[data-testid^="workbooks-doc-${workbookId}-"]'))
+            .map(el => String(el.getAttribute("data-testid") || ""))
+            .filter(Boolean)
+          )()
+        `);
+        const b = new Set(Array.isArray(before) ? before : []);
+        const a = Array.isArray(after) ? after : [];
+        const diff = a.filter((x) => !b.has(x));
+        const ipynb = diff.find((tid) => tid.toLowerCase().includes(".ipynb"));
+        if (ipynb) return ipynb;
+        await sleep(150);
+      }
+      return null;
+    })();
+
+    if (!notebookDocTid) fail("Notebook did not appear in Workbooks tree after Create New Notebook action");
+    await clickSelector(evaluate, `div[data-testid="${notebookDocTid}"]`);
+    await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="ipynb"]', 20000);
+    await waitForSelector(evaluate, 'div[data-testid="notebook-viewer"]', 20000);
+
+    // Overwrite the first cell with %pwd (the exact user repro).
+    await waitForSelector(evaluate, 'div[data-testid="notebook-cell-0"]', 20000);
+    await setInputValue(evaluate, 'div[data-testid="notebook-cell-0"] textarea', "%pwd");
+    await waitForSelector(evaluate, 'button[data-testid="notebook-cell-run-0"]', 20000);
+    await clickSelector(evaluate, 'button[data-testid="notebook-cell-run-0"]');
+
+    const pwdOk = await (async () => {
+      const start = Date.now();
+      const expectedNeedle = `workbooks\\\\${workbookId}\\\\documents`.toLowerCase();
+      while (Date.now() - start < 30000) {
+        const out = await evaluate(`
+          (() => {
+            const el = document.querySelector('div[data-testid="notebook-cell-output-0"]');
+            return el ? String(el.innerText || el.textContent || "") : "";
+          })()
+        `);
+        const outText = String(out || "");
+        // Fail-fast on obvious execution errors (this should be strict now).
+        if (outText && (outText.includes("ExecutionError") || outText.includes("Traceback") || outText.toLowerCase().includes("missing required param: notebook_path"))) {
+          fail(`Notebook execution failed while validating %pwd:\n${outText.slice(0, 1200)}`);
+        }
+        const norm = outText.toLowerCase().replaceAll("/", "\\");
+        if (norm.includes(expectedNeedle)) return true;
+        await sleep(150);
+      }
+      return false;
+    })();
+    if (!pwdOk) fail("Notebook %pwd output did not include expected notebook directory (workbooks/<id>/documents)");
+    console.log("✅ Notebook %pwd resolves to notebook directory (no cwd fallback)");
+
+    // Capture doc id + filename for tab-stability checks after Ctrl+S.
+    const nb1 = await evaluate(`
+      (() => {
+        const el = document.querySelector('div[data-testid="document-viewer-content"]');
+        return el ? { id: el.getAttribute("data-active-doc-id") || "", filename: el.getAttribute("data-active-filename") || "" } : null;
+      })()
+    `);
+    if (!nb1?.id) fail("Could not read active notebook tab id for save-stability check");
+
+    // Create a SECOND notebook deterministically so lastOpenedDocId differs from the tab we will save.
+    // (The create-notebook action uses second-level timestamps, which can collide in fast automation.)
+    const nb2RelPath = `documents/auto-smoke-tab-stability-${Date.now()}.ipynb`;
+    const nb2Content = JSON.stringify(
+      {
+        cells: [
+          {
+            cell_type: "code",
+            source: "%pwd",
+            metadata: {},
+            outputs: [],
+            execution_count: null,
+          },
+        ],
+        metadata: { kernelspec: { name: "python3", display_name: "Python 3", language: "python" } },
+        nbformat: 4,
+        nbformat_minor: 2,
+      },
+      null,
+      2,
+    );
+    await evaluate(`
+      (async () => {
+        if (!window.electronAPI?.file?.write) return false;
+        await window.electronAPI.file.write(${jsString(workbookId)}, ${jsString(nb2RelPath)}, ${jsString(nb2Content)});
+        return true;
+      })()
+    `);
+    // Refresh the Workbooks view so the new notebook is visible.
+    const refreshBtn = 'button[data-testid="workbooks-refresh"]';
+    const refreshPresent = await evaluate(`!!document.querySelector(${jsString(refreshBtn)})`);
+    if (refreshPresent) await clickSelector(evaluate, refreshBtn);
+
+    const notebookDocTid2 = `div[data-testid="workbooks-doc-${workbookId}-${encodeURIComponent(nb2RelPath)}"]`;
+    const nb2Ok = await waitForSelector(evaluate, notebookDocTid2, 20000);
+    if (!nb2Ok) fail("Second notebook did not appear in Workbooks tree after file.write + refresh");
+
+    // Open second notebook via Workbooks (this sets lastOpenedDocId to notebook2).
+    await clickSelector(evaluate, notebookDocTid2);
+    await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="ipynb"]', 20000);
+    const nb2 = await evaluate(`
+      (() => {
+        const el = document.querySelector('div[data-testid="document-viewer-content"]');
+        return el ? { id: el.getAttribute("data-active-doc-id") || "", filename: el.getAttribute("data-active-filename") || "" } : null;
+      })()
+    `);
+    if (!nb2?.id) fail("Could not read second notebook tab id");
+
+    // Switch back to notebook1 by clicking its TAB (important: should NOT update lastOpenedDocId).
+    await clickSelector(evaluate, `div[data-testid="document-tab-${nb1.id}"]`);
+    const backTabOk = await waitForTextContains(
+      evaluate,
+      'div[data-testid="document-viewer-content"]',
+      String(nb1.filename || ""),
+      20000,
+    );
+    if (!backTabOk) fail("Could not switch back to notebook1 tab for save-stability check");
+
+    // Make an edit so the save bar appears.
+    await setInputValue(evaluate, 'div[data-testid="notebook-cell-0"] textarea', "%pwd\\n");
+    const saveBarOk = await waitForSelector(evaluate, 'div[data-testid="document-savebar"]', 20000);
+    if (!saveBarOk) fail("Expected save bar to appear after notebook edit");
+
+    // Trigger Ctrl+S (the exact repro path).
+    await evaluate(`
+      (() => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }));
+        return true;
+      })()
+    `);
+    await waitForGone(evaluate, 'div[data-testid="document-savebar"]', 20000);
+
+    // Assert the active tab did NOT change to notebook2 after saving notebook1.
+    const afterSave = await evaluate(`
+      (() => {
+        const el = document.querySelector('div[data-testid="document-viewer-content"]');
+        return el ? { id: el.getAttribute("data-active-doc-id") || "", filename: el.getAttribute("data-active-filename") || "" } : null;
+      })()
+    `);
+    if (!afterSave?.id) fail("Could not read active tab after Ctrl+S");
+    if (String(afterSave.id) !== String(nb1.id)) {
+      fail(`Ctrl+S save switched active tab unexpectedly (expected ${nb1.filename}, got ${afterSave.filename})`);
+    }
+    console.log("✅ Ctrl+S save keeps the saved tab active (no tab jump)");
+
+    // Ctrl+S already performed a save; don't require the save bar/button to still be visible.
+    // If it is visible (e.g. slow persistence), click it as a best-effort extra save.
+    const saveBtn = 'button[data-testid="document-save"]';
+    const saveVisible = await evaluate(`!!document.querySelector(${jsString(saveBtn)})`);
+    if (saveVisible) {
+      await clickSelector(evaluate, saveBtn);
+    }
+    console.log("✅ Saved notebook after %pwd execution");
 
     // Create + activate a context that contains this workbook (so Chat is in-scope deterministically).
     await ensureExpanded(evaluate, "sidebar-contexts-header");

@@ -33,6 +33,31 @@ export class MCPService {
   private serverInitialized: Map<string, boolean> = new Map();
   private extensionManagedServers: Set<string> = new Set();
   private nextRequestId: Map<string, number> = new Map();
+  // Remember how each running server was launched so we can restart it without UI/DevTools involvement.
+  private launchInfo: Map<string, { config: MCPServerConfig; serverPath: string }> = new Map();
+
+  private findDiscoveredServer(serverName: string): { config: MCPServerConfig; serverPath: string } | null {
+    try {
+      if (!fs.existsSync(this.serversDir)) return null;
+      const entries = fs.readdirSync(this.serversDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const serverPath = path.join(this.serversDir, entry.name);
+        const configPath = path.join(serverPath, "config.json");
+        if (!fs.existsSync(configPath)) continue;
+        try {
+          const content = fs.readFileSync(configPath, "utf-8");
+          const config = JSON.parse(content) as MCPServerConfig;
+          if (config?.name === serverName) return { config, serverPath };
+        } catch {
+          continue;
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
 
   constructor(serversDir: string) {
     this.serversDir = serversDir;
@@ -160,6 +185,9 @@ export class MCPService {
       stdio: "pipe",
       shell: process.platform === "win32", // Use shell on Windows to find python in PATH
     });
+
+    // Persist launch info for restart-on-demand.
+    this.launchInfo.set(config.name, { config, serverPath });
 
     // Capture stdout and stderr for debugging
     let stdout = "";
@@ -383,6 +411,60 @@ export class MCPService {
         this.serverStopCallback(name);
       }
     }
+  }
+
+  /**
+   * Restart a server using its last known launch configuration.
+   * Useful when an extension-managed server needs a hot restart after a code update.
+   */
+  async restartServer(name: string, timeoutMs: number = 8000): Promise<void> {
+    const info = this.launchInfo.get(name);
+    if (!info) {
+      throw new Error(`Cannot restart MCP server ${name}: missing launch info`);
+    }
+
+    this.stopServer(name);
+    // Give the OS a moment to release stdio handles.
+    await new Promise((r) => setTimeout(r, 200));
+    this.startServer(info.config, info.serverPath);
+
+    // Wait for the server to respond to tools/list (best available readiness signal).
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        await this.sendRequest(name, "tools/list", {}, 2000);
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
+    throw new Error(`MCP server ${name} did not become ready after restart (timeout ${timeoutMs}ms)`);
+  }
+
+  /**
+   * Ensure a server is running. If it isn't, start it (using prior launch info or discovered config),
+   * then wait until it responds to tools/list.
+   */
+  async ensureServerRunning(name: string, timeoutMs: number = 8000): Promise<void> {
+    if (this.isServerRunning(name)) return;
+
+    const info = this.launchInfo.get(name) || this.findDiscoveredServer(name);
+    if (!info) {
+      throw new Error(`No MCP server config found for ${name}`);
+    }
+
+    this.startServer(info.config, info.serverPath);
+
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        await this.sendRequest(name, "tools/list", {}, 2000);
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
+    throw new Error(`MCP server ${name} did not become ready after start (timeout ${timeoutMs}ms)`);
   }
 
   stopAll(): void {

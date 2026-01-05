@@ -1,2 +1,2 @@
-dataDir: C:\Users\JohnDeHart\AppData\Roaming/insightLM-LT-dev
+dataDir: "%APPDATA%/insightLM-LT-dev"
 llmProvider: openai

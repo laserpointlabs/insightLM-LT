@@ -16,7 +16,7 @@ Open the Electron app's developer console (View → Toggle Developer Tools) and 
 
 **When files are added:**
 ```
-[RAG Index] Starting RAG indexing: C:\Users\JohnDeHart\AppData\Roaming\insightLM-LT
+[RAG Index] Starting RAG indexing: %APPDATA%\insightLM-LT
 [RAG Index] Indexing workbook: Your Workbook Name (X documents)
 [RAG Index]   Processing filename.pdf: 3 chunks
 [RAG Index]   Processing document.docx: 2 chunks
@@ -111,6 +111,3 @@ if (Test-Path $dbPath) {
     Write-Host "❌ Database not found - run manual indexing first" -ForegroundColor Red
 }
 ```
-
-
-

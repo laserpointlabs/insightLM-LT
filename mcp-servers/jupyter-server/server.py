@@ -78,9 +78,12 @@ def _resolve_notebook_fs_path(input_path: str) -> Path:
         workbook_id = unquote(u.netloc or "").strip()
         rel_posix = unquote((u.path or "")).lstrip("/")
 
-        # Validate workbook id (UUID) but keep error message friendly.
-        # If this is ever expanded beyond UUIDs, loosen this regex.
-        if not re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", workbook_id):
+        # Validate workbook id. In production we typically use UUIDs, but seeded/demo workbooks may
+        # use stable slugs (e.g. "uav-trade-study"). Keep this strict enough to avoid surprises,
+        # but allow both forms.
+        is_uuid = re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", workbook_id)
+        is_slug = re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z_-]{0,63}", workbook_id)
+        if not (is_uuid or is_slug):
             raise ValueError(f"Invalid workbook id in path: {workbook_id!r}")
         if not rel_posix:
             raise ValueError("Workbook path must include a file path after the workbook id")
@@ -179,7 +182,7 @@ class JupyterKernelManager:
         self.kernels: Dict[str, KernelManager] = {}
         self.kernel_clients: Dict[str, Any] = {}
 
-    def start_kernel(self, kernel_name: str = 'python3') -> str:
+    def start_kernel(self, kernel_name: str = 'python3', cwd: Optional[str] = None) -> str:
         """Start a new kernel and return its ID"""
         if not JUPYTER_AVAILABLE:
             raise RuntimeError("Jupyter dependencies not available")
@@ -188,7 +191,10 @@ class JupyterKernelManager:
 
         # Create kernel manager
         km = KernelManager(kernel_name=kernel_name)
-        km.start_kernel()
+        # Strict: we must not silently start a kernel in the wrong directory.
+        if not (isinstance(cwd, str) and cwd.strip()):
+            raise ValueError("Kernel working directory (cwd) is required")
+        km.start_kernel(cwd=cwd)
 
         # Create client
         kc = km.client()
@@ -201,6 +207,43 @@ class JupyterKernelManager:
         self.kernel_clients[kernel_id] = kc
 
         return kernel_id
+
+    def set_cwd(self, kernel_id: str, cwd: str) -> None:
+        """
+        Strict: update the running kernel's working directory.
+        This must not fail-soft; otherwise we risk executing in the wrong directory.
+        """
+        if kernel_id not in self.kernel_clients:
+            raise ValueError(f"Kernel {kernel_id} not found")
+        if not isinstance(cwd, str) or not cwd.strip():
+            raise ValueError("cwd must be a non-empty string")
+
+        # Escape backslashes for Windows paths inside a raw string literal.
+        safe = cwd.replace("\\", "\\\\")
+        preamble = (
+            "import os\n"
+            f"os.chdir(r\"{safe}\")\n"
+            "print(os.getcwd())\n"
+        )
+
+        kc = self.kernel_clients[kernel_id]
+        msg_id = kc.execute(preamble)
+
+        # Drain iopub until idle; capture stdout to confirm cwd.
+        observed = ""
+        while True:
+            msg = kc.get_iopub_msg(timeout=5)
+            if msg.get("parent_header", {}).get("msg_id") != msg_id:
+                continue
+            msg_type = msg.get("header", {}).get("msg_type")
+            if msg_type == "stream" and msg.get("content", {}).get("name") == "stdout":
+                observed += str(msg.get("content", {}).get("text") or "")
+            if msg_type == "status" and msg.get("content", {}).get("execution_state") == "idle":
+                break
+
+        # Strict verification (case-insensitive on Windows).
+        if cwd.lower() not in observed.lower():
+            raise RuntimeError(f"Failed to set kernel cwd to {cwd!r}; observed={observed!r}")
 
     def execute_cell(self, kernel_id: str, code: str) -> Dict[str, Any]:
         """Execute code in the specified kernel"""
@@ -286,11 +329,6 @@ class JupyterKernelManager:
 # Global kernel manager
 kernel_manager = JupyterKernelManager()
 
-# Best-effort: remember the last created notebook so execute_cell can persist into it even if
-# the caller does not pass notebook_path. This stays inside the jupyter-server (extension-managed),
-# keeping core decoupled.
-LAST_CREATED_NOTEBOOK_PATH: str | None = None
-
 def _outputs_to_nbformat(outputs, execution_count=None):
     """Convert execute_cell output dicts to nbformat output objects (fail-soft)."""
     nb_out = []
@@ -323,14 +361,28 @@ def handle_execute_cell(request: Dict[str, Any]) -> Dict[str, Any]:
         code = params.get('code', '')
         kernel_name = params.get('kernel_name', 'python3')
         notebook_path = params.get('notebook_path')  # optional: persist execution into a notebook file
-        if (not isinstance(notebook_path, str) or not notebook_path.strip()) and isinstance(LAST_CREATED_NOTEBOOK_PATH, str):
-            notebook_path = LAST_CREATED_NOTEBOOK_PATH
+        if not isinstance(notebook_path, str) or not notebook_path.strip():
+            return {
+                'jsonrpc': '2.0',
+                'id': request.get('id'),
+                'error': {
+                    'code': -32602,
+                    'message': 'Missing required param: notebook_path (required to set kernel working directory)',
+                }
+            }
+
+        # Strict: cwd must be the notebook's directory; no fallbacks.
+        full_nb_path = _resolve_notebook_fs_path(notebook_path.strip())
+        desired_cwd: str = str(full_nb_path.parent)
 
         # Start kernel if needed (for now, use a shared kernel)
         kernel_id = getattr(handle_execute_cell, '_kernel_id', None)
         if kernel_id is None:
-            kernel_id = kernel_manager.start_kernel(kernel_name)
+            kernel_id = kernel_manager.start_kernel(kernel_name, cwd=desired_cwd)
             handle_execute_cell._kernel_id = kernel_id
+        else:
+            # Shared kernel: keep it aligned to the notebook's directory before each execution.
+            kernel_manager.set_cwd(kernel_id, desired_cwd)
 
         # Execute the cell
         result = kernel_manager.execute_cell(kernel_id, code)
@@ -434,10 +486,6 @@ def handle_create_notebook(request: Dict[str, Any]) -> Dict[str, Any]:
         # Best-effort: keep workbook metadata in sync so UI lists the created notebook.
         _try_update_workbook_metadata_for_created_file(full_path)
 
-        # Remember the last created notebook for subsequent execute_cell persistence.
-        global LAST_CREATED_NOTEBOOK_PATH
-        LAST_CREATED_NOTEBOOK_PATH = str(full_path)
-
         return {
             'jsonrpc': '2.0',
             'id': request.get('id'),
@@ -531,9 +579,9 @@ def handle_request(request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                             'properties': {
                                 'code': {'type': 'string', 'description': 'Python code to execute'},
                                 'kernel_name': {'type': 'string', 'description': 'Kernel name (default: python3)'},
-                                'notebook_path': {'type': 'string', 'description': 'Optional notebook path to persist the executed cell + outputs into (supports relative paths and workbook:// URLs)'}
+                                'notebook_path': {'type': 'string', 'description': 'Notebook path (required). Used to set kernel working directory and to persist executed cells/outputs. Supports relative paths and workbook:// URLs.'}
                             },
-                            'required': ['code']
+                            'required': ['code', 'notebook_path']
                         }
                     },
                     {

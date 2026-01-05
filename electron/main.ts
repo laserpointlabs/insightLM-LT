@@ -587,27 +587,47 @@ app.whenReady().then(async () => {
       console.log('Executing cell via Jupyter kernel:', { workbookId, notebookPath, cellIndex, codeLength: code.length });
 
       // Find server that provides execute_cell tool
-      const jupyterServer = toolRegistry.getToolServer("execute_cell");
-      if (!jupyterServer) {
-        throw new Error("No Jupyter server available. Please ensure jupyter-server MCP server is enabled.");
-      }
+      const jupyterServer = toolRegistry.getToolServer("execute_cell") || "jupyter-server";
+      // Ensure the server is running (extension-managed servers may not be auto-started).
+      await mcpService.ensureServerRunning(jupyterServer);
 
-      if (!mcpService.isServerRunning(jupyterServer)) {
-        throw new Error(`Jupyter server ${jupyterServer} is not running`);
-      }
+      // Use the MCP server to execute code.
+      // IMPORTANT: notebook execution must be scoped to the notebook's directory so relative file access works.
+      // We pass a workbook:// URL so the jupyter-server can resolve it under <dataDir>/workbooks/<id>/...
+      const nbPath =
+        typeof notebookPath === "string" && notebookPath.trim().toLowerCase().startsWith("workbook://")
+          ? notebookPath.trim()
+          : `workbook://${workbookId}/${String(notebookPath || "").replace(/^[/\\\\]+/, "")}`;
 
-      // Use the MCP server to execute code
-      const result = await mcpService.sendRequest(
-        jupyterServer,
-        "tools/call",
-        {
+      const callExecute = () =>
+        mcpService.sendRequest(jupyterServer, "tools/call", {
           name: "execute_cell",
           arguments: {
             code: code,
-            kernel_name: "python3"
-          }
-        }
-      );
+            kernel_name: "python3",
+            notebook_path: nbPath,
+          },
+        });
+
+      let result;
+      try {
+        result = await callExecute();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // If the jupyter-server is running an older version (or got wedged), automatically restart it and retry once.
+        // This avoids requiring the user to touch DevTools to restart extension-managed servers.
+        const shouldRestart =
+          msg.includes("Invalid workbook id in path") ||
+          msg.toLowerCase().includes("missing required param: notebook_path") ||
+          msg.toLowerCase().includes("mcp server") && msg.toLowerCase().includes("is not running") ||
+          msg.toLowerCase().includes("no jupyter server available");
+
+        if (!shouldRestart) throw err;
+
+        console.warn(`[mcp:jupyter:executeCell] Restarting ${jupyterServer} after error: ${msg}`);
+        await mcpService.restartServer(jupyterServer);
+        result = await callExecute();
+      }
 
       console.log('Jupyter execution result:', result);
       return result;

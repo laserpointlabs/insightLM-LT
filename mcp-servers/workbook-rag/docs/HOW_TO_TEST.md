@@ -13,7 +13,7 @@
 
 Your data directory is typically:
 ```
-C:\Users\JohnDeHart\AppData\Roaming\insightLM-LT
+%APPDATA%\insightLM-LT
 ```
 
 Or check your `config/app.yaml` file for the exact path.
@@ -35,8 +35,8 @@ python index.py "$env:APPDATA\insightLM-LT"
 **Expected Output:**
 ```
 Starting indexing...
-  Data directory: C:\Users\JohnDeHart\AppData\Roaming\insightLM-LT
-  Database path: C:\Users\JohnDeHart\AppData\Roaming\insightLM-LT\rag_db
+  Data directory: %APPDATA%\insightLM-LT
+  Database path: %APPDATA%\insightLM-LT\rag_db
   Embedding model: text-embedding-3-small
   Max chunk size: 8000 tokens
 
@@ -48,7 +48,7 @@ Indexing workbook: My Workbook (5 documents)
 ✅ Indexing complete!
    Files indexed: 5
    Total chunks: 4
-   Database location: C:\Users\JohnDeHart\AppData\Roaming\insightLM-LT\rag_db
+   Database location: %APPDATA%\insightLM-LT\rag_db
 ```
 
 ### 1.3 Verify Database Created
@@ -148,7 +148,7 @@ cd mcp-servers\workbook-rag
 ### 5.1 Start the Electron App
 
 ```powershell
-cd C:\Users\JohnDeHart\working\insightLM-LT
+cd C:\path\to\insightLM-LT
 npm run dev
 ```
 
@@ -161,7 +161,7 @@ npm run dev
 
 **Expected Console Output:**
 ```
-[RAG Index] Starting RAG indexing: C:\Users\JohnDeHart\AppData\Roaming\insightLM-LT
+[RAG Index] Starting RAG indexing: %APPDATA%\insightLM-LT
 [RAG Index] Indexing workbook: My Workbook (1 documents)
 [RAG Index]   Processing newfile.txt: 1 chunks
 [RAG Index] ✅ Indexing complete!
@@ -256,6 +256,3 @@ Once basic tests pass:
 3. Test performance with large codebases
 4. Integrate RAG search into LLM service
 5. Add chat persistence and indexing
-
-
-
