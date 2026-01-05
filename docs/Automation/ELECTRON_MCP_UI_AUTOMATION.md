@@ -110,6 +110,11 @@ There is a selector-only, end-to-end UI smoke test driven by Chrome DevTools Pro
 - **Run**: `npm run test:automation:smoke`
 - **Precondition**: app running with CDP enabled on `127.0.0.1:9222` (already set in `electron/main.ts`)
 
+For a fully automated end-to-end run that builds, launches a production renderer, runs the CDP smoke,
+and cleans up test artifacts (using the isolated smoke workspace):
+
+- **Run**: `npm run smoke:run`
+
 The smoke covers:
 - Toggle scoping **All ↔ Scoped**
 - Create workbook → create markdown → rename → create folder → move doc into folder
@@ -117,6 +122,6 @@ The smoke covers:
 
 ### How smoke testing works (and how to extend it safely)
 
-For a deeper guide on how we build deterministic, automation-centric smoke coverage (including `npm run test:automation:prod` and anti-flake patterns), see:
+For a deeper guide on how we build deterministic, automation-centric smoke coverage (including `npm run smoke:run` / the legacy `npm run test:automation:prod` runner and anti-flake patterns), see:
 
 - `docs/Automation/AUTOMATION_SMOKE_TESTING.md`

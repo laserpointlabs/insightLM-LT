@@ -50,6 +50,12 @@ npm install
 npm run dev
 ```
 
+If you want a guaranteed clean dev workspace before starting (recommended when handing this to someone new):
+
+```powershell
+npm run dev:clean
+```
+
 ### 3) If Electron fails to install correctly
 
 Symptom during `npm run dev`:
@@ -97,6 +103,13 @@ We changed these files to use `%APPDATA%/...`:
 - `config/app.dev.yaml`
 - `config/app.org.yaml`
 - `config/app.smoke.yaml`
+
+Data directory conventions:
+
+- `config/app.yaml` → **main** workspace (`%APPDATA%/insightLM-LT`)
+- `config/app.dev.yaml` → **dev** workspace (`%APPDATA%/insightLM-LT-dev`)
+- `config/app.smoke.yaml` → **automation/smoke** workspace (`%APPDATA%/insightLM-LT-smoke`)
+- `config/app.org.yaml` → **demo source** workspace (`%APPDATA%/insightLM-LT-org`)
 
 Example:
 
@@ -188,6 +201,12 @@ npm run dev
 ```
 
 Confirm Electron opens and the Window loads.
+
+### Smoke test (isolated workspace; does not pollute dev)
+
+```powershell
+npm run smoke:run
+```
 
 ### Jupyter server integration test (CLI)
 

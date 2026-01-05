@@ -62,6 +62,12 @@ This will:
 - Start Vite dev server for React
 - Launch Electron window
 
+If you want a guaranteed clean dev workspace (recommended when testing demos):
+
+```bash
+npm run dev:clean
+```
+
 You should see:
 
 - A window with a sidebar (left) and main area (right)
@@ -210,6 +216,19 @@ npm run dev:react
 npm run dev:electron
 ```
 
+### Smoke (automation) without polluting your dev workspace
+
+These commands always use a dedicated **smoke data directory** (`config/app.smoke.yaml` → `%APPDATA%/insightLM-LT-smoke`)
+so your normal workspaces stay clean:
+
+```bash
+# Runs prod-renderer + deterministic CDP UI smoke, with automatic pre/post cleanup
+npm run smoke:run
+
+# Just wipe the smoke workspace
+npm run smoke:clean
+```
+
 ### Issue: Chat doesn't work
 
 **Check:**
@@ -353,7 +372,8 @@ This runs all three phases in sequence and provides a comprehensive summary.
 We maintain a **UI-level smoke** that drives the Electron renderer via **Chrome DevTools Protocol (CDP)** using stable `data-testid` selectors.
 
 - **Fast dev smoke (requires running app w/ CDP)**: `npm run test:automation:smoke`
-- **Recommended (build + launch prod renderer + run smoke)**: `npm run test:automation:prod`
+- **Recommended (build + launch prod renderer + run smoke, isolated + auto-clean)**: `npm run smoke:run`
+- **Legacy runner (still available)**: `npm run test:automation:prod`
 
 Docs:
 - Stable selectors: `docs/Automation/ELECTRON_MCP_UI_AUTOMATION.md`

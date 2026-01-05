@@ -40,8 +40,11 @@ If you prefer manual setup:
 # Install dependencies
 npm install
 
-# Start development server
+# Start dev (uses config/app.dev.yaml)
 npm run dev
+
+# Start dev from a clean workspace (recommended when debugging)
+npm run dev:clean
 ```
 
 ## Daily Usage
@@ -56,6 +59,12 @@ Or manually:
 
 ```powershell
 npm run dev
+```
+
+If you want a guaranteed clean workspace before starting:
+
+```powershell
+npm run dev:clean
 ```
 
 ## Production Build
@@ -80,6 +89,7 @@ npm run build
 | **Run** | `.\run.ps1` | Quick start for daily use |
 | **Build** | `.\build.ps1` | Create production build |
 | **Dev** | `npm run dev` | Start development server |
+| **Dev (clean)** | `npm run dev:clean` | Reset dev workspace dataDir, then start dev |
 | **Build (manual)** | `npm run build` | Build for production |
 | **Test** | `npm test` | Run tests |
 | **Lint** | `npm run lint` | Check code quality |
@@ -134,6 +144,12 @@ npm install
 2. Reinstall dependencies: `npm install`
 3. Clear cache: `npm cache clean --force`
 4. Try again: `npm run dev`
+
+If you’re seeing lots of test artifacts in your workspace, reset dev data:
+
+```powershell
+npm run dev:clean
+```
 
 ## Next Steps
 

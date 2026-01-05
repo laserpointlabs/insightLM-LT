@@ -35,8 +35,11 @@ cd ../workbook-rag && pip install -r requirements.txt
 cd ../document-parser && pip install -r requirements.txt
 cd ../..
 
-# Run in development mode
+﻿# Run in development mode (uses config/app.dev.yaml)
 npm run dev
+
+# Start dev from a clean workspace (recommended when demoing / handing off)
+npm run dev:clean
 
 # If you get port conflicts, clean up ports manually:
 npm run clean
@@ -52,11 +55,27 @@ npm run clean
    model: "gpt-4"
    ```
 
-2. **App Settings**: Edit `config/app.yaml` if needed
+2. **App Settings**: Configs select which data directory you are using:
    ```yaml
    dataDir: "%APPDATA%/insightLM-LT"
    llmProvider: "openai"
    ```
+
+Workspace configs:
+- `config/app.yaml` → **main** workspace (`%APPDATA%/insightLM-LT`)
+- `config/app.dev.yaml` → **dev** workspace (`%APPDATA%/insightLM-LT-dev`)
+- `config/app.smoke.yaml` → **automation/smoke** workspace (`%APPDATA%/insightLM-LT-smoke`)
+- `config/app.org.yaml` → **demo source** workspace (`%APPDATA%/insightLM-LT-org`)
+
+### Smoke (automation) without polluting your workspace
+
+```bash
+# Runs prod-renderer + deterministic CDP UI smoke, with automatic pre/post cleanup
+npm run smoke:run
+
+# Just wipe the smoke workspace
+npm run smoke:clean
+```
 
 ### Build
 

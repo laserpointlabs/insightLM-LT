@@ -49,6 +49,12 @@ npm run dev:react
 npm run dev:electron -- --remote-debugging-port=9222 --enable-logging
 ```
 
+Note: `npm run dev` uses `config/app.dev.yaml` by default. If you need a clean dev workspace first:
+
+```powershell
+npm run dev:clean
+```
+
 Verify the port:
 ```powershell
 netstat -ano | findstr 9222

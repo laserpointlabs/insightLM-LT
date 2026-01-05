@@ -9,7 +9,7 @@ Why this matters:
 
 ---
 
-### What `npm run test:automation:prod` does
+### What `npm run test:automation:prod` does (low-level)
 
 `npm run test:automation:prod` runs a *local production-renderer smoke* without packaging:
 
@@ -20,7 +20,7 @@ Why this matters:
 
 The runner code is `tests/run-prod-renderer-smoke.mjs`. The UI smoke test is `tests/automation-smoke-ui.mjs`.
 
-**Important precondition**: port `9222` must be free. The runner will fail if another Electron instance is already exposing CDP.
+**Note**: this is the low-level runner. For day-to-day usage, prefer `npm run smoke:run`.
 
 ---
 
@@ -139,8 +139,24 @@ If the new feature *cannot* be asserted deterministically yet, that is usually a
 
 - Feature is usable manually
 - Feature has stable `data-testid` selectors
-- `npm run test:automation:prod` covers the happy path (and key empty-state if relevant)
+- `npm run smoke:run` covers the happy path (and key empty-state if relevant)
 - Assertions are deterministic and do not depend on LLM prose
+
+---
+
+### Recommended commands (do not pollute your workspace)
+
+Smoke runs use a dedicated **smoke data directory** (`config/app.smoke.yaml` → `%APPDATA%/insightLM-LT-smoke`) and clean up:
+
+```bash
+# Run smoke with automatic pre/post cleanup
+npm run smoke:run
+
+# Just clean the smoke workspace (fails loudly if files are locked)
+npm run smoke:clean
+```
+
+For backwards compatibility, `npm run test:automation:prod` still exists, but `smoke:run` is preferred.
 
 ---
 
