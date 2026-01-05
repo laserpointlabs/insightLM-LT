@@ -244,6 +244,3 @@ Expected output includes:
 - `electron/services/mcpService.ts`
 - `electron/main.ts`
 - `tests/test-jupyter-server-workbook-url-path.mjs`
-
-
-
