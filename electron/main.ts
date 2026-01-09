@@ -293,6 +293,7 @@ app.whenReady().then(async () => {
   const minimalSmokeMode =
     String(process.env.INSIGHTLM_SMOKE_MINIMAL || "").toLowerCase() === "1" ||
     String(process.env.INSIGHTLM_SMOKE_MINIMAL || "").toLowerCase() === "true";
+  (global as any).__insightlmMinimalSmoke = minimalSmokeMode;
 
   // Projects: accept --dataDir=... on argv and expose it as INSIGHTLM_DATA_DIR for this process.
   // ConfigService will honor INSIGHTLM_DATA_DIR as an override.
@@ -609,7 +610,10 @@ app.whenReady().then(async () => {
     try {
       return await mcpService.sendRequest(serverName, method, params);
     } catch (error) {
-      console.error("Error in MCP call:", error);
+      // In minimal smoke mode we intentionally don't start MCP; avoid noisy stack traces.
+      if (!(global as any).__insightlmMinimalSmoke) {
+        console.error("Error in MCP call:", error);
+      }
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error"
