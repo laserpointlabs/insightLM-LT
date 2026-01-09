@@ -1,6 +1,6 @@
 # Product Roadmap (InsightLM‑LT)
 
-This file is the single source of truth for roadmap planning.
+This file is the **single source of truth** for roadmap planning.
 
 - **1.0 (MVP)**: rock-solid local desktop “workbook OS” + deterministic UX + automation-safe UI.
 - **1.1**: quality-of-life + scale features (bulk ops, search/sort, safety).
@@ -8,26 +8,63 @@ This file is the single source of truth for roadmap planning.
 
 ---
 
+## Bugs captured (Jan 5, 2026) — untriaged
+
+These are captured as numbered items for easy reference. They also appear (grouped) throughout the roadmap below.
+
+### Chat / Tabs / Views
+- [ ] **1) Chat draft text is lost when switching tabs**: type in chat input → switch to another tab → return → typed text is gone (persist draft per tab/thread, or warn before losing).
+- [ ] **2) Opening Chat in a tabbed layout collapses/forces-close the left column view**: opening Chat into a tab area collapses/slides the left column/canvas (layout must remain stable).
+- [ ] **3) First-open refresh required for `.is` docs or Sheets**: after launch, opening a `.is` document or a sheet sometimes requires a manual refresh.
+- [ ] **4) `@` mention caret/selection offset after inserting a chip**: after selecting an `@` suggestion and inserting the chip, caret resumes in the wrong place.
+- [ ] **5) Duplicate/extra “thinking” indicators in chat**: remove duplicate indicator; keep a single, correct “thinking/streaming” UI. (Related: “Remove initial thinking…” below.)
+- [ ] **6) Streamed chat output should render as Markdown**: streaming responses should progressively render Markdown safely/deterministically.
+- [ ] **7) Chat should support “edit & rerun” + history revert**: Cursor/Continue parity; clear state model.
+- [ ] **8) Add HTML renderer (where applicable)**: safe HTML rendering where appropriate (likely chat output or specific viewers).
+- [ ] **9) Add LaTeX/math rendering in Markdown**: support math rendering in Markdown output.
+
+### Context / Information Architecture (design question)
+- [ ] **10) Do chats always need a Context?** Consider allowing chat to *be* a context, later attach documents/workbooks. (Design discussion; not a bug.)
+
+### Sheets / Workbooks (state + persistence + search)
+Note: Prior to working the current luckysheets (now depreicated) Lets consider Univer and the Univer Platform.
+- [ ] **11) Sheet column widths (and other visual formatting) are not saved**: persist sheet “view state” (column width/row height/fonts/etc). (Related: “Save state of sheet items…” below.)
+- [ ] **12) Unsaved sheet changes are lost when switching tabs**: retain unsaved state and/or prompt to save/discard.
+- [ ] **13) Search results for `.is` sheet files show wrong/missing names**: fix Workbooks search display/name mapping for `.is`.
+- [ ] **14) Sheets should auto-update when data/events change**: refresh sheets/workbooks/dashboards without manual reload; audit global update mechanism.
+
+### App startup UX
+- [ ] **15) Add a loading indicator/progress during app startup**: avoid white screen; show deterministic progress/loader. (Related: “UI / Loading enhancements” below.)
+
+### LLM prompting (system prompt guidance)
+- [ ] **16) Add system prompt instructions for returning Sheets + Notebooks**: document expected formats; keep MCP/tool routing decoupled (fail-soft).
+
+### Sheets (LLM authoring contract + MCP tools)
+- [ ] Define “Insight Sheet” authoring contract so LLM never guesses `.is` format: add Spreadsheet MCP tool surface (create/open/read-range/set-cells/view-state) + schema/examples. See `docs/MCP/SPREADSHEET_MCP_CONTRACT.md`.
+- [ ] Reference parity for Spreadsheet MCP tool surface: use Univer MCP Start Kit “Currently Supported MCP Tools” list as a checklist for coverage. Ref: `https://github.com/dream-num/univer-mcp-start-kit`
+
+---
+
 ## 1.0 (MVP) — “Core workflow works every time”
 
 ### Workbooks (core file/folder management)
 - [x] Collision-resolution UX for moves/imports (Rename / Overwrite / Skip) when target exists
-- [x] Folder context menu: **Move… / Rename / Delete** — polished spacing + icons + stable selectors
-- [x] Document row actions: **Rename/Move/Delete** — polished icons + kept tooltips + stable selectors
-- [x] Drag & drop: doc → folder, doc → workbook root — improved visual drop indicators (clear “Drop here”/target banner)
-- [x] Drag & drop: folder → workbook — improved conflict messaging + clearer drop target feedback
+- [x] Folder context menu: **Move… / Rename / Delete** — spacing + icons + stable selectors
+- [x] Document row actions: **Rename / Move / Delete** — icons + tooltips + stable selectors
+- [x] Drag & drop: doc → folder, doc → workbook root — clear drop indicators
+- [x] Drag & drop: folder → workbook — clearer messaging + drop targets
 - [x] Prevent destructive folder delete when non-empty unless confirmed + include “contents count” in confirm text
 - [x] Tighten folder row layout: action strip never overlaps long folder names (truncate + reserve space)
 - [x] Ensure open tabs update when a file is moved/renamed (tab title/path stays consistent)
 
 ### Deterministic UX (no browser popups)
 - [x] Replace remaining `alert/prompt/confirm` usages (audit + eliminate)
-- [x] Standardize modal patterns: InputDialog / ConfirmDialog / Toast (consistent testids + keyboard handling)
+- [x] Standardize modal patterns: InputDialog / ConfirmDialog / Toast (consistent testIds + keyboard handling)
 
 ### Automation / Testability (MCP-safe)
 - [x] Centralize all `data-testid` strings (expanded `src/testing/testIds.ts` + updated Workbooks/Chat/Dialogs/Toast/ActivityBar)
 - [x] Ensure **selector-only** automation for critical flows (Contexts + Workbooks + Chat)
-- [x] Add “Automation Mode” coverage: verify hover-only strips become visible and stable (smoke forces automation mode on)
+- [x] Add “Automation Mode” coverage: hover-only strips become visible and stable (smoke forces automation mode on)
 - [x] Docs: keep `docs/Automation/ELECTRON_MCP_UI_AUTOMATION.md` current (canonical selectors + flows)
 - [x] Add UI-level automation smoke (CDP): `npm run test:automation:smoke`
 - [x] Add local “prod renderer” smoke (no electron-builder needed): `npm run test:automation:prod`
@@ -38,59 +75,56 @@ This file is the single source of truth for roadmap planning.
 - [x] Make active context indicator clickable (quick jump to Contexts)
 
 ### Chat (core)
-- [ ] Rename chat to iDA (Integrated Digital Assistant) (or DAS Digital Assistant System... lets think)
-- [x] Add small UX hint when no workbooks are scoped (link to Contexts to fix) — deterministic Chat empty-state + jump-to-contexts
-- [x] Add deterministic chat history scaffolding (even if minimal in 1.0) — persisted single-thread per Context
-- [x] config.yaml for llm source (ollama, openai, asksage) [Critical for genernal testing] — `config/app.yaml` + `config/llm.yaml` + in-app Settings tab + model listing
-- [x] @commands for specific context calls to worbooks, folders, and docs [Nice have and carries over to the dash boards] — lightweight `@` refs inserting `workbook://...` + citations. (@ commands are opening off of the bottom of the screen)
-- [x] Chats are first class citizens and remain in context with the scopeing — tools are scoped to active Context workbooks when Scoped mode is enabled
-- [?] (Think about not tabbing) Tabbed and stored chats where chat context is first class (we can discuss need and complexity)
-- [ ] When asking a question that is out of scope the response should be somthing like "I dont know that..." per best practice.
-- [ ] API key management (env.os first, then others)
-  
+- [ ] Rename chat to iDA (Integrated Digital Assistant) (or DAS… decide)
+- [x] Chat empty-state when no workbooks are scoped (link to Contexts) — deterministic + jump-to-contexts
+- [x] Chat history scaffolding (minimal for MVP) — persisted single-thread per Context
+- [x] LLM config files + in-app Settings (ollama/openai/asksage) — `config/app.yaml` + `config/llm.yaml` + model listing
+- [x] `@` refs to workbooks/folders/docs — `workbook://...` refs + citations (typeahead)
+- [x] Chats remain scoped with Context scoping when enabled
+- [?] Tabbed/stored chats (evaluate need/complexity; “maybe not tabbing”)
+- [ ] Out-of-scope response best practice: “I don’t know that…” (policy/UX)
+- [ ] API key management (env OS first, then others)
+
 ### Dashboards (MVP)
-- [x] Ensure tile formatting always returns valid JSON (even for “no data found”)
-- [x] Add “Explain / View Sources” affordance per tile (stable testIds + automation-safe UI)
-- [x] Allow user to edit card question (in-place edit + re-run)
-- [x] General tile clean up per best practice (compact header controls + responsive results sizing)
-- [x] Add Visualization picker per tile (force Counter/Table/Graph/etc) + expand prod smoke to validate multiple tile types
-- [x] Ensure Dashboards are not scoped by context (dashboard queries ignore active Context scoping)
-- [x] Allow direct calls to workbooks/folders/files using @ for dashboard results (Dashboard question box typeahead inserts `workbook://...` refs)
-- [x] Graph tiles: ensure bar charts render reliably (avoid “hidden” charts; show explicit empty-state when no labels/values)
-- [x] Graph tiles (quality): improve CSV-backed chart extraction so common questions produce multi-bar outputs (robust column picking + grouping) + smoke asserts >1 bar
+- [x] Tile formatting always returns valid JSON (even “no data found”)
+- [x] “Explain / View Sources” per tile (stable testIds + automation-safe UI)
+- [x] Edit card question (in-place edit + re-run)
+- [x] Tile UI clean up per best practice (compact header controls + responsive sizing)
+- [x] Visualization picker per tile (Counter/Table/Graph/etc) + prod smoke validates multiple tile types
+- [x] Dashboards not scoped by Context (queries ignore active Context scoping)
+- [x] Dashboard question box supports `@` workbook/folder/file refs (`workbook://...`)
+- [x] Graph tiles: reliable bar charts + explicit empty-state for no data
+- [x] Graph tiles quality: improve CSV-backed extraction (grouping/column picking) + smoke asserts >1 bar
 
 ### CI / Packaging / Updates
 - [ ] CI build artifacts (NSIS installer + portable)
 - [ ] Auto-update pipeline (release + install)
+- [ ] Auto-update (Windows / electron-updater) best practices: implement per `docs/AUTO_UPDATE_IMPLEMENTATION.md` (UX state machine, no silent downloads, NSIS “cannot be closed” mitigation, `latest.yml` naming correctness, smoke proof)
 - [ ] Basic crash log capture + “Report Issue” bundle (logs + config)
 
-### Corrections/Bugs
-- [ ] When saving a tab, after the save the last tab in the list is broght forward, not the saved or current working tab
+### Demo readiness + correctness (MVP polish)
+- [ ] Add “Load demo” to top toolbar (AC-1000 + trade study demo workbooks)
+- [ ] Clean up smoke test artifacts (so demos/dev workspaces stay clean)
+- [ ] Create proper production/dev smoke test `app.config` / config wiring
 
-- [ ] Add load demo to top tool bar to load AC-1000 and related workbooks and the example trade study demo workbooks. 
-- [ ] Add clean up Clean up smoke test artifacts
+### Known bugs / corrections (MVP-level)
+- [ ] Tab focus bug: after saving a tab, the last tab is brought forward (should keep the current/saved tab active)
+- [ ] Add link from dashboard card to supporting information (sources/content)
+- [ ] Fix Chat Settings to work without selecting a context (also see duplicate item under “Other fixes…”)
+- [ ] Fix overflow on right side of the canvas
+- [ ] Tabs/layout (VS Code parity): support editor groups (split vertical/horizontal) + allow Chat to dock as a sidecar/panel so users can view Chat and other tabs simultaneously (avoid constant switching). (Reference Map required)
 
-
-### Others - caltch all
--[ ] Add link from card in dashoard to supporting informatin
--[ ] Create proper production/dev smoke test app.config
--[ ] Fix Chat Settings to work without selecting a context
--[ ] Fix overflow on right side of the canvase
- 
-
-Notes: Need to work on CRUD operataions by llm
-
-
-
+### Notes
+- Notes: Need to work on CRUD operations by LLM
 
 ---
 
 ## 1.1 — “Scale & safety”
 
 ### Dashboards
-- [ ] Spreadsheet range charts: allow questions like “plot A1:C5 as a line chart” (multi-series) from a spreadsheet, infer X axis, and render multiple lines
+- [ ] Spreadsheet range charts: allow questions like “plot A1:C5 as a line chart” (multi-series), infer X axis, render multiple lines
 - [ ] Time tracking tiles where the change in values is stored and plotted over time
-- [ ] Color coded based on cell colors in spread sheet - allows users to set pass/fail/warning values and propegate to dashboard without inteaction. 
+- [ ] Color coded based on cell colors in spreadsheet (pass/fail/warn values propagate to dashboard)
 
 ### Workbooks (power user)
 - [ ] Bulk operations: multi-select + move/delete/rename/archive (docs + folders)
@@ -117,12 +151,19 @@ Notes: Need to work on CRUD operataions by llm
 
 ### Extensions
 - [ ] Jupyter integration polish (kernel selection, error surfacing)
+- [ ] Evaluate adopting/extending against external `jupyter-mcp-server` tool surface (possible replacement or parity target). Ref: `https://pypi.org/project/jupyter-mcp-server/`
 - [ ] Spreadsheet integration polish (import/export, stable sheet ids)
   - [ ] Cleanup: remove now-unused Luckysheet `loadPluginScript()` code path in `src/extensions/spreadsheet/SpreadsheetViewer.tsx` (we intentionally stopped loading `plugin.js` to avoid AMD/jQuery define collisions)
 
 ### QA / Testing
 - [ ] Add UI-level smoke tests for Workbooks move/rename/delete (automation selectors)
 - [ ] Add regression tests for folder move collisions and rename cascades
+
+### Security / Demo proof (Project-scoped access)
+- [ ] Enforce + prove “Project-only” data access for Chat/RAG: deny absolute paths, path traversal (`..`), and symlink escape; add deterministic “deny” test. See `docs/Standards/PROJECT_DATA_ACCESS_BOUNDARY.md`.
+
+### Projects (Workspace parity)
+- [ ] Add first-class Projects (VS Code Workspace parity): File → New/Open/Open Recent + project-scoped persistence (layout/tabs/chat/contexts/workbooks/dashboards). See `docs/Standards/PROJECTS_WORKSPACES.md`.
 
 ---
 
@@ -148,123 +189,126 @@ Notes: Need to work on CRUD operataions by llm
 
 ### Containerization / portability
 - [ ] Multi-build with containers → portable distribution
-  
+
 ---
 
 ## Backlog (nice-to-haves / not scheduled)
+
+### Editor/authoring helpers
 - [ ] Right-click in document: “Ask chat to add text/diagram here...” (inline authoring helpers)
 
-### Chat becomes iDA (Integrated Digital Assisant)
+### Chat becomes iDA (Integrated Digital Assistant)
 - [x] Update Chat Area (rename label from Chat → iDA)
 - [x] Add @(Focused Context)
-- [ ] Add /(Commands), Rules, save this is a hidden workbook that can be shown by the user. Allow users to import a central or general workbook of this thype
-- [ ] Add actions and command /Commands
-- [ ] Add /CreateRule (store the rules)
+- [ ] Add /(Commands), Rules; save as hidden workbook; allow importing a central/general workbook of this type
+- [ ] Add actions and command `/Commands`
+- [ ] Add `/CreateRule` (store the rules)
 - [ ] Add Teams, Agents, Ask, and Plan capabilities
-- [ ] Allow chat view to move to full 'other' side of the workspace
-- [ ] Chunck and store chat for scope in vector store when avaiable
-  - [ ] Add chat content to current context by saving as a file (Need some thoughts here)
-
+- [ ] Allow chat view to move to full “other” side of the workspace
+- [ ] Chunk and store chat for scope in vector store when available
+  - [ ] Add chat content to current context by saving as a file (needs design)
 
 ### Import workbook/dashboard stack
-- [ ] Allow a user to import a prebuild workbook and dashboard stack
-- [ ] Allow general workbook imports (genernal or specific knowldege for instance an approved or specialized Systems Engineeirng KNowledge Base workbook with example SEP/SEMP, Trade Study, etc.) Allow general workblooks to hide/show imports.  
+- [ ] Allow a user to import a prebuilt workbook and dashboard stack
+- [ ] Allow general workbook imports (general or specialized knowledge base workbooks). Allow general workbooks to hide/show imports.
 
 ### iDA (Chat) functionality
-- [ ] Allow a chat thread to be assoicated or linked to workbooks, folders, files, and dashbards, models, data, etc. Any and all objects mentioned and/or created should be linked to capture a knowldedge graph. 
-  - A typical usecase might involve building an ontology model and saving it for use. As the model is created in a particular chat thread the models developement is also captured semantically which is 'real' tracability where rahter than just a link we have a fully develope process documented in the text for the model. 
+- [ ] Allow a chat thread to be associated/linked to workbooks, folders, files, dashboards, models, data, etc. Capture a knowledge graph.
+  - Typical use case: building ontology/model in chat; capture dev process for traceability.
 
-### Ontology integrations (We need to think more about this and properly lay it out)
-- [ ] Provide ontology capability to the tool, initally allow the user to create .owl files
-- [ ] Provide an ontological understanding and development import workbook with templats for SE, etc.
-- [ ] Understand how we properly emply ontologies in the insightLM ecosystem. Consider the conceptualizer use case. Requirements → Ontology (Compentace Questions, Micro Theory) → Concept Graph → Individuals → Knowledge Graph → Study)
+### Ontology integrations
+- [ ] Provide ontology capability (initially allow user to create `.owl` files)
+- [ ] Provide ontology understanding + import workbook templates for SE, etc.
+- [ ] Understand ontology usage in InsightLM ecosystem (conceptualizer use case; Requirements → Ontology → Concept Graph → Individuals → Knowledge Graph → Study)
 
 ### Notebooks
-- [ ]  Add dot nor @ notation to notebooks to capture datasets, documents, etc. as usable data for the study in the notebook. 
-  - Usecase: typing '.workbook_name/decision_martix.is' or '@.workbook_name/decision_martix.is imports the data into the notebook for use. 
+- [ ] Add dot or `@` notation to notebooks to capture datasets/documents for study
+  - Use case: typing `.workbook_name/decision_matrix.is` or `@.workbook_name/decision_matrix.is` imports data into notebook
 
-  ### UI / Loading enhancments
-- [ ] Add loadng rotator and inform user while waiting of what is happening.
-- [ ] Add pdf, word, and excel import/export 
+### UI / Loading enhancements
+- [ ] Add loading rotator and inform user while waiting (general)
+- [ ] Add PDF, Word, and Excel import/export
 
-  ### Git integrations
-  - [ ] Add methods to perform versioning using git
+### Git integrations
+- [ ] Add methods to perform versioning using git
+- [ ] Evaluate GitMCP as a **reference/optional integration** for AI-safe access to GitHub repo docs/code (fetch/search), not as a replacement for local git versioning. Ref: `https://github.com/idosal/git-mcp`
 
-### MCP Servers
-- [ ] Investigate trade study mcp server
-- [ ] Investigate MCDA mcp server
-- [ ] Others? 
+### MCP Servers (ideas)
+- [ ] Investigate trade study MCP server
+- [ ] Investigate MCDA MCP server
+- [ ] Multimodal server with recongnition (robot vision extension)
+- [ ] Others?
 
 ### CDNs
-- [ ] download all necessary cdns at inital build, we dont what to need the internet
+- [ ] Download all necessary CDNs at initial build (offline-friendly)
 
-### Quick Fixes and Bugs
-- [x] @ - context direction
-- [x] save llm.cfg to users appdata
-  - [x] Allow user to edit llm.comfig in a new tab to edit entire yaml and to easily add new providers.
-- [x] Show tool useage reporting and thinking as small or simple reporting in the chat area
-- [x] Allow user to move chat area to tab for chat first working add pop-out icon
+### Quick Fixes and Bugs (historical list; some complete)
+- [x] @ context direction
+- [x] Save llm.cfg to user appdata
+  - [x] Allow user to edit llm.config in a new tab (edit entire YAML; add providers)
+- [x] Show tool usage reporting and thinking as small/simple reporting in chat
+- [x] Allow user to move chat area to tab (pop-out icon)
 - [x] Improve scope indicator in chat area
-  - [x] add a quick switch switch combobo
-- [x] Show full name of files not ellipsis in @
-- [ ] fix startup left trim of the views area (looks like dashbard pushes the view left) [ looks like an artiface of the automatied:prod testing]
-- [x] Show selected object as a chip and highlighted for clearity
+  - [x] Add a quick switch combo box
+- [x] Show full name of files (no ellipsis) in `@`
+- [ ] Fix startup left trim of the views area (looks like dashboard pushes view left) [may be artifact of automated prod testing]
+- [x] Show selected object as a chip and highlight for clarity
   - [x] Trim chip to just the object name
   - [x] Add chip inline in prompt text
-  - [x] Fix blank spaces after inline chip isertion
-- [x] Add toggle on Chat settings button, open/close
-- [x] Update the context view when we set the context and scoping in the chat text area so they match. (verify)
-- [ ] Remove inital thinking and animate the actual thinkng...
+  - [x] Fix blank spaces after inline chip insertion
+- [x] Add toggle on Chat settings button (open/close)
+- [x] Update the context view when we set the context and scoping in chat text area so they match (verify)
+- [ ] Remove initial thinking and animate the actual thinking…
 - [x] Render mermaid in the chat text area
 - [x] Store chat tab state
-- [x] When a user selectes a new context auto change to scoped if in the all state.
-- [x] Ensure tabs remain open after refrech
+- [x] When a user selects a new context, auto change to scoped if in “all” state
+- [x] Ensure tabs remain open after refresh
 - [x] Auto close the chat view when we pop-out to the tabbed view
-- [ ] Workbooks listed natrually to context so a user can just select them without create a spcial context view of just a single workbook. This can also be a general list in the context chip.
+- [ ] Workbooks listed naturally to context so a user can select without special “single workbook context view” (also in context chip)
+- [x] Add automationState.workbooks mapping (name → id/path) to enable deterministic Workbooks UI automation using existing testIds
+- [ ] Improved handling of views open/collapsed state to prevent overlapping edge of screen
+- [ ] Remove the words “Context:” and “Scope:” from chat text area chips
+- [ ] Context chip label is showing above the actual chip; should be just above chip
 
- - [x] Add automationState.workbooks mapping (name → id/path) to enable deterministic Workbooks UI automation using existing testIds.
- - [ ] Improved handling of the views open/collapsed stated to prevent overlaping edge of screen
- - [ ] Remove the workds Context: and Scope: from the chat text area chips.
- - [ ] Context chip is showing context way above the actual chip... it shuold be just above the chip. 
-
-## Other fixes and bugs for later
-- [ ] change move icon to ↓↑ in 
-- [ ] Add loadng rotator and reports to user when  at windows loading phase
-- [ ] Add split for chat tab and other tabs so use can reivew and chat at the same time
-- [ ] Animate the 'Thinking...' indicator in the chat
+### Other fixes and bugs (later)
+- [ ] Change move icon to ↓↑
+- [ ] Add loading rotator and reports to user during Windows loading phase
+- [ ] Add split for chat tab and other tabs so user can review and chat at same time
+- [ ] Animate the “Thinking…” indicator in chat
 - [ ] Fix the double sources
-  - [ ] Improve the visual appeal of the sources in the AI chat response
-- [ ] Add split to tabs area to allow side by side viewer of mutliple tabs
-- [ ] Clean up smoke testing worbooks and Dashboards
-- [ ] Allow AI access to application context (currnet tabs, chat modes, chat data and chat(s), open workbenchs, loaded extensions, etc. )
+  - [ ] Improve the visual appeal of sources in AI chat response
+- [ ] Add split to tabs area to allow side-by-side viewer of multiple tabs
+- [ ] Clean up smoke testing workbooks and dashboards
+- [ ] Allow AI access to application context (current tabs, chat modes, chat data, open workbenches, loaded extensions, etc.)
 - [x] Add workbook search
-- [ ] Add selection from document or sheet to chat wiht mete-data.
-- [ ] Make AI aware of date and time. 
+- [ ] Add selection from document or sheet to chat with metadata
+- [ ] Make AI aware of date and time
 - [ ] Manually adjust size of dashboard card
-- [ ] Manually configure dahboard grid size
-- [ ] Vari the icon for file types.
-- [ ] Allow user to view and modify chat settings when no context is set.
-- [ ] Spreadsheets are opening white sometimes, not sure what the trigger is but I can fix by reloading the the app under view reload. [Working right now - 12/19/2025]
-- [ ] Filter Workbooks view such that as the user types the search Worbkooks/Folders are filtertered out but still show contents so if I have a workbook "Test" Show and I start Te.. show the workbook and any files in the workbook that may be te.. also 
-- [ ] Save state of sheet items (cell hight/width, font, etc.)
-- [ ] IMprove document tab calaibltity (drag order, rename, .etc)
-- [ ] file context modal (save as... → pdf, word, excel)
-- [ ] Double click view to collas views below and expand view fully
-- [ ] Quickworkbooks should highlihgt the selected context workbook in hte contextx view... or add an (actvive) indicaotor.
-- [ ] Add copy/paste (ctrl+c/v/d...) commands to workbooks view. 
-
-- [ ] Maybe the dashboard shold always be scoped by a @ since we are looking to show particuar things, remove it from the all scoping and ask the user to use a '@' but then what if I want a overall count of docs? Do we add an @All scope?
+- [ ] Manually configure dashboard grid size
+- [ ] Vary the icon for file types
+- [ ] Allow user to view and modify chat settings when no context is set (duplicate of MVP “Chat Settings w/o context”)
+- [ ] Spreadsheets sometimes open white; can fix by reloading (needs root cause)
+- [ ] Filter Workbooks view: as user types, filter workbooks/folders but still show matching contents
+- [ ] Save state of sheet items (cell height/width, font, etc.) (related to bug **11**)
+- [ ] Improve document tab capability (drag order, rename, etc.)
+- [ ] File context modal (save as… → PDF/Word/Excel)
+- [ ] Double click view to collapse views below and expand view fully
+- [ ] Quickworkbooks should highlight selected context workbook in Contexts view (or add “active” indicator)
+- [ ] Add copy/paste (Ctrl+C/V/etc.) commands to Workbooks view
+- [ ] Dashboard scoping question: should dashboard always be scoped by an `@`? If so, add `@All` option?
 
 ### Major features
 - [ ] Git integration
 - [ ] Active tab priority and general addition
-- [ ] Traning Paks: Add extension like traning for knowledge that has been curated and tested users can purchase and recieve testing data (like the old days with anasys :)
-- [ ] Add 'Planning and Teaming' mcp
-- [ ] Extension packages (Group extensions in a package for sale)
+- [ ] Training packs: extension-like curated knowledge + test data distribution
+- [ ] Knowledge packs (content sourcing): evaluate GitMCP as an optional way to pull curated docs/code from GitHub repos into a pack/import flow (repo-as-source). Ref: `https://github.com/idosal/git-mcp`
+- [ ] Add “Planning and Teaming” MCP
+- [ ] Extension packages (group extensions in a package for sale)
 
 ### Teams
 - [ ] Add AI type chip for Teams/Agent/Ask/Plan
-- [ ] Add ability to apply a teaming effort to working a solution in the chat
-- [ ] Devlope a methdd to create, test, and optimze a team of agents that can better anwser questions as SMEs (need leanring kits)
+- [ ] Add ability to apply a teaming effort while working in chat
+- [ ] Develop method to create/test/optimize a team of agents as SMEs (learning kits)
 
+### Process / policy
 - [ ] Decoupling checks after every commit? or branch merge?

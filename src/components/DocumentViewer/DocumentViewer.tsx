@@ -101,7 +101,7 @@ export interface OpenDocument {
   type?: "document" | "dashboard" | "config" | "chat"; // Document type
   dashboardId?: string; // For dashboard documents
   configKey?: "llm"; // For config documents
-  chatKey?: "main"; // For chat documents
+  chatKey?: string; // For chat documents
 }
 
 interface DocumentViewerProps {
@@ -245,7 +245,7 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     if (activeDoc.type === "chat") {
       return (
         <div className="h-full">
-          <Chat onJumpToContexts={onJumpToContexts} />
+          <Chat onJumpToContexts={onJumpToContexts} chatKey={activeDoc.chatKey || "main"} />
         </div>
       );
     }

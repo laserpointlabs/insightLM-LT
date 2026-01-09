@@ -7,6 +7,7 @@ import { notifyError, notifySuccess } from "../../utils/notify";
 import { MentionItem, MentionTextInput } from "../MentionTextInput";
 import { useDocumentStore } from "../../store/documentStore";
 import { useLayoutStore } from "../../store/layoutStore";
+import { useChatDraftStore, type ChatDraftRef } from "../../store/chatDraftStore";
 
 type PersistedChatMessage = {
   id: string;
@@ -20,14 +21,17 @@ type PersistedChatMessage = {
 interface ChatProps {
   onActionButton?: (button: React.ReactNode) => void;
   onJumpToContexts?: () => void;
+  /** Used when Chat is rendered as a tab so drafts persist per-chat instance. */
+  chatKey?: string;
 }
 
-export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
+export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: ChatProps = {}) {
   const [activeTab, setActiveTab] = useState<"chat" | "history" | "settings">("chat");
   const [messages, setMessages] = useState<
     PersistedChatMessage[]
   >([]);
   const [input, setInput] = useState("");
+  const [draftRefs, setDraftRefs] = useState<ChatDraftRef[]>([]);
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState<null | { status: "waiting" | "streaming"; text: string }>(null);
   const [activity, setActivity] = useState<
@@ -72,15 +76,11 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   const scopeRefreshLastRef = useRef(0);
 
   // Inline ref tokens:
-  // Keep visible text as "@Name" so caret behaves naturally, and encode a short id in invisible separators
-  // so we can map back to workbook://... on send.
-  const ZW = "\u2063"; // INVISIBLE SEPARATOR
-  const REF_TOKEN_RE = new RegExp(`@([^\\n${ZW}]+)${ZW}([^${ZW}]+)${ZW}`, "g");
   const refCounterRef = useRef(0);
   const refIdByInsertTextRef = useRef<Map<string, string>>(new Map());
-  const [refMap, setRefMap] = useState<
-    Record<string, { key: string; displayLabel: string; fullLabel: string; insertText: string; kind: string }>
-  >({});
+  const { getDraft, setDraft, clearDraft } = useChatDraftStore();
+  const inputValueRef = useRef<string>("");
+  const draftRefsRef = useRef<ChatDraftRef[]>([]);
 
   const getOrCreateRefId = useCallback((insertText: string) => {
     const k = String(insertText || "");
@@ -110,6 +110,14 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   useEffect(() => {
     scrollToBottom("auto");
   }, [messages.length, streaming?.text, streaming?.status, activity.length, activeTab, scrollToBottom]);
+
+  // Keep synchronous refs for "persist on change" so fast tab switches never lose draft.
+  useEffect(() => {
+    inputValueRef.current = input;
+  }, [input]);
+  useEffect(() => {
+    draftRefsRef.current = Array.isArray(draftRefs) ? draftRefs : [];
+  }, [draftRefs]);
   const [contextStatus, setContextStatus] = useState<{
     loading: boolean;
     scopeMode: "all" | "context";
@@ -132,9 +140,15 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
     setActiveTab("chat");
     setMessages([]);
     setInput("");
-    setRefMap({});
+    setDraftRefs([]);
     refIdByInsertTextRef.current = new Map();
     refCounterRef.current = 0;
+    try {
+      const ctxKey = contextStatus.activeContextId || "noctx";
+      clearDraft(`${chatKey}:${ctxKey}`);
+    } catch {
+      // ignore
+    }
   }, [contextStatus.activeContextId]);
 
   const handleShowHistory = useCallback(() => {
@@ -665,14 +679,20 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
-    const raw = input.trim();
-    setInput("");
-    setRefMap({});
-    refIdByInsertTextRef.current = new Map();
-    refCounterRef.current = 0;
-
     const ctxId = contextStatus.activeContextId;
     if (!ctxId) return;
+
+    const raw = input.trim();
+    const refs = Array.isArray(draftRefs) ? draftRefs : [];
+    setInput("");
+    setDraftRefs([]);
+    refIdByInsertTextRef.current = new Map();
+    refCounterRef.current = 0;
+    try {
+      clearDraft(`${chatKey}:${ctxId}`);
+    } catch {
+      // ignore
+    }
 
     setLoading(true);
     setActivity([]);
@@ -680,20 +700,16 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
 
     try {
       // Persist + render user message first (deterministic ordering via backend seq).
-      const seen = new Set<string>();
-      const usedKeys: string[] = [];
-      let m: RegExpExecArray | null;
-      while ((m = REF_TOKEN_RE.exec(raw)) !== null) {
-        const key = String(m[2] || "");
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        usedKeys.push(key);
-      }
-      const usedRefs = usedKeys.map((k) => refMap[k]).filter(Boolean);
-      const userMessage = raw
-        .replace(REF_TOKEN_RE, (_all, visibleName) => `@${String(visibleName || "").trim()}`)
-        .replace(new RegExp(ZW, "g"), "")
-        .trim();
+      const seenInsert = new Set<string>();
+      const usedRefs = refs
+        .filter((r) => r && typeof r.insertText === "string" && r.insertText.trim())
+        .filter((r) => {
+          const k = String(r.insertText);
+          if (seenInsert.has(k)) return false;
+          seenInsert.add(k);
+          return true;
+        });
+      const userMessage = raw.trim();
       const userMessageWithRefs =
         usedRefs.length > 0
           ? `${userMessage}\n\n${usedRefs.map((r) => r.insertText).join("\n")}`
@@ -769,6 +785,66 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
         setLoading(false);
       }
   };
+
+  // Draft persistence: keyed by chatKey + activeContextId (or noctx).
+  const draftKey = `${chatKey}:${contextStatus.activeContextId || "noctx"}`;
+  const lastLoadedDraftKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastLoadedDraftKeyRef.current === draftKey) return;
+    lastLoadedDraftKeyRef.current = draftKey;
+    const d = getDraft(draftKey);
+    if (d) {
+      setInput(String(d.text || ""));
+      setDraftRefs(Array.isArray(d.refs) ? d.refs : []);
+    } else {
+      // Avoid nuking a live in-progress draft just because the key changed
+      // (e.g., context id transitions from noctx -> real id shortly after mount).
+      const hasLiveDraft = (inputValueRef.current || "").length > 0 || (draftRefsRef.current || []).length > 0;
+      if (!hasLiveDraft) {
+        setInput("");
+        setDraftRefs([]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  // If the user typed a draft before the active context id finished loading,
+  // migrate the draft from "noctx" to the real context key (so tab switches keep it).
+  useEffect(() => {
+    const ctxId = contextStatus.activeContextId;
+    if (!ctxId) return;
+    const fromKey = `${chatKey}:noctx`;
+    const toKey = `${chatKey}:${ctxId}`;
+    if (fromKey === toKey) return;
+    try {
+      const from = getDraft(fromKey);
+      const to = getDraft(toKey);
+      const toEmpty = !to || ((!to.text || String(to.text).length === 0) && (!to.refs || (Array.isArray(to.refs) && to.refs.length === 0)));
+      if (from && toEmpty) {
+        setDraft(toKey, from);
+        clearDraft(fromKey);
+      }
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatKey, contextStatus.activeContextId]);
+
+  const persistDraft = useCallback(
+    (nextText?: string, nextRefs?: ChatDraftRef[]) => {
+      if (activeTab !== "chat") return;
+      if (loading) return;
+      try {
+        setDraft(draftKey, {
+          text: nextText ?? inputValueRef.current,
+          refs: nextRefs ?? draftRefsRef.current,
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [activeTab, loading, draftKey, setDraft],
+  );
 
   const renderedMessages = useMemo(() => messages, [messages]);
 
@@ -1250,27 +1326,25 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
             <div className="relative">
               <MentionTextInput
                 value={input}
-                onChange={setInput}
+                onChange={(v) => {
+                  setInput(v);
+                  inputValueRef.current = v;
+                  persistDraft(v, draftRefsRef.current);
+                }}
                 disabled={loading || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"}
                 multiline
                 rows={2}
-                placeholder="Ask about your workbooks… (type @ to reference) — Ctrl/Cmd+Enter to send"
+                maxRows={8}
+                autosize
+                enterBehavior="send"
+                placeholder="Ask about your workbooks… (type @ to reference) — Enter to send, Shift+Enter for newline"
                 containerClassName="w-full"
-                className="w-full resize-none bg-transparent px-2 py-1 pr-10 text-sm leading-5 text-transparent caret-gray-900 placeholder:text-gray-400 focus:outline-none max-h-48 overflow-y-auto"
+                className="w-full resize-none bg-transparent px-2 py-1 pr-10 text-sm leading-5 text-gray-900 placeholder:text-gray-400 focus:outline-none"
                 inputTestId={testIds.chat.input}
                 menuTestId={testIds.chat.mentions.menu}
                 itemTestId={(it) => testIds.chat.mentions.item(it.kind, it.id)}
                 mentionItems={mentionItems}
-                getMentionReplacementText={(it) => {
-                  const displayLabel =
-                    it.kind === "file"
-                      ? String(it.label).split("/").pop() || it.label
-                      : it.kind === "folder"
-                        ? String(it.label).split("/").pop() || it.label
-                        : it.label;
-                  const id = getOrCreateRefId(it.insertText || `${it.kind}:${it.id}`);
-                  return `@${displayLabel}${ZW}${id}${ZW}`;
-                }}
+                getMentionReplacementText={() => ""} // chip-only: remove "@query" token without inserting workbook://...
                 onSelectMention={(it) => {
                   const fullLabel = it.label;
                   const displayLabel =
@@ -1280,100 +1354,82 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                         ? String(it.label).split("/").pop() || it.label
                         : it.label;
                   const id = getOrCreateRefId(it.insertText || `${it.kind}:${it.id}`);
-                  setRefMap((prev) => ({
-                    ...prev,
-                    [id]: { key: id, displayLabel, fullLabel, insertText: it.insertText, kind: it.kind },
-                  }));
-                }}
-                renderOverlay={(val) => {
-                  const parts: React.ReactNode[] = [];
-                  let lastIdx = 0;
-                  const s = String(val || "");
-                  const re = new RegExp(`@([^\\n${ZW}]+)${ZW}([^${ZW}]+)${ZW}`, "g");
-                  let mm: RegExpExecArray | null;
-                  while ((mm = re.exec(s)) !== null) {
-                    const start = mm.index;
-                    const end = start + mm[0].length;
-                    const visible = String(mm[1] || "");
-                    const key = String(mm[2] || "");
-                    if (start > lastIdx) {
-                      parts.push(<span key={`t-${lastIdx}`}>{s.slice(lastIdx, start)}</span>);
+                  setDraftRefs((prev) => {
+                    const next = Array.isArray(prev) ? [...prev] : [];
+                    if (!next.some((r) => r.key === id)) {
+                      next.push({ key: id, displayLabel, fullLabel, insertText: it.insertText, kind: it.kind });
                     }
-                    const r = refMap[key];
-                    if (r) {
-                      const token = mm[0];
-                      parts.push(
-                        <span
-                          key={`c-${key}-${start}`}
-                          className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 align-baseline text-xs text-gray-800 shadow-sm"
-                          data-testid={testIds.chat.refs.chip(key)}
-                          title={`${r.fullLabel}\n${r.insertText}`}
-                        >
-                          <button
-                            type="button"
-                            className="hover:underline"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              const raw2 = r.insertText || "";
-                              if (!raw2.startsWith("workbook://")) return;
-                              const tail = raw2.replace("workbook://", "");
-                              const segs = tail.split("/");
-                              const workbookId = decodeURIComponent(segs[0] || "");
-                              const filePath = segs
-                                .slice(1)
-                                .map((p) => {
-                                  try {
-                                    return decodeURIComponent(p);
-                                  } catch {
-                                    return p;
-                                  }
-                                })
-                                .join("/");
-                              if (!workbookId || !filePath) return;
-                              openDocument({
-                                workbookId,
-                                path: filePath,
-                                filename: filePath.split("/").pop() || filePath,
-                              }).catch(() => {});
-                            }}
-                          >
-                            {r.kind === "workbook" ? "📚" : r.kind === "folder" ? "📁" : "📄"} {r.displayLabel}
-                          </button>
-                          <button
-                            type="button"
-                            className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded hover:bg-gray-200"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              // Remove this token instance from the input (and keep refMap entry in case used elsewhere).
-                              setInput((prev) => prev.replace(token, "").replace(/\s{2,}/g, " "));
-                            }}
-                            aria-label={`Remove ${r.displayLabel}`}
-                            data-testid={testIds.chat.refs.remove(key)}
-                            title="Remove"
-                          >
-                            ×
-                          </button>
-                        </span>,
-                      );
-                    } else {
-                      parts.push(<span key={`u-${key}-${start}`}>@{visible}</span>);
-                    }
-                    lastIdx = end;
-                  }
-                  if (lastIdx < s.length) parts.push(<span key={`t-${lastIdx}`}>{s.slice(lastIdx)}</span>);
-                  return (
-                    <div
-                      className="pointer-events-none whitespace-pre-wrap break-words px-2 py-1 pr-10 text-sm leading-5 text-gray-900"
-                      data-testid={testIds.chat.refs.container}
-                    >
-                      {parts}
-                    </div>
-                  );
+                    draftRefsRef.current = next;
+                    persistDraft(inputValueRef.current, next);
+                    return next;
+                  });
                 }}
-                overlayClassName="pointer-events-none"
                 onEnterWhenMenuOpen={() => {}}
                 onEnter={() => handleSend()}
               />
+
+              {/* Selected refs (Cursor/Continue-style chip row) */}
+              {draftRefs.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1" data-testid={testIds.chat.refs.container}>
+                  {draftRefs.map((r) => (
+                    <span
+                      key={r.key}
+                      className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-800 shadow-sm"
+                      data-testid={testIds.chat.refs.chip(r.key)}
+                      title={`${r.fullLabel}\n${r.insertText}`}
+                    >
+                      <button
+                        type="button"
+                        className="hover:underline"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          const raw2 = r.insertText || "";
+                          if (!raw2.startsWith("workbook://")) return;
+                          const tail = raw2.replace("workbook://", "");
+                          const segs = tail.split("/");
+                          const workbookId = decodeURIComponent(segs[0] || "");
+                          const filePath = segs
+                            .slice(1)
+                            .map((p) => {
+                              try {
+                                return decodeURIComponent(p);
+                              } catch {
+                                return p;
+                              }
+                            })
+                            .join("/");
+                          if (!workbookId || !filePath) return;
+                          openDocument({
+                            workbookId,
+                            path: filePath,
+                            filename: filePath.split("/").pop() || filePath,
+                          }).catch(() => {});
+                        }}
+                      >
+                        {r.kind === "workbook" ? "📚" : r.kind === "folder" ? "📁" : "📄"} {r.displayLabel}
+                      </button>
+                      <button
+                        type="button"
+                        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded hover:bg-gray-200"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() =>
+                          setDraftRefs((prev) => {
+                            const next = prev.filter((x) => x.key !== r.key);
+                            draftRefsRef.current = next;
+                            persistDraft(inputValueRef.current, next);
+                            return next;
+                          })
+                        }
+                        aria-label={`Remove ${r.displayLabel}`}
+                        data-testid={testIds.chat.refs.remove(r.key)}
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <div className="mt-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -1544,7 +1600,7 @@ export function Chat({ onActionButton, onJumpToContexts }: ChatProps = {}) {
                     : "bg-blue-600 text-white hover:bg-blue-700"
                 }`}
             aria-label="Send"
-                title="Send (Ctrl/Cmd+Enter)"
+                title="Send (Enter) — Shift+Enter for newline"
             data-testid={testIds.chat.send}
           >
                 <SendIcon className="h-4 w-4" />

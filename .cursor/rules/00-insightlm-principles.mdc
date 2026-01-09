@@ -12,3 +12,4 @@ alwaysApply: true
 - Keep changes **robust + testable**:
   - Add stable selectors early (don’t “add test ids later”).
   - Avoid fragile coupling to context scope unless explicitly required (dashboards must be stable across context changes).
+- **UI parity contract**: follow `docs/Standards/UI_PARITY_CONTRACT.md` (Reference‑First; VS Code for views/layout/tabs, Continue/Cursor for chat).

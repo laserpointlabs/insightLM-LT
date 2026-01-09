@@ -1,0 +1,31 @@
+---
+description: Reference-First UI parity (VS Code for views/layout; Continue/Cursor for chat). No invented UX.
+alwaysApply: true
+---
+
+- Default rule: **do not invent UI/UX** for core surfaces.
+  - If a request touches **views/layout/workbench/tabs** → follow **VS Code** patterns.
+  - If a request touches **chat UX** (composer/input/history UI/mentions/context chips) → follow **Continue/Cursor** patterns.
+
+- Reference-first workflow (required before code changes):
+  - Produce a short **Reference Map** (≤ 1 page) and get user approval before implementing.
+  - Reference Map must include:
+    - **Upstream reference**: VS Code doc section (Context7) and/or upstream repo file paths.
+    - **Must-match behaviors**: bullet list of concrete behaviors (e.g., autosize rules, selection model, pane move behavior).
+    - **Explicit non-goals**: what we are not copying.
+    - **Repo touch points**: which local files/components will change.
+
+- Tooling rules:
+  - Use **Context7 first** for official documentation (especially VS Code docs).
+  - Web search is allowed only to **locate** upstream sources; do not use blog posts as behavioral truth when source/docs are available.
+  - When possible, cite **upstream file path + commit hash/tag** in the Reference Map for reproducibility.
+
+- Automation (required for user-facing workflow changes):
+  - Add stable selectors via `src/testing/testIds.ts` (no inline `data-testid` strings).
+  - Add/extend deterministic UI smoke steps (`tests/automation-smoke-ui.mjs`) to prove the behavior from a user standpoint.
+
+- If references are unclear:
+  - Stop and ask for clarification; do not guess. "Closest VS Code/Continue analog is X—confirm?" is acceptable.
+
+Reference:
+- `docs/Standards/UI_PARITY_CONTRACT.md`

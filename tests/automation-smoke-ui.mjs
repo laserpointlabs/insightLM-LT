@@ -226,12 +226,107 @@ async function setInputValue(evaluate, selector, value) {
         // Keep caret at end so @-typeahead logic (caret-based) behaves like real typing.
         el.setSelectionRange(el.value.length, el.value.length);
       } catch {}
-      el.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+      // Prefer InputEvent so React's change tracking is reliably triggered in prod Electron.
+      try {
+        el.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: null }));
+      } catch {
+        el.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+      }
       el.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
       return true;
     })()
   `);
   if (!ok) throw new Error(`Could not fill input selector: ${selector}`);
+}
+
+// Type like a real user (char-by-char) so the UI visibly updates and React's controlled value stays in sync.
+async function typeText(evaluate, selector, text, delayMs = 15) {
+  // Ensure focus + start from empty (like selecting all + delete).
+  await setInputValue(evaluate, selector, "");
+  for (const ch of String(text || "")) {
+    const ok = await evaluate(`
+      (() => {
+        const el = document.querySelector(${jsString(selector)});
+        if (!el) return false;
+        if (el.disabled) return false;
+        el.focus();
+        const next = String(el.value || "") + ${jsString(ch)};
+        const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        const desc = Object.getOwnPropertyDescriptor(proto, "value");
+        if (desc && typeof desc.set === "function") desc.set.call(el, next);
+        else el.value = next;
+        try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+        try {
+          el.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: ${jsString(ch)} }));
+        } catch {
+          el.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+        }
+        return true;
+      })()
+    `);
+    if (!ok) throw new Error(`Could not type into selector: ${selector}`);
+    await sleep(delayMs);
+  }
+}
+
+// Append text without clearing first (useful for newline + continued typing assertions).
+async function appendText(evaluate, selector, text, delayMs = 15) {
+  for (const ch of String(text || "")) {
+    const ok = await evaluate(`
+      (() => {
+        const el = document.querySelector(${jsString(selector)});
+        if (!el) return false;
+        if (el.disabled) return false;
+        el.focus();
+        const next = String(el.value || "") + ${jsString(ch)};
+        const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        const desc = Object.getOwnPropertyDescriptor(proto, "value");
+        if (desc && typeof desc.set === "function") desc.set.call(el, next);
+        else el.value = next;
+        try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+        try {
+          el.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: ${jsString(ch)} }));
+        } catch {
+          el.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+        }
+        return true;
+      })()
+    `);
+    if (!ok) throw new Error(`Could not type into selector: ${selector}`);
+    await sleep(delayMs);
+  }
+}
+
+async function getTextareaMetrics(evaluate, selector) {
+  return await evaluate(`
+    (() => {
+      const el = document.querySelector(${jsString(selector)});
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      const cs = window.getComputedStyle(el);
+      const px = (v) => {
+        const n = parseFloat(String(v || "0"));
+        return Number.isFinite(n) ? n : 0;
+      };
+      const lineHeightRaw = cs.lineHeight;
+      const lineHeight = lineHeightRaw && lineHeightRaw !== "normal" ? px(lineHeightRaw) : 20;
+      return {
+        rectH: rect.height,
+        rectW: rect.width,
+        clientH: el.clientHeight,
+        clientW: el.clientWidth,
+        scrollH: el.scrollHeight,
+        scrollW: el.scrollWidth,
+        overflowY: cs.overflowY,
+        overflowX: cs.overflowX,
+        lineHeight,
+        padTop: px(cs.paddingTop),
+        padBottom: px(cs.paddingBottom),
+        borderTop: px(cs.borderTopWidth),
+        borderBottom: px(cs.borderBottomWidth),
+      };
+    })()
+  `);
 }
 
 async function setSelectValue(evaluate, selector, value) {
@@ -953,9 +1048,221 @@ async function run() {
     await ensureExpanded(evaluate, "sidebar-chat-header");
     await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]', 20000);
 
+    // Pop Chat out into a tab, then verify draft persists across tab switches.
+    // (This is the high-frequency UX: users keep typed text while switching tabs.)
+    const popoutBtn = 'button[data-testid="chat-popout"]';
+    const popoutOk = await waitForSelector(evaluate, popoutBtn, 20000);
+    if (!popoutOk) fail("Chat popout button not found");
+    await clickSelector(evaluate, popoutBtn);
+    // Wait for the main DocumentViewer to show the Chat tab content.
+    await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="chat"]', 20000);
+    await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]', 20000);
+    // Chat input is disabled while context status is loading; wait until it becomes interactive.
+    await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]:not([disabled])', 20000);
+
+    // Make chat send deterministic + fast for smoke by stubbing the LLM chat call.
+    // This avoids flaky long waits and ensures the composer re-enables quickly after send.
+    await evaluate(`
+      (() => {
+        try {
+          if (!window.electronAPI?.llm?.chat) return false;
+          if (!window.__SMOKE_ORIG_LLM_CHAT) window.__SMOKE_ORIG_LLM_CHAT = window.electronAPI.llm.chat;
+          window.electronAPI.llm.chat = async () => "smoke-ok";
+          return true;
+        } catch {
+          return false;
+        }
+      })()
+    `);
+
+    // --- Chat composer hardening: autosize + wrapping + keyboard semantics ---
+    // 1) Autosize grows with content up to maxRows, then becomes internally scrollable.
+    {
+      const sel = 'textarea[data-testid="chat-input"]';
+      await clickSelector(evaluate, sel);
+      await typeText(evaluate, sel, "x");
+      const base = await getTextareaMetrics(evaluate, sel);
+      if (!base) fail("Could not read chat textarea metrics (base)");
+
+      const fiveLines = ["one", "two", "three", "four", "five"].join("\n");
+      await typeText(evaluate, sel, fiveLines);
+      const m5 = await getTextareaMetrics(evaluate, sel);
+      if (!m5) fail("Could not read chat textarea metrics (5 lines)");
+      if (!(m5.rectH > base.rectH + Math.max(4, base.lineHeight * 1.5))) {
+        fail(`Chat textarea did not grow for multi-line input (baseH=${base.rectH}, h5=${m5.rectH})`);
+      }
+
+      const manyLines = Array.from({ length: 20 }, (_, i) => `l${i + 1}`).join("\n");
+      await typeText(evaluate, sel, manyLines);
+      const m20 = await getTextareaMetrics(evaluate, sel);
+      if (!m20) fail("Could not read chat textarea metrics (20 lines)");
+
+      const maxRows = 8;
+      const maxH =
+        (m20.lineHeight || 20) * maxRows +
+        (m20.padTop || 0) +
+        (m20.padBottom || 0) +
+        (m20.borderTop || 0) +
+        (m20.borderBottom || 0) +
+        6; // tolerance for subpixel rounding / box model diffs
+
+      if (m20.rectH > maxH) {
+        fail(`Chat textarea exceeded maxRows height cap (h20=${m20.rectH}, maxH≈${maxH})`);
+      }
+      if (!(m20.scrollH > m20.clientH + 2)) {
+        fail(`Chat textarea did not become scrollable after exceeding maxRows (scrollH=${m20.scrollH}, clientH=${m20.clientH})`);
+      }
+      console.log("✅ Chat composer autosize caps at maxRows and scrolls internally");
+    }
+
+    // 2) Wrapping/no horizontal overflow for long tokens.
+    {
+      const sel = 'textarea[data-testid="chat-input"]';
+      // Ensure enabled before typing (if prior steps triggered async loading).
+      await waitForSelector(evaluate, `${sel}:not([disabled])`, 20000);
+      const longToken = "A".repeat(220);
+      await typeText(evaluate, sel, longToken);
+      const m = await getTextareaMetrics(evaluate, sel);
+      if (!m) fail("Could not read chat textarea metrics (wrap)");
+      // Allow a tiny tolerance for subpixel rounding.
+      if (m.scrollW > m.clientW + 2) {
+        fail(`Chat textarea has horizontal overflow for long tokens (scrollW=${m.scrollW}, clientW=${m.clientW})`);
+      }
+      console.log("✅ Chat composer long-token wrapping (no horizontal overflow)");
+    }
+
+    // 3) Shift+Enter inserts newline; Enter is handled by the app (preventDefault=true).
+    {
+      const sel = 'textarea[data-testid="chat-input"]';
+      await waitForSelector(evaluate, `${sel}:not([disabled])`, 20000);
+      await clickSelector(evaluate, sel);
+      await typeText(evaluate, sel, "hello");
+      const shiftEnterPrevented = await evaluate(`
+        (() => {
+          const el = document.querySelector(${jsString(sel)});
+          if (!el) return null;
+          el.focus();
+          const ev = new KeyboardEvent("keydown", { key: "Enter", code: "Enter", shiftKey: true, bubbles: true, cancelable: true });
+          el.dispatchEvent(ev);
+          return ev.defaultPrevented;
+        })()
+      `);
+      if (shiftEnterPrevented == null) fail("Could not dispatch Shift+Enter to chat textarea");
+      if (shiftEnterPrevented) fail("Shift+Enter was prevented; expected newline behavior");
+
+      // Simulate the browser's newline insertion (since synthetic KeyboardEvent does not perform default actions).
+      const inserted = await evaluate(`
+        (() => {
+          const el = document.querySelector(${jsString(sel)});
+          if (!el) return false;
+          const v = String(el.value || "");
+          const next = v + "\\n";
+          const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
+          if (desc && typeof desc.set === "function") desc.set.call(el, next);
+          else el.value = next;
+          try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+          try {
+            el.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertLineBreak", data: "\\n" }));
+          } catch {
+            el.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+          }
+          return true;
+        })()
+      `);
+      if (!inserted) fail("Failed to simulate Shift+Enter newline insertion");
+      await appendText(evaluate, sel, "world");
+      const hasNewline = await evaluate(`
+        (() => {
+          const el = document.querySelector(${jsString(sel)});
+          return el ? String(el.value || "") === "hello\\nworld" : false;
+        })()
+      `);
+      if (!hasNewline) fail("Shift+Enter newline assertion failed (expected \"hello\\nworld\")");
+
+      // Now verify Enter is handled by the app (preventDefault) and results in sending.
+      const enterMsg = `enter send ${Date.now()}`;
+      await typeText(evaluate, sel, enterMsg);
+      const enterPrevented = await evaluate(`
+        (() => {
+          const el = document.querySelector(${jsString(sel)});
+          if (!el) return null;
+          el.focus();
+          const ev = new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true });
+          el.dispatchEvent(ev);
+          return ev.defaultPrevented;
+        })()
+      `);
+      if (enterPrevented == null) fail("Could not dispatch Enter to chat textarea");
+      if (!enterPrevented) fail("Enter was not prevented; expected Enter=send behavior");
+
+      // Wait for a user message bubble to include the sent text.
+      const enterSentOk = await (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 20000) {
+          const ok = await evaluate(`
+            (() => {
+              const nodes = Array.from(document.querySelectorAll('[data-chat-message][data-role="user"]'));
+              return nodes.some(n => (n.innerText || "").includes(${jsString(enterMsg)}));
+            })()
+          `);
+          if (ok) return true;
+          await sleep(150);
+        }
+        return false;
+      })();
+      if (!enterSentOk) fail("Enter-to-send did not result in a sent user message");
+      // Ensure the composer becomes interactive again before subsequent typing steps.
+      await waitForSelector(evaluate, `${sel}:not([disabled])`, 20000);
+      console.log("✅ Chat composer Shift+Enter newline + Enter=send semantics verified");
+    }
+
+    const chatDoc = await evaluate(`
+      (() => {
+        const el = document.querySelector('div[data-testid="document-viewer-content"]');
+        return el ? { id: el.getAttribute("data-active-doc-id") || "" } : null;
+      })()
+    `);
+    if (!chatDoc?.id) fail("Could not read active chat tab id after popout");
+
+    const draft = `draft ${Date.now()}`;
+    await clickSelector(evaluate, 'textarea[data-testid="chat-input"]');
+    await typeText(evaluate, 'textarea[data-testid="chat-input"]', draft);
+
+    // Switch to an existing notebook tab and back.
+    if (nb1?.id) {
+      await clickSelector(evaluate, `div[data-testid="document-tab-${nb1.id}"]`);
+      await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="ipynb"]', 20000);
+      await clickSelector(evaluate, `div[data-testid="document-tab-${chatDoc.id}"]`);
+      await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="chat"]', 20000);
+      await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]:not([disabled])', 20000);
+      const draftOk = await evaluate(`
+        (() => {
+          const el = document.querySelector('textarea[data-testid="chat-input"]');
+          return el ? String(el.value || "") === ${jsString(draft)} : false;
+        })()
+      `);
+      if (!draftOk) {
+        const debug = await evaluate(`
+          (() => {
+            const el = document.querySelector('textarea[data-testid="chat-input"]');
+            const actual = el ? String(el.value || "") : null;
+            let storage = null;
+            try {
+              storage = localStorage.getItem("insightlm.chatDrafts.v1");
+            } catch {}
+            const has = storage ? storage.includes(${jsString(draft)}) : false;
+            return { actual, actualLen: actual ? actual.length : 0, storageLen: storage ? storage.length : 0, storageHasDraft: has };
+          })()
+        `);
+        console.log("❌ Chat draft persist debug:", debug);
+        fail("Chat draft did not persist across tab switch");
+      }
+      console.log("✅ Chat draft persists across tab switches");
+    }
+
     // Sanity: Chat @ mention menu opens and inserts a workbook:// reference.
     await clickSelector(evaluate, 'textarea[data-testid="chat-input"]');
-    await setInputValue(evaluate, 'textarea[data-testid="chat-input"]', '@');
+    await typeText(evaluate, 'textarea[data-testid="chat-input"]', '@');
     const chatMenuOk = await waitForSelector(evaluate, 'div[data-testid="chat-mention-menu"]', 20000);
     if (!chatMenuOk) fail("Chat @ mention menu did not appear");
     const chatItemOk = await waitForSelector(evaluate, 'button[data-testid^="chat-mention-item-"]', 30000);
@@ -974,7 +1281,7 @@ async function run() {
     console.log("✅ Chat @ mention creates ref chip");
 
     const msg = `smoke ping ${Date.now()}`;
-    await setInputValue(evaluate, 'textarea[data-testid="chat-input"]', msg);
+    await typeText(evaluate, 'textarea[data-testid="chat-input"]', msg);
     await clickSelector(evaluate, 'button[data-testid="chat-send"]');
 
     // Verify at least one user message exists.

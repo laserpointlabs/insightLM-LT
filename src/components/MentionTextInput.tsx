@@ -58,6 +58,21 @@ interface MentionTextInputProps {
    * Called when the user presses Enter while the mention menu is closed.
    */
   onEnter?: () => void;
+  /**
+   * Multiline Enter behavior.
+   * - "newline": Enter inserts newline (default), Ctrl/Cmd+Enter submits
+   * - "send": Enter submits, Shift+Enter inserts newline
+   */
+  enterBehavior?: "newline" | "send";
+  /**
+   * Autosize the textarea height to fit content up to maxRows.
+   * (Only applies when multiline=true)
+   */
+  autosize?: boolean;
+  /**
+   * Maximum rows for autosize (beyond this, textarea scrolls).
+   */
+  maxRows?: number;
 }
 
 function getMentionQuery(
@@ -94,6 +109,9 @@ export function MentionTextInput({
   mentionItems = [],
   onEnterWhenMenuOpen,
   onEnter,
+  enterBehavior = "newline",
+  autosize = false,
+  maxRows = 8,
 }: MentionTextInputProps) {
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -227,8 +245,12 @@ export function MentionTextInput({
       setMentionState(null);
       return;
     }
-    const inserted = `${before}${replacement} ${after}`;
-    const nextCaret = (before + replacement + " ").length;
+    const rep = String(replacement);
+    // If replacement is empty, remove the "@query" token entirely and keep the rest unchanged.
+    // Otherwise, insert replacement and add a single trailing space (unless already present).
+    const needsSpace = rep.length > 0 && after.length > 0 ? !after.startsWith(" ") : rep.length > 0;
+    const inserted = rep.length === 0 ? `${before}${after}` : `${before}${rep}${needsSpace ? " " : ""}${after}`;
+    const nextCaret = rep.length === 0 ? before.length : (before + rep + (needsSpace ? " " : "")).length;
     onChange(inserted);
     // Restore caret after React updates.
     setTimeout(() => {
@@ -242,6 +264,42 @@ export function MentionTextInput({
     setMenuOpen(false);
     setMentionState(null);
   };
+
+  const autosizeTextarea = () => {
+    const el = inputRef.current;
+    if (!multiline) return;
+    if (!autosize) return;
+    if (!el) return;
+    // Only textarea supports height adjustment.
+    if (!(el instanceof HTMLTextAreaElement)) return;
+    try {
+      const cs = window.getComputedStyle(el);
+      const lineHeightRaw = cs.lineHeight;
+      const lineHeight =
+        lineHeightRaw && lineHeightRaw !== "normal" ? parseFloat(lineHeightRaw) : 20;
+      const padTop = parseFloat(cs.paddingTop || "0") || 0;
+      const padBottom = parseFloat(cs.paddingBottom || "0") || 0;
+      const borderTop = parseFloat(cs.borderTopWidth || "0") || 0;
+      const borderBottom = parseFloat(cs.borderBottomWidth || "0") || 0;
+      const maxH = Math.max(1, (lineHeight || 20) * Math.max(1, maxRows) + padTop + padBottom + borderTop + borderBottom);
+
+      el.style.height = "auto";
+      const next = Math.min(el.scrollHeight, maxH);
+      el.style.height = `${next}px`;
+      el.style.overflowY = el.scrollHeight > maxH ? "auto" : "hidden";
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (!multiline) return;
+    if (!autosize) return;
+    // Defer until after React applies value so scrollHeight is correct.
+    const t = window.setTimeout(() => autosizeTextarea(), 0);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, multiline, autosize, maxRows]);
 
   return (
     <div ref={containerRef} className={`relative ${containerClassName || ""}`}>
@@ -265,10 +323,19 @@ export function MentionTextInput({
             if (ms) setActiveIndex(0);
           }}
           onKeyDown={(e) => {
+            // IME-safe: don't submit while composing.
+            // keyCode 229 is common for IME composition events.
+            if ((e as any).isComposing || (e as any).keyCode === 229) return;
             if (!menuOpen) {
-              // In multiline mode:
-              // - Enter inserts newline (default browser behavior)
-              // - Ctrl/Cmd+Enter triggers submit
+              if (enterBehavior === "send") {
+                // Chat-style: Enter submits, Shift+Enter inserts newline.
+                if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                  e.preventDefault();
+                  onEnter?.();
+                }
+                return;
+              }
+              // Default: Enter inserts newline; Ctrl/Cmd+Enter submits.
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
                 onEnter?.();
@@ -293,6 +360,7 @@ export function MentionTextInput({
           }}
           onClick={() => setTimeout(refreshMentionState, 0)}
           onKeyUp={() => setTimeout(refreshMentionState, 0)}
+          onInput={() => autosizeTextarea()}
           disabled={disabled}
           placeholder={placeholder}
           className={className}
