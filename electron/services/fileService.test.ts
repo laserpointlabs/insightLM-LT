@@ -92,6 +92,12 @@ describe('FileService - readDocument', () => {
     ).rejects.toThrow('File not found');
   });
 
+  it('should reject path traversal outside workbook', async () => {
+    await expect(
+      fileService.readDocument(workbookId, '../secrets.txt')
+    ).rejects.toThrow('Path not allowed');
+  });
+
   it('should handle files with special characters in content', async () => {
     const testContent = 'Content with special chars: émojis 🎉, unicode 中文, and symbols ©®™';
     const fileName = 'special.md';

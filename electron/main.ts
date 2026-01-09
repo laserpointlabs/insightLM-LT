@@ -9,6 +9,8 @@ import { setupDashboardIPC } from "./ipc/dashboards";
 import { setupChatIPC } from "./ipc/chat";
 import { setupConfigIPC } from "./ipc/config";
 import { setupDemosIPC } from "./ipc/demos";
+import { setupProjectsIPC } from "./ipc/projects";
+import { setupGitIPC } from "./ipc/git";
 import { ConfigService } from "./services/configService";
 import { MCPService, MCPServerConfig } from "./services/mcpService";
 import { LLMService, LLMMessage } from "./services/llmService";
@@ -17,14 +19,17 @@ import { setupUpdater } from "./updater";
 import { seedDemoWorkbooksIfNeeded } from "./services/demoSeedService";
 import * as yaml from "js-yaml";
 import { expandPath } from "./services/configService";
+import { ProjectService, parseDataDirArg, projectPartitionIdFromDataDir } from "./services/projectService";
 
 let mainWindow: BrowserWindow | null = null;
 let mcpService!: MCPService;
 let demoService: DemoService | null = null;
+let projectService: ProjectService | null = null;
 
 function setAppMenu() {
   const ds = demoService;
-  if (!ds) return;
+  const ps = projectService;
+  if (!ds || !ps) return;
 
   const demosSubmenu: any[] = [
     {
@@ -87,7 +92,55 @@ function setAppMenu() {
     });
   }
 
-  template.push({ role: "fileMenu" });
+  // File menu: include explicit Project commands (workspace-like).
+  const recentProjects = ps.listRecents();
+  const openRecentSubmenu: any[] =
+    recentProjects.length === 0
+      ? [{ label: "No Recent Projects", enabled: false }]
+      : recentProjects.map((p) => ({
+          label: p.name,
+          click: async () => {
+            try {
+              ps.relaunchIntoProject(p.dataDir);
+            } catch (e) {
+              dialog.showErrorBox("Failed to open project", e instanceof Error ? e.message : "Unknown error");
+            }
+          },
+        }));
+
+  template.push({
+    label: "File",
+    submenu: [
+      {
+        label: "New Project…",
+        click: async () => {
+          try {
+            const dir = await ps.pickProjectDirectory("new");
+            if (!dir) return;
+            ps.relaunchIntoProject(dir);
+          } catch (e) {
+            dialog.showErrorBox("Failed to create project", e instanceof Error ? e.message : "Unknown error");
+          }
+        },
+      },
+      {
+        label: "Open Project…",
+        click: async () => {
+          try {
+            const dir = await ps.pickProjectDirectory("open");
+            if (!dir) return;
+            ps.relaunchIntoProject(dir);
+          } catch (e) {
+            dialog.showErrorBox("Failed to open project", e instanceof Error ? e.message : "Unknown error");
+          }
+        },
+      },
+      { label: "Open Recent", submenu: openRecentSubmenu },
+      { type: "separator" },
+      { role: "close" },
+      ...(process.platform === "darwin" ? [] : [{ role: "quit" }]),
+    ],
+  });
   template.push({ role: "editMenu" });
   template.push({ role: "viewMenu" });
   template.push({ label: "Demos", submenu: demosSubmenu });
@@ -146,6 +199,16 @@ async function createWindow() {
   console.log("Preload path:", preloadPath);
   console.log("Preload exists:", fs.existsSync(preloadPath));
 
+  // Projects: isolate renderer storage per project via session partition.
+  // This makes localStorage-backed state (tabs/layout/chat drafts) naturally project-scoped.
+  let partition: string | undefined;
+  try {
+    const cfg = new ConfigService().loadAppConfig();
+    partition = projectPartitionIdFromDataDir(cfg.dataDir);
+  } catch {
+    partition = undefined;
+  }
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -153,6 +216,7 @@ async function createWindow() {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
+      ...(partition ? { partition } : {}),
     },
     titleBarStyle: "default",
     show: true, // Show immediately to debug UI issues
@@ -224,6 +288,17 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Projects: accept --dataDir=... on argv and expose it as INSIGHTLM_DATA_DIR for this process.
+  // ConfigService will honor INSIGHTLM_DATA_DIR as an override.
+  try {
+    const argDataDir = parseDataDirArg(process.argv || []);
+    if (argDataDir) {
+      process.env.INSIGHTLM_DATA_DIR = String(argDataDir);
+    }
+  } catch {
+    // ignore
+  }
+
   // Setup updater (check for updates on startup)
   if (app.isPackaged) {
     setupUpdater();
@@ -233,6 +308,15 @@ app.whenReady().then(async () => {
   const configService = new ConfigService();
   const appConfig = configService.loadAppConfig();
   const llmConfig = configService.loadLLMConfig();
+
+  // Initialize Projects service (workspace-like)
+  projectService = new ProjectService(configService);
+  try {
+    projectService.ensureProjectLayout(appConfig.dataDir);
+    projectService.touchRecent(appConfig.dataDir);
+  } catch {
+    // ignore (fail-soft)
+  }
 
   // Seed demo workbooks into the dedicated "org" dataDir on first run.
   // This keeps a canonical demo source that can be copied into dev/smoke/current workspaces via Demos menu,
@@ -412,6 +496,12 @@ app.whenReady().then(async () => {
   setupArchiveIPC(configService);
   setupDashboardIPC(configService);
   setupConfigIPC(configService, llmService);
+  // Projects IPC (workspace-like)
+  if (projectService) {
+    setupProjectsIPC(projectService);
+  }
+  // Git-lite IPC (local-first; scoped to current Project dataDir)
+  setupGitIPC(configService);
   // Chat persistence IPC (single-thread-per-context)
   try {
     const { ChatService } = require("./services/chatService");

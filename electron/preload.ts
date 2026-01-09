@@ -119,6 +119,22 @@ try {
     openFiles: () => ipcRenderer.invoke("dialog:openFiles"),
   },
 
+  // Projects (workspace-like)
+  project: {
+    getCurrent: () => ipcRenderer.invoke("project:getCurrent"),
+    listRecents: () => ipcRenderer.invoke("project:listRecents"),
+    open: (dataDir: string) => ipcRenderer.invoke("project:open", dataDir),
+  },
+
+  // Git-lite (local-first, scoped to current Project)
+  git: {
+    init: () => ipcRenderer.invoke("git:init"),
+    status: () => ipcRenderer.invoke("git:status"),
+    diff: (args?: { path?: string; staged?: boolean }) => ipcRenderer.invoke("git:diff", args),
+    commit: (message: string) => ipcRenderer.invoke("git:commit", message),
+    log: (limit?: number) => ipcRenderer.invoke("git:log", limit),
+  },
+
   llm: {
     chat: (messages: any[], requestId?: string) => ipcRenderer.invoke("llm:chat", messages, requestId),
     listModels: () => ipcRenderer.invoke("llm:listModels"),

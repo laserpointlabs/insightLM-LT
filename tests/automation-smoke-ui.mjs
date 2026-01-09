@@ -1044,6 +1044,35 @@ async function run() {
     if (!(Number(rxHit?.match_count || 0) >= 1)) fail("rag_grep regex found fixture file but match_count < 1");
     console.log("✅ Verified workbook-rag rag_grep tool advertised + executable (literal + regex)");
 
+    // Git-lite deterministic smoke (scoped to current project dataDir; no remote).
+    const gitSmokeOk = await evaluate(`
+      (async () => {
+        if (!window.electronAPI?.git?.init) return { ok: false, error: "electronAPI.git unavailable" };
+        // Ensure repo exists
+        const init = await window.electronAPI.git.init();
+        if (!init?.ok) return { ok: false, error: init?.error || "git init failed" };
+        // Create deterministic file in an existing workbook
+        const rel = "documents/git_smoke.txt";
+        const token = "GIT_SMOKE_TOKEN_" + Date.now();
+        await window.electronAPI.file.write(${jsString(workbookId)}, rel, "token=" + token + "\\n");
+        // Status should include the workbook file path somewhere (exact path varies by repo root).
+        const st = await window.electronAPI.git.status();
+        if (!st?.ok) return { ok: false, error: st?.error || "git status failed" };
+        const hasUntracked = Array.isArray(st.untracked) && st.untracked.length > 0;
+        // Commit with deterministic message
+        const msg = "smoke: git-lite " + token;
+        const c = await window.electronAPI.git.commit(msg);
+        if (!c?.ok) return { ok: false, error: c?.error || "git commit failed" };
+        const lg = await window.electronAPI.git.log(5);
+        if (!lg?.ok) return { ok: false, error: lg?.error || "git log failed" };
+        const hit = Array.isArray(lg.commits) && lg.commits.some((x) => String(x?.subject || "").includes(token));
+        if (!hit) return { ok: false, error: "git log did not include commit subject token" };
+        return { ok: true, hasUntracked };
+      })()
+    `);
+    if (!gitSmokeOk?.ok) fail(`Git-lite smoke failed: ${gitSmokeOk?.error || "unknown error"}`);
+    console.log("✅ Verified Git-lite init/status/commit/log (local, deterministic)");
+
     // Expand Chat and send message.
     await ensureExpanded(evaluate, "sidebar-chat-header");
     await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]', 20000);

@@ -166,6 +166,16 @@ export class ConfigService {
       const config = yaml.load(content) as AppConfig;
 
       config.dataDir = expandPath(config.dataDir);
+      // Projects: allow overriding the active dataDir at runtime without mutating packaged config.
+      // This is set by the main process on relaunch when switching Projects.
+      try {
+        const override = String(process.env.INSIGHTLM_DATA_DIR || "").trim();
+        if (override) {
+          config.dataDir = expandPath(override);
+        }
+      } catch {
+        // ignore
+      }
 
       this.appConfig = config;
       return config;
