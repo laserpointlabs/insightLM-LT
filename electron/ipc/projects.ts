@@ -12,8 +12,16 @@ export function setupProjectsIPC(projectService: ProjectService) {
   });
 
   ipcMain.handle("project:open", async (_evt, dataDir: string) => {
-    projectService.relaunchIntoProject(String(dataDir || ""));
+    // IMPORTANT: reply to the renderer BEFORE relaunching, otherwise the IPC promise can hang
+    // (the app may exit before the response is delivered).
+    const dir = String(dataDir || "");
+    setTimeout(() => {
+      try {
+        projectService.relaunchIntoProject(dir).catch(() => {});
+      } catch {
+        // ignore (fail-soft)
+      }
+    }, 75);
     return { ok: true };
   });
 }
-

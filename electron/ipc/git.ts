@@ -21,4 +21,3 @@ export function setupGitIPC(configService: ConfigService) {
     return await svc().log(limit);
   });
 }
-

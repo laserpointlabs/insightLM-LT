@@ -118,6 +118,11 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
   useEffect(() => {
     draftRefsRef.current = Array.isArray(draftRefs) ? draftRefs : [];
   }, [draftRefs]);
+
+  // Ensure disk-backed drafts are loaded before we attempt to restore this chatKey draft.
+  useEffect(() => {
+    useChatDraftStore.getState().ensureLoaded().catch(() => {});
+  }, []);
   const [contextStatus, setContextStatus] = useState<{
     loading: boolean;
     scopeMode: "all" | "context";

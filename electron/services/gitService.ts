@@ -154,4 +154,3 @@ export class GitService {
     return { ok: true, commits };
   }
 }
-

@@ -1,4 +1,4 @@
-import { app, dialog } from "electron";
+import { app, dialog, BrowserWindow } from "electron";
 import * as fs from "fs";
 import * as path from "path";
 import { createHash } from "crypto";
@@ -25,7 +25,17 @@ function sanitizeName(name: string): string {
 
 function computeProjectId(dataDir: string): string {
   // Short, stable id; avoid long hashes.
-  const h = createHash("sha1").update(String(dataDir || "")).digest("hex").slice(0, 10);
+  // IMPORTANT: normalize path so Windows separator/case differences don't create different partitions.
+  let norm = String(dataDir || "").trim();
+  try {
+    norm = path.resolve(norm);
+  } catch {
+    // ignore
+  }
+  norm = norm.replace(/\\/g, "/").replace(/\/+$/g, "");
+  if (process.platform === "win32") norm = norm.toLowerCase();
+
+  const h = createHash("sha1").update(norm).digest("hex").slice(0, 10);
   return h;
 }
 
@@ -132,7 +142,7 @@ export class ProjectService {
     return p ? String(p) : null;
   }
 
-  relaunchIntoProject(dataDir: string) {
+  async relaunchIntoProject(dataDir: string) {
     const dir = String(dataDir || "").trim();
     if (!dir) return;
     this.ensureProjectLayout(dir);
@@ -140,10 +150,51 @@ export class ProjectService {
 
     // Relaunch with an argv override. On startup we parse --dataDir=... and set INSIGHTLM_DATA_DIR.
     const arg = `--dataDir=${dir}`;
-    const args = (process.argv || []).filter((a) => !String(a).startsWith("--dataDir="));
+    // IMPORTANT (Windows): app.relaunch({ args }) expects args *excluding* the executable path.
+    // If we include argv[0] (electron.exe), the relaunched instance will try to load electron.exe as the app
+    // and crash with ERR_UNKNOWN_FILE_EXTENSION ".exe".
+    const args = (process.argv || [])
+      .slice(1)
+      .filter((a) => !String(a).startsWith("--dataDir="));
     args.push(arg);
+    // Best-effort: flush renderer storage before exiting so drafts/tabs persist deterministically.
+    // Without this, fast relaunch can lose last-moment localStorage writes (LevelDB flush timing).
+    try {
+      const wins = BrowserWindow.getAllWindows();
+      await Promise.allSettled(
+        wins.map(async (w) => {
+          try {
+            await w.webContents?.session?.flushStorageData?.();
+          } catch {
+            // ignore
+          }
+        }),
+      );
+    } catch {
+      // ignore
+    }
+
     app.relaunch({ args });
-    app.exit(0);
+
+    // Graceful quit so Chromium has a chance to persist partition storage.
+    try {
+      for (const w of BrowserWindow.getAllWindows()) {
+        try {
+          w.close();
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setTimeout(() => {
+      try {
+        app.quit();
+      } catch {
+        // ignore
+      }
+    }, 50);
   }
 }
 
@@ -158,4 +209,3 @@ export function parseDataDirArg(argv: string[]): string | null {
 export function projectPartitionIdFromDataDir(dataDir: string): string {
   return `persist:insightlm-project-${computeProjectId(dataDir)}`;
 }
-

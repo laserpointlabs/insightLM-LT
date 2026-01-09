@@ -58,7 +58,7 @@ async function connectCDP() {
     ) ||
     targets.find((t) => typeof t.webSocketDebuggerUrl === "string");
   if (!page?.webSocketDebuggerUrl) {
-    fail(`No CDP target found at ${listUrl}. Is the Electron app running?`);
+    throw new Error(`No CDP target found at ${listUrl}. Is the Electron app running?`);
   }
 
   const ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -352,10 +352,61 @@ async function ensureExpanded(evaluate, headerTestId) {
   if (!expanded) await clickSelector(evaluate, selector);
 }
 
+async function ensureAutomationMode(evaluate) {
+  await evaluate(`
+    (async () => {
+      if (window.__insightlmAutomationUI?.setMode) window.__insightlmAutomationUI.setMode(true);
+      return window.__insightlmAutomationUI?.getMode?.() === true || document.body?.dataset?.automationMode === "true";
+    })()
+  `);
+}
+
+async function connectWithRetry(timeoutMs = 45000, wantProjectNameContains = null) {
+  const start = Date.now();
+  let lastErr = "";
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const cdp = await connectCDP();
+      const bootOk = await waitForSelector(cdp.evaluate, "body", 20000);
+      if (!bootOk) throw new Error("No <body>");
+      const hasElectronAPI = await cdp.evaluate(`typeof window.electronAPI !== "undefined"`);
+      if (!hasElectronAPI) throw new Error("electronAPI missing");
+
+      if (wantProjectNameContains) {
+        const want = String(wantProjectNameContains || "").trim();
+        if (want) {
+          const ok = await waitForSelector(cdp.evaluate, 'span[data-testid="sidebar-project-name"]', 20000);
+          if (!ok) throw new Error("Project name indicator missing");
+          const name = await cdp.evaluate(`
+            (() => {
+              const el = document.querySelector('span[data-testid="sidebar-project-name"]');
+              return el ? (el.innerText || "").trim() : "";
+            })()
+          `);
+          if (!String(name || "").includes(want)) {
+            try { cdp.ws?.close?.(); } catch {}
+            throw new Error(`Connected to wrong Project (wanted "${want}", got "${String(name || "")}")`);
+          }
+        }
+      }
+      return cdp;
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e);
+      await sleep(750);
+    }
+  }
+  throw new Error(`Failed to reconnect CDP after relaunch: ${lastErr}`);
+}
+
 async function run() {
   console.log(`🧪 UI automation smoke (CDP @ ${DEBUG_HOST}:${DEBUG_PORT})`);
 
-  const { ws, evaluate, consoleEvents, exceptionEvents } = await connectCDP();
+  let ws, evaluate, consoleEvents, exceptionEvents;
+  try {
+    ({ ws, evaluate, consoleEvents, exceptionEvents } = await connectCDP());
+  } catch (e) {
+    fail(e instanceof Error ? e.message : "Failed to connect to CDP");
+  }
 
   try {
     // Ensure the app has booted and our automation helper is present.
@@ -377,12 +428,9 @@ async function run() {
     await sleep(300);
 
     // Enable automation mode (force-show hover-only controls).
-    await evaluate(`
-      (async () => {
-        if (window.__insightlmAutomationUI?.setMode) window.__insightlmAutomationUI.setMode(true);
-        return window.__insightlmAutomationUI?.getMode?.() === true || document.body?.dataset?.automationMode === "true";
-      })()
-    `);
+    await ensureAutomationMode(evaluate);
+    // Project header should be visible (project indicator).
+    await waitForSelector(evaluate, 'div[data-testid="sidebar-project"]', 20000);
 
     // Ensure we are on the File workbench (Insight Workbench) so the stacked sidebar views exist.
     const contextsHeaderSelector = 'button[data-testid="sidebar-contexts-header"]';
@@ -463,6 +511,9 @@ async function run() {
     })();
     if (!backOk) fail("Main header scope indicator did not stay in sync with Contexts header toggle");
     console.log("✅ Verified scoping indicator is always visible + toggles stay in sync (main + contexts header)");
+
+    // NOTE: Project-scoped persistence across relaunch is proven deterministically in
+    // `tests/run-prod-renderer-smoke.mjs` because in-app relaunch can disrupt CDP connectivity.
 
     // Force deterministic mode for the rest of the smoke: Scoped (context).
     await ensureContextScopingMode(evaluate, "context");

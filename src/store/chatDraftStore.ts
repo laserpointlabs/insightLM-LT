@@ -16,35 +16,56 @@ export type ChatDraft = {
 
 type ChatDraftStore = {
   drafts: Record<string, ChatDraft>;
+  hydrate: (drafts: Record<string, ChatDraft>) => void;
+  ensureLoaded: () => Promise<void>;
   getDraft: (draftKey: string) => ChatDraft | null;
   setDraft: (draftKey: string, draft: Omit<ChatDraft, "updatedAt">) => void;
   clearDraft: (draftKey: string) => void;
 };
 
-const STORAGE_KEY = "insightlm.chatDrafts.v1";
+let saveTimer: any = null;
+let loadedOnce = false;
+let loadInFlight: Promise<void> | null = null;
 
-function loadDrafts(): Record<string, ChatDraft> {
+function scheduleSaveToDisk(drafts: Record<string, ChatDraft>) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return {};
-    return parsed as Record<string, ChatDraft>;
-  } catch {
-    return {};
-  }
-}
-
-function saveDrafts(drafts: Record<string, ChatDraft>) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts));
+    if (!window.electronAPI?.chatDrafts?.setAll) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    // Debounce to avoid IPC spam while typing.
+    saveTimer = setTimeout(() => {
+      try {
+        window.electronAPI.chatDrafts.setAll(drafts).catch(() => {});
+      } catch {
+        // ignore
+      }
+    }, 250);
   } catch {
     // ignore
   }
 }
 
 export const useChatDraftStore = create<ChatDraftStore>((set, get) => ({
-  drafts: loadDrafts(),
+  drafts: {},
+  hydrate: (drafts) => {
+    set({ drafts: drafts || {} });
+  },
+  ensureLoaded: async () => {
+    if (loadedOnce) return;
+    if (loadInFlight) return await loadInFlight;
+    loadInFlight = (async () => {
+      try {
+        const res = await window.electronAPI?.chatDrafts?.getAll?.();
+        const drafts = res?.ok ? res?.drafts : {};
+        set({ drafts: drafts && typeof drafts === "object" ? drafts : {} });
+      } catch {
+        // ignore
+      } finally {
+        loadedOnce = true;
+        loadInFlight = null;
+      }
+    })();
+    return await loadInFlight;
+  },
   getDraft: (draftKey) => {
     const k = String(draftKey || "");
     if (!k) return null;
@@ -64,7 +85,7 @@ export const useChatDraftStore = create<ChatDraftStore>((set, get) => ({
           updatedAt: Date.now(),
         },
       };
-      saveDrafts(next);
+      scheduleSaveToDisk(next);
       return { drafts: next };
     });
   },
@@ -74,7 +95,7 @@ export const useChatDraftStore = create<ChatDraftStore>((set, get) => ({
     set((state) => {
       const next = { ...(state.drafts || {}) };
       delete next[k];
-      saveDrafts(next);
+      scheduleSaveToDisk(next);
       return { drafts: next };
     });
   },

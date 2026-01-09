@@ -25,6 +25,10 @@ try {
 try {
   contextBridge.exposeInMainWorld("electronAPI", {
   getVersion: () => ipcRenderer.invoke("app:getVersion"),
+  app: {
+    quit: () => ipcRenderer.invoke("app:quit"),
+    quitForAutomation: () => ipcRenderer.invoke("app:quitForAutomation"),
+  },
 
   // Workbook operations
   workbook: {
@@ -124,6 +128,12 @@ try {
     getCurrent: () => ipcRenderer.invoke("project:getCurrent"),
     listRecents: () => ipcRenderer.invoke("project:listRecents"),
     open: (dataDir: string) => ipcRenderer.invoke("project:open", dataDir),
+  },
+
+  // Project-scoped persisted chat drafts (disk-backed, not localStorage-backed).
+  chatDrafts: {
+    getAll: () => ipcRenderer.invoke("chatDrafts:getAll"),
+    setAll: (drafts: any) => ipcRenderer.invoke("chatDrafts:setAll", drafts),
   },
 
   // Git-lite (local-first, scoped to current Project)
