@@ -27,6 +27,8 @@ function App() {
   const [chatActionButton, setChatActionButton] = useState<React.ReactNode>(null);
   const [activeContextName, setActiveContextName] = useState<string | null>(null);
   const [contextScopeMode, setContextScopeMode] = useState<"all" | "context">("context");
+  const [projectLabel, setProjectLabel] = useState<string>("Project");
+  const [projectDataDir, setProjectDataDir] = useState<string>("");
   const { openDocuments, closeDocument, openDocument } = useDocumentStore();
   const {
     sidebarWidth,
@@ -122,6 +124,33 @@ function App() {
     return () => {
       cancelled = true;
       window.removeEventListener("context:changed", onChanged as any);
+    };
+  }, []);
+
+  // Project indicator (workspace-like): show the current Project name derived from dataDir.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await window.electronAPI?.project?.getCurrent?.();
+        const dataDir = String(res?.dataDir || "").trim();
+        const base = dataDir
+          ? dataDir.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "Project"
+          : "Project";
+        if (!cancelled) {
+          setProjectDataDir(dataDir);
+          setProjectLabel(base);
+        }
+      } catch {
+        if (!cancelled) {
+          setProjectDataDir("");
+          setProjectLabel("Project");
+        }
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -466,6 +495,16 @@ function App() {
         <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
           <div className="min-w-0">
             <h1 className="text-sm font-semibold text-gray-700">insightLM-LT</h1>
+            <div
+              className="mt-0.5 w-full truncate text-left text-[10px] text-gray-500"
+              title={projectDataDir ? `Project dataDir:\n${projectDataDir}` : "Project"}
+              data-testid={testIds.sidebar.project.container}
+            >
+              <span className="text-gray-500">Project: </span>
+              <span className="font-medium text-gray-700" data-testid={testIds.sidebar.project.name}>
+                {projectLabel}
+              </span>
+            </div>
             <button
               type="button"
               className="mt-0.5 w-full truncate text-left text-[10px] text-gray-500 hover:text-gray-700"

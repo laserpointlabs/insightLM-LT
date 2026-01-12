@@ -13,6 +13,10 @@ export const testIds = {
       workbooks: "sidebar-workbooks-header",
       chat: "sidebar-chat-header",
     },
+    project: {
+      container: "sidebar-project",
+      name: "sidebar-project-name",
+    },
     activeContextJump: "sidebar-active-context-jump",
     scopeIndicator: "sidebar-scope-indicator",
     scopeText: "sidebar-scope-text",

@@ -15,6 +15,57 @@ export class FileService {
     return p.replace(/\\/g, "/");
   }
 
+  /**
+   * Resolve a workbook-scoped relative path safely.
+   * Enforces the Project data boundary by preventing:
+   * - absolute paths
+   * - path traversal (`..`)
+   * - symlink escape (best-effort via realpath of the workbook root)
+   */
+  private resolveWithinWorkbook(workbookId: string, relativePath: string): { workbookPath: string; filePath: string; relPosix: string } {
+    const wbRoot = path.join(this.workbookService["workbooksDir"], workbookId);
+    const relPosix = this.toPosixPath(String(relativePath || "")).replace(/^\/+/, "").replace(/^\.\//, "");
+
+    if (!relPosix) {
+      throw new Error("Path not allowed: empty path");
+    }
+    // Reject absolute paths (including Windows drive paths).
+    if (path.isAbsolute(relativePath) || /^[a-zA-Z]:[\\/]/.test(String(relativePath || ""))) {
+      throw new Error("Path not allowed: absolute path");
+    }
+    // Reject traversal segments.
+    const segs = relPosix.split("/").filter(Boolean);
+    if (segs.some((s) => s === "..")) {
+      throw new Error("Path not allowed: traversal");
+    }
+
+    // Resolve to absolute.
+    const candidate = path.resolve(wbRoot, ...segs);
+
+    // Best-effort symlink escape prevention: compare against real workbook root.
+    let wbReal = wbRoot;
+    try {
+      wbReal = fs.realpathSync(wbRoot);
+    } catch {
+      wbReal = path.resolve(wbRoot);
+    }
+    const prefix = wbReal.endsWith(path.sep) ? wbReal : wbReal + path.sep;
+
+    // If target exists, realpath it before checking prefix to avoid symlink escapes.
+    let candToCheck = candidate;
+    try {
+      if (fs.existsSync(candidate)) candToCheck = fs.realpathSync(candidate);
+    } catch {
+      candToCheck = candidate;
+    }
+
+    if (!(candToCheck === wbReal || candToCheck.startsWith(prefix))) {
+      throw new Error("Path not allowed: outside workbook");
+    }
+
+    return { workbookPath: wbRoot, filePath: candidate, relPosix };
+  }
+
   private getFileStats(filePath: string): { modifiedAt?: string; size?: number } {
     try {
       if (!fs.existsSync(filePath)) return {};
@@ -86,11 +137,7 @@ export class FileService {
   }
 
   async readDocument(workbookId: string, relativePath: string): Promise<string> {
-    const workbookPath = path.join(
-      this.workbookService["workbooksDir"],
-      workbookId,
-    );
-    const filePath = path.join(workbookPath, relativePath);
+    const { workbookPath, filePath } = this.resolveWithinWorkbook(workbookId, relativePath);
 
     // Debug logging for troubleshooting
     console.log(`[FileService] readDocument called:`);
@@ -125,11 +172,7 @@ export class FileService {
   }
 
   getFilePath(workbookId: string, relativePath: string): string {
-    const workbookPath = path.join(
-      this.workbookService["workbooksDir"],
-      workbookId,
-    );
-    const filePath = path.join(workbookPath, relativePath);
+    const { filePath } = this.resolveWithinWorkbook(workbookId, relativePath);
 
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found: ${relativePath}`);
@@ -139,11 +182,7 @@ export class FileService {
   }
 
   readBinary(workbookId: string, relativePath: string): Buffer {
-    const workbookPath = path.join(
-      this.workbookService["workbooksDir"],
-      workbookId,
-    );
-    const filePath = path.join(workbookPath, relativePath);
+    const { filePath } = this.resolveWithinWorkbook(workbookId, relativePath);
 
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found: ${relativePath}`);
@@ -157,11 +196,7 @@ export class FileService {
     relativePath: string,
     content: string,
   ): Promise<void> {
-    const workbookPath = path.join(
-      this.workbookService["workbooksDir"],
-      workbookId,
-    );
-    const filePath = path.join(workbookPath, relativePath);
+    const { filePath } = this.resolveWithinWorkbook(workbookId, relativePath);
 
     // Ensure the directory exists
     const dirPath = path.dirname(filePath);
@@ -216,11 +251,7 @@ export class FileService {
     oldRelativePath: string,
     newName: string,
   ): Promise<void> {
-    const workbookPath = path.join(
-      this.workbookService["workbooksDir"],
-      workbookId,
-    );
-    const oldPath = path.join(workbookPath, oldRelativePath);
+    const { filePath: oldPath } = this.resolveWithinWorkbook(workbookId, oldRelativePath);
     const parentDir = path.dirname(oldPath);
     const newPath = path.join(parentDir, newName);
 
@@ -256,11 +287,7 @@ export class FileService {
   }
 
   deleteDocument(workbookId: string, relativePath: string): Promise<void> {
-    const workbookPath = path.join(
-      this.workbookService["workbooksDir"],
-      workbookId,
-    );
-    const filePath = path.join(workbookPath, relativePath);
+    const { filePath } = this.resolveWithinWorkbook(workbookId, relativePath);
 
     if (fs.existsSync(filePath)) {
       const stats = fs.statSync(filePath);
@@ -298,11 +325,7 @@ export class FileService {
     options?: { overwrite?: boolean; destFilename?: string },
   ): void {
     const canonicalRel = this.toPosixPath(relativePath).replace(/^\.\//, "");
-    const sourcePath = path.join(
-      this.workbookService["workbooksDir"],
-      sourceWorkbookId,
-      canonicalRel,
-    );
+    const sourcePath = this.resolveWithinWorkbook(sourceWorkbookId, canonicalRel).filePath;
     if (!fs.existsSync(sourcePath)) {
       throw new Error(`File not found: ${canonicalRel}`);
     }
@@ -320,11 +343,7 @@ export class FileService {
     );
     this.ensureDirectoryExists(targetDocsDir);
 
-    const targetPath = path.join(
-      this.workbookService["workbooksDir"],
-      targetWorkbookId,
-      ...destRel.split("/"),
-    );
+    const targetPath = this.resolveWithinWorkbook(targetWorkbookId, destRel).filePath;
     if (fs.existsSync(targetPath)) {
       if (options?.overwrite) {
         const st = fs.statSync(targetPath);

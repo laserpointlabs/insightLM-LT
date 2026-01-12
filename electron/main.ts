@@ -9,6 +9,9 @@ import { setupDashboardIPC } from "./ipc/dashboards";
 import { setupChatIPC } from "./ipc/chat";
 import { setupConfigIPC } from "./ipc/config";
 import { setupDemosIPC } from "./ipc/demos";
+import { setupProjectsIPC } from "./ipc/projects";
+import { setupGitIPC } from "./ipc/git";
+import { setupChatDraftsIPC } from "./ipc/chatDrafts";
 import { ConfigService } from "./services/configService";
 import { MCPService, MCPServerConfig } from "./services/mcpService";
 import { LLMService, LLMMessage } from "./services/llmService";
@@ -17,14 +20,18 @@ import { setupUpdater } from "./updater";
 import { seedDemoWorkbooksIfNeeded } from "./services/demoSeedService";
 import * as yaml from "js-yaml";
 import { expandPath } from "./services/configService";
+import { ProjectService, parseDataDirArg, projectPartitionIdFromDataDir } from "./services/projectService";
 
 let mainWindow: BrowserWindow | null = null;
 let mcpService!: MCPService;
 let demoService: DemoService | null = null;
+let projectService: ProjectService | null = null;
+let automationQuitRequested = false;
 
 function setAppMenu() {
   const ds = demoService;
-  if (!ds) return;
+  const ps = projectService;
+  if (!ds || !ps) return;
 
   const demosSubmenu: any[] = [
     {
@@ -87,7 +94,55 @@ function setAppMenu() {
     });
   }
 
-  template.push({ role: "fileMenu" });
+  // File menu: include explicit Project commands (workspace-like).
+  const recentProjects = ps.listRecents();
+  const openRecentSubmenu: any[] =
+    recentProjects.length === 0
+      ? [{ label: "No Recent Projects", enabled: false }]
+      : recentProjects.map((p) => ({
+          label: p.name,
+          click: async () => {
+            try {
+              ps.relaunchIntoProject(p.dataDir).catch(() => {});
+            } catch (e) {
+              dialog.showErrorBox("Failed to open project", e instanceof Error ? e.message : "Unknown error");
+            }
+          },
+        }));
+
+  template.push({
+    label: "File",
+    submenu: [
+      {
+        label: "New Project…",
+        click: async () => {
+          try {
+            const dir = await ps.pickProjectDirectory("new");
+            if (!dir) return;
+            ps.relaunchIntoProject(dir).catch(() => {});
+          } catch (e) {
+            dialog.showErrorBox("Failed to create project", e instanceof Error ? e.message : "Unknown error");
+          }
+        },
+      },
+      {
+        label: "Open Project…",
+        click: async () => {
+          try {
+            const dir = await ps.pickProjectDirectory("open");
+            if (!dir) return;
+            ps.relaunchIntoProject(dir).catch(() => {});
+          } catch (e) {
+            dialog.showErrorBox("Failed to open project", e instanceof Error ? e.message : "Unknown error");
+          }
+        },
+      },
+      { label: "Open Recent", submenu: openRecentSubmenu },
+      { type: "separator" },
+      { role: "close" },
+      ...(process.platform === "darwin" ? [] : [{ role: "quit" }]),
+    ],
+  });
   template.push({ role: "editMenu" });
   template.push({ role: "viewMenu" });
   template.push({ label: "Demos", submenu: demosSubmenu });
@@ -146,6 +201,16 @@ async function createWindow() {
   console.log("Preload path:", preloadPath);
   console.log("Preload exists:", fs.existsSync(preloadPath));
 
+  // Projects: isolate renderer storage per project via session partition.
+  // This makes localStorage-backed state (tabs/layout/chat drafts) naturally project-scoped.
+  let partition: string | undefined;
+  try {
+    const cfg = new ConfigService().loadAppConfig();
+    partition = projectPartitionIdFromDataDir(cfg.dataDir);
+  } catch {
+    partition = undefined;
+  }
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -153,6 +218,7 @@ async function createWindow() {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
+      ...(partition ? { partition } : {}),
     },
     titleBarStyle: "default",
     show: true, // Show immediately to debug UI issues
@@ -224,6 +290,22 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  const minimalSmokeMode =
+    String(process.env.INSIGHTLM_SMOKE_MINIMAL || "").toLowerCase() === "1" ||
+    String(process.env.INSIGHTLM_SMOKE_MINIMAL || "").toLowerCase() === "true";
+  (global as any).__insightlmMinimalSmoke = minimalSmokeMode;
+
+  // Projects: accept --dataDir=... on argv and expose it as INSIGHTLM_DATA_DIR for this process.
+  // ConfigService will honor INSIGHTLM_DATA_DIR as an override.
+  try {
+    const argDataDir = parseDataDirArg(process.argv || []);
+    if (argDataDir) {
+      process.env.INSIGHTLM_DATA_DIR = String(argDataDir);
+    }
+  } catch {
+    // ignore
+  }
+
   // Setup updater (check for updates on startup)
   if (app.isPackaged) {
     setupUpdater();
@@ -234,10 +316,22 @@ app.whenReady().then(async () => {
   const appConfig = configService.loadAppConfig();
   const llmConfig = configService.loadLLMConfig();
 
+  // Initialize Projects service (workspace-like)
+  projectService = new ProjectService(configService);
+  try {
+    projectService.ensureProjectLayout(appConfig.dataDir);
+    projectService.touchRecent(appConfig.dataDir);
+  } catch {
+    // ignore (fail-soft)
+  }
+
+  // Minimal smoke mode: boot fast WITHOUT starting MCP servers (restart-level projects proof).
+  // We still register IPC handlers so the renderer can mount normally.
+
   // Seed demo workbooks into the dedicated "org" dataDir on first run.
   // This keeps a canonical demo source that can be copied into dev/smoke/current workspaces via Demos menu,
   // without polluting the user's active dataDir (and without tests writing into real workspaces).
-  try {
+  if (!minimalSmokeMode) try {
     const projectConfigDir = path.join(process.cwd(), "config");
     const configDir =
       fs.existsSync(projectConfigDir) ? projectConfigDir : (process.resourcesPath ? path.join(process.resourcesPath, "config") : projectConfigDir);
@@ -267,44 +361,45 @@ app.whenReady().then(async () => {
   const toolProviderRegistry = new ToolProviderRegistry(toolRegistry);
 
   // Initialize MCP service (non-blocking)
-  try {
-    mcpService = new MCPService(path.join(process.cwd(), "mcp-servers"));
+  if (!minimalSmokeMode) {
+    try {
+      mcpService = new MCPService(path.join(process.cwd(), "mcp-servers"));
 
-    // Wire MCP service to tool registry for dynamic tool discovery
-    mcpService.setToolDiscoveryCallback((serverName, tools) => {
-      console.log(`[Main] Tools discovered from ${serverName}: ${tools.length} tools`);
-      toolRegistry.registerTools(serverName, tools);
-    });
+      // Wire MCP service to tool registry for dynamic tool discovery
+      mcpService.setToolDiscoveryCallback((serverName, tools) => {
+        console.log(`[Main] Tools discovered from ${serverName}: ${tools.length} tools`);
+        toolRegistry.registerTools(serverName, tools);
+      });
 
-    // Wire MCP service to tool registry for tool cleanup on server stop
-    mcpService.setServerStopCallback((serverName) => {
-      console.log(`[Main] Server ${serverName} stopped, unregistering tools`);
-      console.log(`[Main] ToolRegistry instance:`, toolRegistry ? 'exists' : 'missing');
-      console.log(`[Main] Calling unregisterTools for ${serverName}`);
-      toolRegistry.unregisterTools(serverName);
-      console.log(`[Main] unregisterTools call completed for ${serverName}`);
-    });
+      // Wire MCP service to tool registry for tool cleanup on server stop
+      mcpService.setServerStopCallback((serverName) => {
+        console.log(`[Main] Server ${serverName} stopped, unregistering tools`);
+        console.log(`[Main] ToolRegistry instance:`, toolRegistry ? 'exists' : 'missing');
+        console.log(`[Main] Calling unregisterTools for ${serverName}`);
+        toolRegistry.unregisterTools(serverName);
+        console.log(`[Main] unregisterTools call completed for ${serverName}`);
+      });
 
-    // Mark extension-managed servers (will be populated by extensions)
-    // jupyter-server is managed by jupyter extension
-    mcpService.markExtensionManaged("jupyter-server");
+      // Mark extension-managed servers (will be populated by extensions)
+      // jupyter-server is managed by jupyter extension
+      mcpService.markExtensionManaged("jupyter-server");
 
-    const mcpServers = mcpService.discoverServers();
+      const mcpServers = mcpService.discoverServers();
 
-    // Initialize Tool Provider Registry
-    await toolProviderRegistry.initialize();
+      // Initialize Tool Provider Registry
+      await toolProviderRegistry.initialize();
 
-    // Register MCP Tool Provider
-    const mcpProvider = new MCPToolProvider(
-      "mcp-provider",
-      mcpService,
-      toolRegistry,
-      mcpServers, // All discovered MCP servers
-      100 // Priority
-    );
-    await toolProviderRegistry.registerProvider({ provider: mcpProvider });
+      // Register MCP Tool Provider
+      const mcpProvider = new MCPToolProvider(
+        "mcp-provider",
+        mcpService,
+        toolRegistry,
+        mcpServers, // All discovered MCP servers
+        100 // Priority
+      );
+      await toolProviderRegistry.registerProvider({ provider: mcpProvider });
 
-    for (const serverConfig of mcpServers) {
+      for (const serverConfig of mcpServers) {
       // Skip extension-managed servers (they're started by extensions)
       if (mcpService.isExtensionManaged(serverConfig.name)) {
         console.log(`[MCP] Skipping auto-start for ${serverConfig.name} (extension-managed)`);
@@ -331,8 +426,8 @@ app.whenReady().then(async () => {
       } else {
         console.warn(`[MCP] Server directory not found: ${serverPath}`);
       }
-    }
-  } catch (error) {
+      }
+    } catch (error) {
     console.warn("MCP service initialization failed, continuing without MCP servers:", error);
     // Create a minimal MCP service stub to prevent crashes
     mcpService = {
@@ -340,6 +435,24 @@ app.whenReady().then(async () => {
       sendRequest: async () => { throw new Error("MCP service not available"); },
       stopAll: () => {},
     } as any;
+    }
+  } else {
+    // Minimal smoke: stub MCP service but do NOT start/discover servers (fast boot).
+    mcpService = {
+      isServerRunning: () => false,
+      sendRequest: async () => {
+        throw new Error("MCP service not available (minimal smoke)");
+      },
+      stopAll: () => {},
+      discoverServers: () => [],
+      markExtensionManaged: () => {},
+      isExtensionManaged: () => false,
+      startServer: () => {},
+      restartServer: async () => {},
+      setToolDiscoveryCallback: () => {},
+      setServerStopCallback: () => {},
+    } as any;
+    await toolProviderRegistry.initialize();
   }
 
   // Generic health check for servers that support rag/health endpoint
@@ -412,6 +525,13 @@ app.whenReady().then(async () => {
   setupArchiveIPC(configService);
   setupDashboardIPC(configService);
   setupConfigIPC(configService, llmService);
+  setupChatDraftsIPC(configService);
+  // Projects IPC (workspace-like)
+  if (projectService) {
+    setupProjectsIPC(projectService);
+  }
+  // Git-lite IPC (local-first; scoped to current Project dataDir)
+  setupGitIPC(configService);
   // Chat persistence IPC (single-thread-per-context)
   try {
     const { ChatService } = require("./services/chatService");
@@ -490,7 +610,10 @@ app.whenReady().then(async () => {
     try {
       return await mcpService.sendRequest(serverName, method, params);
     } catch (error) {
-      console.error("Error in MCP call:", error);
+      // In minimal smoke mode we intentionally don't start MCP; avoid noisy stack traces.
+      if (!(global as any).__insightlmMinimalSmoke) {
+        console.error("Error in MCP call:", error);
+      }
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error"
@@ -682,6 +805,8 @@ app.whenReady().then(async () => {
   });
 
   app.on("before-quit", () => {
+    // In automation harness runs we may request a bounded shutdown; don't let stopAll hang the process.
+    if (automationQuitRequested) return;
     mcpService.stopAll();
   });
 });
@@ -695,6 +820,44 @@ app.on("window-all-closed", () => {
 // IPC handlers will be added here
 ipcMain.handle("app:getVersion", () => {
   return app.getVersion();
+});
+
+// Automation/test support: request a graceful quit (lets Chromium flush storage).
+ipcMain.handle("app:quit", async () => {
+  // IMPORTANT: respond to IPC first, then quit.
+  // If we quit immediately, the renderer may never receive the IPC response (causing automation hangs).
+  setTimeout(() => {
+    try {
+      app.quit();
+    } catch {
+      // ignore
+    }
+  }, 50);
+  return { ok: true };
+});
+
+// Automation-only: flush storage and force-exit (bounded, avoids hangs during A→B→A proof).
+ipcMain.handle("app:quitForAutomation", async () => {
+  automationQuitRequested = true;
+  // Reply first, then exit quickly.
+  setTimeout(async () => {
+    try {
+      // Best-effort flush for all windows.
+      const wins = BrowserWindow.getAllWindows();
+      await Promise.allSettled(
+        wins.map(async (w) => {
+          try {
+            await w.webContents?.session?.flushStorageData?.();
+          } catch {}
+        }),
+      );
+    } catch {}
+
+    try {
+      app.exit(0);
+    } catch {}
+  }, 100);
+  return { ok: true };
 });
 
 // Extension lifecycle for MCP servers

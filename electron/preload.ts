@@ -25,6 +25,10 @@ try {
 try {
   contextBridge.exposeInMainWorld("electronAPI", {
   getVersion: () => ipcRenderer.invoke("app:getVersion"),
+  app: {
+    quit: () => ipcRenderer.invoke("app:quit"),
+    quitForAutomation: () => ipcRenderer.invoke("app:quitForAutomation"),
+  },
 
   // Workbook operations
   workbook: {
@@ -117,6 +121,28 @@ try {
   dialog: {
     openFile: () => ipcRenderer.invoke("dialog:openFile"),
     openFiles: () => ipcRenderer.invoke("dialog:openFiles"),
+  },
+
+  // Projects (workspace-like)
+  project: {
+    getCurrent: () => ipcRenderer.invoke("project:getCurrent"),
+    listRecents: () => ipcRenderer.invoke("project:listRecents"),
+    open: (dataDir: string) => ipcRenderer.invoke("project:open", dataDir),
+  },
+
+  // Project-scoped persisted chat drafts (disk-backed, not localStorage-backed).
+  chatDrafts: {
+    getAll: () => ipcRenderer.invoke("chatDrafts:getAll"),
+    setAll: (drafts: any) => ipcRenderer.invoke("chatDrafts:setAll", drafts),
+  },
+
+  // Git-lite (local-first, scoped to current Project)
+  git: {
+    init: () => ipcRenderer.invoke("git:init"),
+    status: () => ipcRenderer.invoke("git:status"),
+    diff: (args?: { path?: string; staged?: boolean }) => ipcRenderer.invoke("git:diff", args),
+    commit: (message: string) => ipcRenderer.invoke("git:commit", message),
+    log: (limit?: number) => ipcRenderer.invoke("git:log", limit),
   },
 
   llm: {
