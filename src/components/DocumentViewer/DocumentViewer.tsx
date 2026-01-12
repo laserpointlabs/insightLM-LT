@@ -127,6 +127,42 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
   const activeDoc = documents.find((d) => d.id === activeDocId);
   const hasUnsaved = activeDocId ? hasUnsavedChanges(activeDocId) : false;
 
+  function toPersistedTabIdentity(doc: OpenDocument): any {
+    const type = (doc?.type || "document") as any;
+    if (type === "chat") {
+      return { type: "chat", chatKey: String(doc?.chatKey || "main").trim() || "main" };
+    }
+    if (type === "dashboard") {
+      if (!doc?.dashboardId) return null;
+      return { type: "dashboard", dashboardId: String(doc.dashboardId) };
+    }
+    if (type === "config") {
+      if (!doc?.configKey) return null;
+      return { type: "config", configKey: String(doc.configKey) };
+    }
+    // default: document
+    if (!doc?.workbookId || !doc?.path) return null;
+    return { type: "document", workbookId: String(doc.workbookId), path: String(doc.path) };
+  }
+
+  // Persist the active tab (project-scoped, disk-backed) whenever the user changes it.
+  const lastSavedActiveKeyRef = useRef<string>("");
+  useEffect(() => {
+    try {
+      // Avoid overwriting restored active tab during startup hydration.
+      if ((window as any).__insightlmRestoringTabs === true) return;
+      if (!activeDoc) return;
+      const ident = toPersistedTabIdentity(activeDoc);
+      if (!ident) return;
+      const key = JSON.stringify(ident);
+      if (key === lastSavedActiveKeyRef.current) return;
+      lastSavedActiveKeyRef.current = key;
+      window.electronAPI?.projectState?.set?.({ activeTab: ident });
+    } catch {
+      // ignore
+    }
+  }, [activeDocId, activeDoc?.id]);
+
   const getFileExtension = (filename: string): string => {
     return filename.split(".").pop()?.toLowerCase() || "";
   };

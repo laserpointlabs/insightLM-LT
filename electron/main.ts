@@ -12,6 +12,7 @@ import { setupDemosIPC } from "./ipc/demos";
 import { setupProjectsIPC } from "./ipc/projects";
 import { setupGitIPC } from "./ipc/git";
 import { setupChatDraftsIPC } from "./ipc/chatDrafts";
+import { setupProjectStateIPC } from "./ipc/projectState";
 import { ConfigService } from "./services/configService";
 import { MCPService, MCPServerConfig } from "./services/mcpService";
 import { LLMService, LLMMessage } from "./services/llmService";
@@ -21,12 +22,14 @@ import { seedDemoWorkbooksIfNeeded } from "./services/demoSeedService";
 import * as yaml from "js-yaml";
 import { expandPath } from "./services/configService";
 import { ProjectService, parseDataDirArg, projectPartitionIdFromDataDir } from "./services/projectService";
+import { ProjectStateService } from "./services/projectStateService";
 
 let mainWindow: BrowserWindow | null = null;
 let mcpService!: MCPService;
 let demoService: DemoService | null = null;
 let projectService: ProjectService | null = null;
 let automationQuitRequested = false;
+let projectStateService: ProjectStateService | null = null;
 
 function setAppMenu() {
   const ds = demoService;
@@ -223,6 +226,16 @@ async function createWindow() {
     titleBarStyle: "default",
     show: true, // Show immediately to debug UI issues
   });
+
+  // Initialize global context scoping from disk-backed project state (fail-soft).
+  try {
+    const cfg = new ConfigService();
+    const st = new ProjectStateService(cfg).get();
+    const mode = st?.scopeMode === "all" || st?.scopeMode === "context" ? st.scopeMode : "context";
+    (global as any).__insightlmDisableContextScoping = mode === "all";
+  } catch {
+    // ignore
+  }
 
   // Top menu (File/Edit/View/Demos)
   try {
@@ -526,6 +539,14 @@ app.whenReady().then(async () => {
   setupDashboardIPC(configService);
   setupConfigIPC(configService, llmService);
   setupChatDraftsIPC(configService);
+  // Project-scoped UI state (disk-backed): active tab + scoping mode.
+  try {
+    projectStateService = new ProjectStateService(configService);
+    setupProjectStateIPC(projectStateService);
+  } catch (e) {
+    console.warn("Project state IPC setup failed:", e);
+    projectStateService = null;
+  }
   // Projects IPC (workspace-like)
   if (projectService) {
     setupProjectsIPC(projectService);
@@ -574,11 +595,26 @@ app.whenReady().then(async () => {
 
   // Context scoping IPC (UI toggle)
   ipcMain.handle("context:scoping:getMode", () => {
+    try {
+      const st = projectStateService?.get?.();
+      const mode = st?.scopeMode === "all" || st?.scopeMode === "context" ? st.scopeMode : undefined;
+      if (mode) {
+        (global as any).__insightlmDisableContextScoping = mode === "all";
+        return { mode };
+      }
+    } catch {
+      // ignore
+    }
     const disabled = (global as any).__insightlmDisableContextScoping === true;
     return { mode: disabled ? "all" : "context" };
   });
   ipcMain.handle("context:scoping:setMode", async (_, mode: "all" | "context") => {
     (global as any).__insightlmDisableContextScoping = mode === "all";
+    try {
+      projectStateService?.set?.({ scopeMode: mode });
+    } catch {
+      // ignore
+    }
     return { mode: (global as any).__insightlmDisableContextScoping ? "all" : "context" };
   });
 

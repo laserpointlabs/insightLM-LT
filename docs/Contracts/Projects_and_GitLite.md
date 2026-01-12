@@ -12,13 +12,13 @@
   - [x] File → **New Project…** (name + location)
   - [x] File → **Open Project…**
   - [x] File → **Open Recent** (deterministic order)
-- [ ] **Project‑scoped persistence** (never global by accident):
+- [x] **Project‑scoped persistence** (never global by accident):
   - [x] layout/view collapse state (localStorage, project-scoped via per-project session partition)
   - [x] open tabs (localStorage, project-scoped via per-project session partition)
-  - [ ] active tab (not yet persisted)
+  - [x] active tab (disk-backed project state + restored on boot)
   - [x] chat drafts (disk‑backed under Project dataDir)
   - [x] chat threads (disk‑backed under Project dataDir, single-thread per context)
-  - [ ] contexts/scope mode (currently in-memory only)
+  - [x] contexts/scope mode (disk-backed project state + restored on boot)
 - [ ] **Hard data access boundary**:
   - [ ] Chat/RAG/tools can only read/write inside the current Project data directory.
   - [x] Absolute paths + `..` traversal + symlink escape are rejected deterministically (workbook file boundary).
@@ -46,6 +46,7 @@
 - [ ] **Projects**:
   - [ ] Create Project → restart app → assert tabs/layout restored only for that project.
   - [x] Chat draft persists across restart in Project A (disk) and does not bleed into Project B (A→B→A proof in `tests/run-prod-renderer-smoke.mjs`).
+  - [x] Active tab + scoping mode persist across restart in Project A and do not bleed into Project B (A→B→A proof in `tests/run-prod-renderer-smoke.mjs`).
 - [ ] **Boundary**:
   - [x] Attempt tool read with `../` traversal → deterministic “not allowed” (unit test).
 - [ ] **Git‑lite**:

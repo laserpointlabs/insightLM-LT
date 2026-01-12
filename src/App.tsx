@@ -55,45 +55,94 @@ function App() {
 
   // Restore "popped out" Chat tab after renderer refresh (Vite reload / Ctrl+R).
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("insightlm.openTabs.v1");
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
-      for (const t of parsed) {
-        const type = String(t?.type || "");
-        if (type === "chat") {
-          const chatKey = String(t?.chatKey || "main").trim() || "main";
-          const filename = String(t?.filename || "Chat").trim() || "Chat";
-          openDocument({ type: "chat", chatKey, filename } as any).catch(() => {});
-          continue;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        // Mark restore-in-progress so tab persistence doesn't overwrite the intended restored active tab.
+        try {
+          (window as any).__insightlmRestoringTabs = true;
+        } catch {
+          // ignore
         }
-        if (type === "document") {
-          const workbookId = String(t?.workbookId || "").trim();
-          const p = String(t?.path || "").trim();
-          if (!workbookId || !p) continue;
-          const filename = String(t?.filename || p.split("/").pop() || p).trim() || (p.split("/").pop() || p);
-          openDocument({ workbookId, path: p, filename } as any).catch(() => {});
-          continue;
+
+        const raw = localStorage.getItem("insightlm.openTabs.v1");
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return;
+
+        // Restore tabs sequentially so active-tab restoration is deterministic.
+        for (const t of parsed) {
+          if (cancelled) return;
+          const type = String(t?.type || "");
+          if (type === "chat") {
+            const chatKey = String(t?.chatKey || "main").trim() || "main";
+            const filename = String(t?.filename || "Chat").trim() || "Chat";
+            await openDocument({ type: "chat", chatKey, filename } as any);
+            continue;
+          }
+          if (type === "document") {
+            const workbookId = String(t?.workbookId || "").trim();
+            const p = String(t?.path || "").trim();
+            if (!workbookId || !p) continue;
+            const filename = String(t?.filename || p.split("/").pop() || p).trim() || (p.split("/").pop() || p);
+            await openDocument({ workbookId, path: p, filename } as any);
+            continue;
+          }
+          if (type === "dashboard") {
+            const dashboardId = String(t?.dashboardId || "").trim();
+            if (!dashboardId) continue;
+            const filename = String(t?.filename || "Dashboard").trim() || "Dashboard";
+            await openDocument({ type: "dashboard", dashboardId, filename } as any);
+            continue;
+          }
+          if (type === "config") {
+            const configKey = String(t?.configKey || "").trim();
+            if (!configKey) continue;
+            const filename = String(t?.filename || "config").trim() || "config";
+            await openDocument({ type: "config", configKey, filename } as any);
+            continue;
+          }
         }
-        if (type === "dashboard") {
-          const dashboardId = String(t?.dashboardId || "").trim();
-          if (!dashboardId) continue;
-          const filename = String(t?.filename || "Dashboard").trim() || "Dashboard";
-          openDocument({ type: "dashboard", dashboardId, filename } as any).catch(() => {});
-          continue;
+
+        // Restore the active tab (project-scoped, disk-backed) after all tabs exist.
+        const st = await window.electronAPI?.projectState?.get?.();
+        const a: any = st?.activeTab;
+        const at = String(a?.type || "");
+        if (at === "chat") {
+          const chatKey = String(a?.chatKey || "main").trim() || "main";
+          await openDocument({ type: "chat", chatKey, filename: "Chat" } as any);
+        } else if (at === "document") {
+          const workbookId = String(a?.workbookId || "").trim();
+          const p = String(a?.path || "").trim();
+          if (workbookId && p) {
+            const filename = p.split("/").pop() || p;
+            await openDocument({ workbookId, path: p, filename } as any);
+          }
+        } else if (at === "dashboard") {
+          const dashboardId = String(a?.dashboardId || "").trim();
+          if (dashboardId) {
+            await openDocument({ type: "dashboard", dashboardId, filename: "Dashboard" } as any);
+          }
+        } else if (at === "config") {
+          const configKey = String(a?.configKey || "").trim();
+          if (configKey) {
+            await openDocument({ type: "config", configKey, filename: "config" } as any);
+          }
         }
-        if (type === "config") {
-          const configKey = String(t?.configKey || "").trim();
-          if (!configKey) continue;
-          const filename = String(t?.filename || "config").trim() || "config";
-          openDocument({ type: "config", configKey, filename } as any).catch(() => {});
-          continue;
+      } catch {
+        // ignore
+      } finally {
+        try {
+          (window as any).__insightlmRestoringTabs = false;
+        } catch {
+          // ignore
         }
       }
-    } catch {
-      // ignore
-    }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
   }, [openDocument]);
 
   // Lightweight automation mode: bots can force-show hover-only controls via `window.__insightlmAutomationUI.setMode(true)`.

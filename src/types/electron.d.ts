@@ -104,6 +104,19 @@ export interface ElectronAPI {
     setMode: (mode: "all" | "context") => Promise<{ mode: "all" | "context" }>;
   };
 
+  projectState?: {
+    get: () => Promise<{
+      version: 1;
+      scopeMode?: "all" | "context";
+      activeTab?: any;
+    }>;
+    set: (partial: any) => Promise<{
+      version: 1;
+      scopeMode?: "all" | "context";
+      activeTab?: any;
+    }>;
+  };
+
   demos?: {
     load: (demoId: "ac1000" | "trade-study") => Promise<{ demoId: string; workbookId: string; contextId: string | null }>;
     resetDevData: () => Promise<{ ok: true }>;

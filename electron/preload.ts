@@ -130,6 +130,12 @@ try {
     open: (dataDir: string) => ipcRenderer.invoke("project:open", dataDir),
   },
 
+  // Project-scoped UI state (disk-backed): active tab + scoping mode, etc.
+  projectState: {
+    get: () => ipcRenderer.invoke("projectState:get"),
+    set: (partial: any) => ipcRenderer.invoke("projectState:set", partial),
+  },
+
   // Project-scoped persisted chat drafts (disk-backed, not localStorage-backed).
   chatDrafts: {
     getAll: () => ipcRenderer.invoke("chatDrafts:getAll"),

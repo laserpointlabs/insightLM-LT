@@ -197,9 +197,18 @@ async function runProjectRelaunchProof(envBase) {
   }
   const projectB = `${projectA}-B-${Date.now()}`;
   const token = `proj_draft_${Date.now()}`;
+  const activeTabMarker = `proj_active_${Date.now()}`;
 
   const runOne = async (dataDir, phase) => {
-    const env = { ...envBase, INSIGHTLM_DATA_DIR: dataDir, INSIGHTLM_SMOKE_MINIMAL: "1" };
+    // IMPORTANT: The prod smoke runner sets INSIGHTLM_CLEAN_TABS_ON_START=1 to avoid noisy stale-tab restores
+    // after resetting dev data. For this project persistence harness we *need* tab restore to be enabled so we can
+    // prove active-tab persistence across restart deterministically.
+    const env = {
+      ...envBase,
+      INSIGHTLM_DATA_DIR: dataDir,
+      INSIGHTLM_SMOKE_MINIMAL: "1",
+      INSIGHTLM_CLEAN_TABS_ON_START: "0",
+    };
     const proc = spawn(electronPath, ["."], { stdio: ["ignore", "pipe", "pipe"], shell: false, env });
     pipeElectronLogs(proc);
     try {
@@ -235,9 +244,46 @@ async function runProjectRelaunchProof(envBase) {
           `);
           const ok = await evaluate(`(async () => { const got = await window.electronAPI.chatDrafts.getAll(); return (got?.drafts?.["sidebar:noctx"]?.text || "") === ${JSON.stringify(token)}; })()`);
           if (!ok) throw new Error("Failed to write draft token in Project A (disk)");
+
+          // Persist context scoping mode to ALL (project-scoped).
+          const scopeOk = await evaluate(`
+            (async () => {
+              if (!window.electronAPI?.contextScope?.setMode) throw new Error("electronAPI.contextScope unavailable");
+              await window.electronAPI.contextScope.setMode("all");
+              const got = await window.electronAPI.contextScope.getMode();
+              return got?.mode === "all";
+            })()
+          `);
+          if (!scopeOk) throw new Error("Failed to set scoping mode to ALL in Project A");
+
+          // Persist open tabs + active tab (project-scoped).
+          const tabsOk = await evaluate(`
+            (async () => {
+              // Open tabs are stored in partition-local localStorage.
+              const tabs = [
+                { type: "chat", chatKey: "main", filename: "Chat" },
+                { type: "config", configKey: "llm", filename: "llm.yaml" },
+              ];
+              try { localStorage.setItem("insightlm.openTabs.v1", JSON.stringify(tabs)); } catch {}
+              if (!window.electronAPI?.projectState?.set) throw new Error("electronAPI.projectState unavailable");
+              const st = await window.electronAPI.projectState.set({ activeTab: { type: "config", configKey: "llm", marker: ${JSON.stringify(activeTabMarker)} } });
+              return st?.activeTab?.type === "config";
+            })()
+          `);
+          if (!tabsOk) throw new Error("Failed to persist openTabs + activeTab in Project A");
         } else if (phase === "checkBAbsent") {
           const has = await evaluate(`(async () => { const got = await window.electronAPI.chatDrafts.getAll(); return (got?.drafts?.["sidebar:noctx"]?.text || "").includes(${JSON.stringify(token)}); })()`);
           if (has) throw new Error("Project B saw Project A token (not isolated)");
+
+          // Project B should default to Scoped ("context") unless explicitly set in that project.
+          const mode = await evaluate(`(async () => (await window.electronAPI?.contextScope?.getMode?.())?.mode || null)()`);
+          if (mode !== "context") throw new Error(`Project B scoping mode was not default "context" (got ${String(mode)})`);
+
+          // Project B should not inherit Project A's active tab state.
+          const bActive = await evaluate(`(async () => (await window.electronAPI?.projectState?.get?.())?.activeTab || null)()`);
+          if (bActive && String(bActive?.type || "") === "config") {
+            throw new Error("Project B inherited activeTab unexpectedly");
+          }
         } else if (phase === "checkAPresent") {
           // Poll briefly for storage to appear
           const ok = await evaluate(`
@@ -259,13 +305,75 @@ async function runProjectRelaunchProof(envBase) {
             })
           `);
           if (!ok) throw new Error("Project A token did not persist across restart");
+
+          // Scope mode should persist as ALL.
+          const mode = await evaluate(`(async () => (await window.electronAPI?.contextScope?.getMode?.())?.mode || null)()`);
+          if (mode !== "all") throw new Error(`Project A scoping mode did not persist (expected all, got ${String(mode)})`);
+
+          // Sanity: openTabs should still be present (we disabled CLEAN_TABS for this harness).
+          const tabsRaw = await evaluate(`(() => { try { return localStorage.getItem("insightlm.openTabs.v1"); } catch { return null; } })()`);
+          if (!tabsRaw || !String(tabsRaw).includes("llm")) {
+            throw new Error(`Project A openTabs missing or unexpected after restart (raw=${String(tabsRaw).slice(0, 200)})`);
+          }
+
+          // Active tab should restore to config (llm.yaml).
+          const activeOk = await evaluate(`
+            new Promise((resolve) => {
+              const start = Date.now();
+              const tick = () => {
+                try {
+                  const el = document.querySelector('div[data-testid="document-viewer-content"]');
+                  const ext = el ? String(el.getAttribute("data-active-ext") || "") : "";
+                  const filename = el ? String(el.getAttribute("data-active-filename") || "") : "";
+                  if (ext === "yaml" && filename.toLowerCase().includes("llm.yaml")) return resolve(true);
+                } catch {}
+                if (Date.now() - start > 20000) return resolve(false);
+                setTimeout(tick, 200);
+              };
+              tick();
+            })
+          `);
+          if (!activeOk) {
+            const debug = await evaluate(`
+              (() => {
+                let openTabs = null;
+                try { openTabs = localStorage.getItem("insightlm.openTabs.v1"); } catch {}
+                return {
+                  openTabs: openTabs ? String(openTabs).slice(0, 400) : null,
+                  projectState: window.electronAPI?.projectState ? "has" : "missing",
+                  activeTab: null,
+                  dom: (() => {
+                    const el = document.querySelector('div[data-testid="document-viewer-content"]');
+                    return el
+                      ? {
+                          ext: String(el.getAttribute("data-active-ext") || ""),
+                          filename: String(el.getAttribute("data-active-filename") || ""),
+                          id: String(el.getAttribute("data-active-doc-id") || ""),
+                        }
+                      : null;
+                  })(),
+                };
+              })()
+            `);
+            // Best-effort: fetch activeTab from projectState if available.
+            try {
+              const st = await evaluate(`(async () => await window.electronAPI?.projectState?.get?.())()`);
+              debug.activeTab = st?.activeTab || null;
+            } catch {}
+            throw new Error(`Project A active tab did not restore to llm.yaml. Debug: ${JSON.stringify(debug).slice(0, 1200)}`);
+          }
         }
+
+        // Use an automation-safe quit to ensure Chromium flushes localStorage (tabs/layout) deterministically.
+        try {
+          await evaluate(`(async () => { try { await window.electronAPI?.app?.quitForAutomation?.(); } catch {} return true; })()`);
+        } catch {}
       } finally {
         try { ws.close(); } catch {}
       }
-      // Disk-backed drafts do not require a graceful quit; force-kill is deterministic and avoids Windows quit hangs.
       console.log(`[projects-proof] Closing app process (${phase})...`);
-      await killProcessTree(proc);
+      const exited = await waitForExit(proc, 30000);
+      if (!exited) await killProcessTree(proc);
       return null;
     } catch (e) {
       await killProcessTree(proc);
