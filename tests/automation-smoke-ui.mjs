@@ -1095,6 +1095,35 @@ async function run() {
     if (!(Number(rxHit?.match_count || 0) >= 1)) fail("rag_grep regex found fixture file but match_count < 1");
     console.log("✅ Verified workbook-rag rag_grep tool advertised + executable (literal + regex)");
 
+    // Project data access boundary (deterministic deny): workbook-rag must not allow traversal outside workbook.
+    // Attempt to escape to the project config (../../config/llm.yaml) from within a workbook.
+    const denyRes = await evaluate(`
+      (async () => {
+        try {
+          const res = await window.electronAPI.mcp.call("workbook-rag", "tools/call", {
+            name: "rag_read_file",
+            arguments: {
+              workbook_id: ${jsString(workbookId)},
+              file_path: "../../config/llm.yaml",
+            },
+          });
+          return res;
+        } catch (e) {
+          return { __threw: true, message: String(e?.message || e) };
+        }
+      })()
+    `);
+    if (denyRes?.__threw) fail(`rag_read_file traversal call threw (expected fail-soft response): ${denyRes?.message || "unknown"}`);
+    const denyContent = String(denyRes?.content || denyRes?.result?.content || "");
+    if (!denyContent.toLowerCase().includes("path not allowed")) {
+      fail(`rag_read_file traversal did not deny access as expected. Got: ${denyContent.slice(0, 300)}`);
+    }
+    // Ensure we did not leak any YAML content (sanity: should not include common keys).
+    if (denyContent.includes("activeProvider") || denyContent.includes("profiles:")) {
+      fail("rag_read_file traversal denial leaked config content unexpectedly");
+    }
+    console.log("✅ Verified workbook-rag denies traversal outside workbook (project data access boundary)");
+
     // Git-lite deterministic smoke (scoped to current project dataDir; no remote).
     const gitSmokeOk = await evaluate(`
       (async () => {

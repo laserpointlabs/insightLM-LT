@@ -198,6 +198,7 @@ async function runProjectRelaunchProof(envBase) {
   const projectB = `${projectA}-B-${Date.now()}`;
   const token = `proj_draft_${Date.now()}`;
   const activeTabMarker = `proj_active_${Date.now()}`;
+  const layoutMarker = `proj_layout_${Date.now()}`;
 
   const runOne = async (dataDir, phase) => {
     // IMPORTANT: The prod smoke runner sets INSIGHTLM_CLEAN_TABS_ON_START=1 to avoid noisy stale-tab restores
@@ -271,6 +272,25 @@ async function runProjectRelaunchProof(envBase) {
             })()
           `);
           if (!tabsOk) throw new Error("Failed to persist openTabs + activeTab in Project A");
+
+          // Persist a distinctive layout marker (project-scoped localStorage partition).
+          const layoutOk = await evaluate(`
+            (() => {
+              try {
+                localStorage.setItem("insightlm-layout-storage", JSON.stringify({
+                  sidebarWidth: 333,
+                  chatHeight: 222,
+                  viewHeights: { dashboards: 111, contexts: 112, workbooks: 113, chat: 114 },
+                  collapsedViews: ["dashboards"],
+                  marker: ${JSON.stringify(layoutMarker)},
+                }));
+                return true;
+              } catch {
+                return false;
+              }
+            })()
+          `);
+          if (!layoutOk) throw new Error("Failed to persist layout marker in Project A");
         } else if (phase === "checkBAbsent") {
           const has = await evaluate(`(async () => { const got = await window.electronAPI.chatDrafts.getAll(); return (got?.drafts?.["sidebar:noctx"]?.text || "").includes(${JSON.stringify(token)}); })()`);
           if (has) throw new Error("Project B saw Project A token (not isolated)");
@@ -283,6 +303,12 @@ async function runProjectRelaunchProof(envBase) {
           const bActive = await evaluate(`(async () => (await window.electronAPI?.projectState?.get?.())?.activeTab || null)()`);
           if (bActive && String(bActive?.type || "") === "config") {
             throw new Error("Project B inherited activeTab unexpectedly");
+          }
+
+          // Project B should not inherit Project A's layout.
+          const bLayout = await evaluate(`(() => { try { return localStorage.getItem("insightlm-layout-storage"); } catch { return null; } })()`);
+          if (bLayout && String(bLayout).includes(String(layoutMarker))) {
+            throw new Error("Project B inherited Project A layout marker unexpectedly");
           }
         } else if (phase === "checkAPresent") {
           // Poll briefly for storage to appear
@@ -314,6 +340,12 @@ async function runProjectRelaunchProof(envBase) {
           const tabsRaw = await evaluate(`(() => { try { return localStorage.getItem("insightlm.openTabs.v1"); } catch { return null; } })()`);
           if (!tabsRaw || !String(tabsRaw).includes("llm")) {
             throw new Error(`Project A openTabs missing or unexpected after restart (raw=${String(tabsRaw).slice(0, 200)})`);
+          }
+
+          // Layout marker should persist in Project A.
+          const layoutRaw = await evaluate(`(() => { try { return localStorage.getItem("insightlm-layout-storage"); } catch { return null; } })()`);
+          if (!layoutRaw || !String(layoutRaw).includes(String(layoutMarker))) {
+            throw new Error("Project A layout marker did not persist across restart");
           }
 
           // Active tab should restore to config (llm.yaml).

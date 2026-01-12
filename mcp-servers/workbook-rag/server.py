@@ -109,6 +109,66 @@ def get_data_dir() -> str:
     raise ValueError("Could not determine data directory")
 
 
+def _normalize_rel_path(rel: str) -> List[str]:
+    """Normalize a user-provided relative path into safe path segments.
+
+    Enforces project/workbook boundary rules:
+    - reject absolute paths (including Windows drive paths)
+    - reject traversal segments ('..')
+    """
+    raw = str(rel or "").strip()
+    if not raw:
+        raise ValueError("Path not allowed: empty path")
+
+    # Reject absolute paths (posix and Windows drive/UNC-like).
+    try:
+        if Path(raw).is_absolute():
+            raise ValueError("Path not allowed: absolute path")
+    except Exception:
+        # fall through; still check common Windows drive prefix
+        pass
+    if re.match(r"^[a-zA-Z]:[\\/]", raw):
+        raise ValueError("Path not allowed: absolute path")
+
+    # Treat backslashes as separators as well (Windows).
+    norm = raw.replace("\\", "/")
+    # Drop leading "./" and "/" noise.
+    norm = re.sub(r"^(\./)+", "", norm)
+    norm = norm.lstrip("/")
+
+    parts = [p for p in norm.split("/") if p and p != "."]
+    if any(p == ".." for p in parts):
+        raise ValueError("Path not allowed: traversal")
+    return parts
+
+
+def _validate_workbook_id(workbook_id: str) -> str:
+    """Ensure workbook_id is a directory name, not a path."""
+    wid = str(workbook_id or "").strip()
+    if not wid:
+        raise ValueError("Path not allowed: invalid workbook_id")
+    if "/" in wid or "\\" in wid:
+        raise ValueError("Path not allowed: invalid workbook_id")
+    if wid == "." or wid == ".." or ".." in wid:
+        raise ValueError("Path not allowed: invalid workbook_id")
+    return wid
+
+
+def _resolve_within_workbook(data_dir: Path, workbook_id: str, rel_path: str) -> Path:
+    """Resolve a workbook-scoped path safely (prevents traversal + symlink escape)."""
+    wid = _validate_workbook_id(workbook_id)
+    wb_root = (data_dir / "workbooks" / wid).resolve()
+    parts = _normalize_rel_path(rel_path)
+
+    # Resolve candidate. strict=False so non-existent paths can still be validated (Python 3.9+).
+    cand = (wb_root.joinpath(*parts)).resolve(strict=False)
+    try:
+        cand.relative_to(wb_root)
+    except Exception:
+        raise ValueError("Path not allowed: outside workbook")
+    return cand
+
+
 def extract_text_from_pdf(file_path: Path) -> str:
     """Extract text from PDF"""
     try:
@@ -651,7 +711,11 @@ def get_all_workbook_documents(workbook_ids: Optional[List[str]] = None) -> List
         for doc in metadata.get('documents', []):
             filename = doc.get('filename', '')
             relative_path = doc.get('path', f"documents/{filename}")
-            file_path = workbook_dir / relative_path
+            try:
+                file_path = _resolve_within_workbook(data_dir, workbook_dir.name, relative_path)
+            except Exception:
+                # Fail-soft: ignore malformed/unsafe metadata paths (do not leak outside workbook).
+                continue
 
             if not file_path.exists():
                 continue
@@ -990,7 +1054,11 @@ Chunks: {len(chunks)} excerpts ({total_chunk_chars} characters total)
 def read_workbook_file(workbook_id: str, file_path: str) -> str:
     """Read a specific file from a workbook"""
     data_dir = Path(get_data_dir())
-    full_path = data_dir / "workbooks" / workbook_id / file_path
+    try:
+        full_path = _resolve_within_workbook(data_dir, workbook_id, file_path)
+    except Exception as e:
+        # Return deterministic, non-throwing error so callers don't crash on JSON-RPC error paths.
+        return f"Path not allowed: {e}"
 
     if not full_path.exists():
         return f"File not found: {file_path}"

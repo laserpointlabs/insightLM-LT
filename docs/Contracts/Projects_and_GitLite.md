@@ -19,8 +19,8 @@
   - [x] chat drafts (disk‑backed under Project dataDir)
   - [x] chat threads (disk‑backed under Project dataDir, single-thread per context)
   - [x] contexts/scope mode (disk-backed project state + restored on boot)
-- [ ] **Hard data access boundary**:
-  - [ ] Chat/RAG/tools can only read/write inside the current Project data directory.
+- [x] **Hard data access boundary**:
+  - [x] Chat/RAG/tools can only read/write inside the current Project data directory (workbook-rag + FileService enforce workbook boundary).
   - [x] Absolute paths + `..` traversal + symlink escape are rejected deterministically (workbook file boundary).
 
 #### Git‑lite (local‑first) behaviors
@@ -43,13 +43,13 @@
 - **Renderer persistence**: several stores currently persist to global `localStorage` keys (e.g., `src/store/documentStore.ts`, `src/store/layoutStore.ts`, `src/store/chatDraftStore.ts`) → must become project-keyed.
 
 #### Proof (deterministic)
-- [ ] **Projects**:
-  - [ ] Create Project → restart app → assert tabs/layout restored only for that project.
+- [x] **Projects**:
+  - [x] Project A→B→A restart-level proof asserts **tabs + layout** persist only for the active Project (no bleed) (`tests/run-prod-renderer-smoke.mjs`).
   - [x] Chat draft persists across restart in Project A (disk) and does not bleed into Project B (A→B→A proof in `tests/run-prod-renderer-smoke.mjs`).
   - [x] Active tab + scoping mode persist across restart in Project A and do not bleed into Project B (A→B→A proof in `tests/run-prod-renderer-smoke.mjs`).
-- [ ] **Boundary**:
-  - [x] Attempt tool read with `../` traversal → deterministic “not allowed” (unit test).
-- [ ] **Git‑lite**:
+- [x] **Boundary**:
+  - [x] Attempt tool read with `../` traversal → deterministic “path not allowed” (UI smoke uses `rag_read_file`).
+- [x] **Git‑lite**:
   - [x] Init → create file → status shows change → commit → history shows commit (UI smoke).
 
 #### Manual verification (closing-out checklist)
