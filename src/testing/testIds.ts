@@ -1,4 +1,13 @@
 export const testIds = {
+  statusBar: {
+    container: "statusbar-container",
+    project: "statusbar-project",
+    projectName: "statusbar-project-name",
+    scope: "statusbar-scope",
+    scopeText: "statusbar-scope-text",
+    scopeToggle: "statusbar-scope-toggle",
+    jumpToContexts: "statusbar-jump-to-contexts",
+  },
   activityBar: {
     item: (workbenchId: "file" | "data" | "analysis" | "event") => `activitybar-item-${workbenchId}`,
     file: "activitybar-item-file",

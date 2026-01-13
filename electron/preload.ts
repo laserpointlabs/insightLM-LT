@@ -153,6 +153,7 @@ try {
     getCurrent: () => ipcRenderer.invoke("project:getCurrent"),
     listRecents: () => ipcRenderer.invoke("project:listRecents"),
     open: (dataDir: string) => ipcRenderer.invoke("project:open", dataDir),
+    pick: (kind: "new" | "open") => ipcRenderer.invoke("project:pick", kind),
   },
 
   // Project-scoped UI state (disk-backed): active tab + scoping mode, etc.

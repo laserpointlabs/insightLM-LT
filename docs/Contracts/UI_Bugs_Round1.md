@@ -19,20 +19,20 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
 ## Must‑match behaviors (MVP checklist)
 
 ### A) Primary Side Bar views (Dashboards / Contexts / Workbooks / Chat) — **no hopping / no disappearing**
-- [ ] **A0. View order is stable (no reordering / no “jump to top”)**:
+- [x] **A0. View order is stable (no reordering / no “jump to top”)**:
   - The vertical order is always: **Dashboards → Contexts → Workbooks → Chat**.
   - Expanding/collapsing any view must **not** reorder views or cause a view header to “jump” to the top unexpectedly.
 - [ ] **A1. Expanded views never “disappear”**:
   - Repro we must fix: open **Dashboards + Contexts + Workbooks**, then expand **Chat** → **Workbooks must remain expanded** (not auto-collapsed, not unmounted, not pushed off-screen without scroll affordance).
-- [ ] **A2. VS Code-style height allocation (“SplitView-ish”)**:
+- [x] **A2. VS Code-style height allocation (“SplitView-ish”)**:
   - With **multiple expanded views**, the layout must remain stable and predictable.
   - At minimum: **the last expanded view grows to fill the remaining space**, and other expanded views are allowed to shrink (no hard `flex-shrink: 0` causing off-screen loss).
   - When **only one** of Dashboards/Contexts/Workbooks is expanded (above Chat), it fills the available area.
-- [ ] **A3. Collapsed views dock to bottom**:
+- [x] **A3. Collapsed views dock to bottom**:
   - Collapsing the lowest view header drops to the bottom; expanding upper views must not push bottom headers off-screen.
-- [ ] **A4. Constrained space behavior is scroll-first**:
+- [x] **A4. Constrained space behavior is scroll-first**:
   - If the sidebar can’t fit all expanded view content, the sidebar uses **vertical scrolling** (no off-screen headers with no scroll).
-- [ ] **A5. No horizontal overflow**:
+- [x] **A5. No horizontal overflow**:
   - Sidebar never shows a horizontal scrollbar; long rows truncate/wrap deterministically.
 - [ ] **A6. Resizers behave deterministically**:
   - Dragging a resizer doesn’t “jump to max/zero”.
@@ -40,30 +40,30 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
   - Resizer handles are always available **between adjacent expanded views** (even if a middle view is collapsed):
     - Example: if **Dashboards** and **Workbooks** are expanded while **Contexts** is collapsed, you must still be able to resize the boundary between the two expanded views.
   - Opening/closing **Chat** must not “break” the ability to resize other expanded views.
-- [ ] **A8. Workbooks view live updates correctly**:
+- [x] **A8. Workbooks view live updates correctly**:
   - Workbooks tree/list reflects changes without requiring manual refresh (create/rename/move/delete/import; and when switching contexts/workbooks where applicable).
   - If there is an intentional refresh trigger, it must be deterministic and obvious (no “stale UI”).
   - Explicit repro to fix: **create/import a workbook** → it must appear in Workbooks without needing **View → Reload**.
-- [ ] **A9. Contexts view live updates correctly**:
+- [x] **A9. Contexts view live updates correctly**:
   - Contexts list/active context UI reflects changes without requiring manual refresh.
   - Explicit repro to fix: add a new workbook (or change context membership) and the Contexts view must reflect it without needing **View → Reload**.
-- [ ] **A7. Persistence (per-project)**:
+- [x] **A7. Persistence (per-project)**:
   - Collapsed/expanded state and sizes persist per project (partition-scoped).
 
 ### B) Tabs / Editor area (VS Code parity)
-- [ ] **B1. Tabs never overflow off-screen without controls**:
+- [x] **B1. Tabs never overflow off-screen without controls**:
   - If too many tabs: deterministic overflow handling (scroll buttons / wrapping rules / truncation) per the parity doc.
 - [ ] **B2. Opening “Chat as a tab” does not break layout**:
   - Bug in `TODO.md` item **2** must be resolved: opening Chat in a tabbed layout must not collapse/force-close the left column view.
-- [ ] **B3. Active tab stability**:
+- [x] **B3. Active tab stability**:
   - Saving a file keeps the current tab active (already fixed; must not regress).
-- [ ] **B4. Unsaved changes are protected on tab close**:
+- [x] **B4. Unsaved changes are protected on tab close**:
   - Closing a dirty tab must prompt deterministically: **Save / Don’t Save / Cancel** (no silent data loss).
   - “Close All” style actions must also honor dirty tabs (batch prompt or per-tab prompt; deterministic).
-- [ ] **B5. Tab context menu (VS Code-style basics)**:
+- [x] **B5. Tab context menu (VS Code-style basics)**:
   - Right click tab → Close / Close Others / Close Saved / Close All (final set to match VS Code references).
   - Must be automation-safe (`testIds`) and keyboard/mouse deterministic.
-- [ ] **B6. Editor splits / groups (Chat + Document side-by-side)**:
+- [x] **B6. Editor splits / groups (Chat + Document side-by-side)**:
   - Support viewing **Chat tab** and a **Document** simultaneously (split left/right or up/down).
   - VS Code parity: editor groups model (not ad-hoc floating panes).
 
@@ -72,19 +72,19 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
 - [ ] **C2. Streaming output renders as Markdown progressively** (safe + deterministic)
 - [ ] **C3. `@` mention insertion caret stability** (no offset)
 - [ ] **C4. Clear empty/loading/error states** (no silent failures)
-- [ ] **C5. Chat context picker is not confusing / no duplicate lists**:
+- [x] **C5. Chat context picker is not confusing / no duplicate lists**:
   - Chat “Context” dropdown must not show the same workbook twice (e.g., Quick Workbooks plus `[WB] ...` contexts in the contexts list).
   - “Go to Contexts…” in the picker must reliably jump/expand the Contexts view (no “does nothing”).
 
 ### D) Context controls (scoping + “active context” indicator)
 - [ ] **D1. Active context display is accurate + not noisy**:
   - No “too much context” / redundant labeling; matches contract targets.
-- [ ] **D2. Scope indicators stay in sync**:
+- [x] **D2. Scope indicators stay in sync**:
   - Main header + Contexts header show the same scoping mode deterministically.
-- [ ] **D3. Context cards: workbook list is collapsible (VS Code section-style)**:
+- [x] **D3. Context cards: workbook list is collapsible (VS Code section-style)**:
   - Context cards that include many workbooks must not dominate the view.
   - The workbook list inside each Context card can be expanded/collapsed, and the collapsed state persists per project.
-- [ ] **D4. Chat context picker updates when Workbooks change (no full reload)**:
+- [x] **D4. Chat context picker updates when Workbooks change (no full reload)**:
   - Creating/renaming/deleting a workbook updates the Chat “Context” dropdown’s **Quick: Workbooks** list immediately.
   - Must not require **View → Reload** to see a newly created workbook.
 - [ ] **D5. Workbook CRUD cascades to Contexts + Active Context (no stale references)**:
@@ -133,7 +133,7 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
   - Assert neither view collapses or becomes inaccessible.
 
 ### 3) No horizontal overflow (sidebar)
-- [ ] Assert `scrollWidth <= clientWidth + epsilon` for `sidebar-container`.
+- [x] Assert `scrollWidth <= clientWidth + epsilon` for `sidebar-container`. (`tests/automation-smoke-ui.mjs`)
 
 ### 4) Tabbed Chat does not collapse sidebar
 - [ ] Repro TODO bug (2): open Chat into editor tabs and assert sidebar view(s) remain visible and unchanged.

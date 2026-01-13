@@ -323,7 +323,7 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 ## Backlog additions (Jan 12, 2026) — captured
 
 ### Chat / Context / UX
-- [ ] Should we filter Chat composer `@` results for the **current context**? (Or intentionally allow cross-context jumps.)
+- [x] Should we filter Chat composer `@` results for the **current context**? (Or intentionally allow cross-context jumps.) (Scoped mode now filters `@` to active Context workbooks; smoke-covered)
 - [ ] Add `/` rules for a user type (slash commands / rule invocation).
 - [ ] Incorporate a **planning** flow in chat for complex problems (may use a team if needed).
 
@@ -346,7 +346,7 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 ---
 
 ## UI / Layout follow-ups (next)
-- [ ] **Status bar (bottom)**: add a VS Code-like status bar row at the bottom of the workbench.
-  - [ ] Move **Project** indicator (currently in the top area) into the status bar.
-  - [ ] Move **Scope** indicator (Scoped/All + active context summary) into the status bar.
-- [ ] **Top title bar**: move the menu bar into the very top title/header row (VS Code/Cursor-style) to maximize vertical workspace area.
+- [x] **Status bar (bottom)**: add a VS Code-like status bar row at the bottom of the workbench.
+  - [x] Move **Project** indicator (currently in the top area) into the status bar.
+  - [x] Move **Scope** indicator (Scoped/All + active context summary) into the status bar.
+- [x] **Top title bar**: move the menu bar into the very top title/header row (VS Code/Cursor-style) to maximize vertical workspace area.

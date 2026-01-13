@@ -108,6 +108,13 @@ export interface ElectronAPI {
     setMode: (mode: "all" | "context") => Promise<{ mode: "all" | "context" }>;
   };
 
+  project?: {
+    getCurrent: () => Promise<{ dataDir: string; projectId: string }>;
+    listRecents: () => Promise<{ recents: Array<{ name: string; dataDir: string; lastOpenedAt?: number }> }>;
+    open: (dataDir: string) => Promise<{ ok: true }>;
+    pick?: (kind: "new" | "open") => Promise<{ ok: boolean; dataDir?: string; cancelled?: boolean; error?: string }>;
+  };
+
   projectState?: {
     get: () => Promise<{
       version: 1;

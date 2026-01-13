@@ -375,11 +375,11 @@ async function connectWithRetry(timeoutMs = 45000, wantProjectNameContains = nul
       if (wantProjectNameContains) {
         const want = String(wantProjectNameContains || "").trim();
         if (want) {
-          const ok = await waitForSelector(cdp.evaluate, 'span[data-testid="sidebar-project-name"]', 20000);
+          const ok = await waitForSelector(cdp.evaluate, 'span[data-testid="statusbar-project-name"]', 20000);
           if (!ok) throw new Error("Project name indicator missing");
           const name = await cdp.evaluate(`
             (() => {
-              const el = document.querySelector('span[data-testid="sidebar-project-name"]');
+              const el = document.querySelector('span[data-testid="statusbar-project-name"]');
               return el ? (el.innerText || "").trim() : "";
             })()
           `);
@@ -443,8 +443,9 @@ async function run() {
 
     // Enable automation mode (force-show hover-only controls).
     await ensureAutomationMode(evaluate);
-    // Project header should be visible (project indicator).
-    await waitForSelector(evaluate, 'div[data-testid="sidebar-project"]', 20000);
+    // Status bar should be visible (project indicator).
+    await waitForSelector(evaluate, 'div[data-testid="statusbar-container"]', 20000);
+    await waitForSelector(evaluate, 'span[data-testid="statusbar-project-name"]', 20000);
 
     // Ensure we are on the File workbench (Insight Workbench) so the stacked sidebar views exist.
     const contextsHeaderSelector = 'button[data-testid="sidebar-contexts-header"]';
@@ -589,10 +590,10 @@ async function run() {
     );
     console.log("✅ Sidebar views: single expanded view fills available area (Dashboards + Contexts)");
 
-    // Context scoping: indicator must be visible in BOTH the main header and the Contexts section header,
+    // Context scoping: indicator must be visible in BOTH the Status Bar and the Contexts section header,
     // even when Contexts is collapsed.
-    await waitForSelector(evaluate, 'button[data-testid="sidebar-scope-indicator"]', 20000);
-    await waitForSelector(evaluate, '[data-testid="sidebar-scope-text"]', 20000);
+    await waitForSelector(evaluate, 'button[data-testid="statusbar-scope-toggle"]', 20000);
+    await waitForSelector(evaluate, '[data-testid="statusbar-scope-text"]', 20000);
     await waitForSelector(evaluate, 'button[data-testid="contexts-scope-toggle"]', 20000);
 
     // Collapse Contexts to prove the header accessory stays visible.
@@ -629,21 +630,21 @@ async function run() {
     })();
     if (!flipped) fail("Context scoping toggle did not flip label in time");
 
-    // Main header scope text should clearly state "All workbooks" when in ALL mode.
+    // Status bar scope text should clearly state "All workbooks" when in ALL mode.
     if (String(flipped).toUpperCase().includes("ALL")) {
-      const ok = await waitForTextContains(evaluate, '[data-testid="sidebar-scope-text"]', "All workbooks", 20000);
-      if (!ok) fail('Main header did not show "All workbooks" after switching to ALL');
+      const ok = await waitForTextContains(evaluate, '[data-testid="statusbar-scope-text"]', "All workbooks", 20000);
+      if (!ok) fail('Status bar did not show "All workbooks" after switching to ALL');
     }
 
-    // Toggle back via the MAIN header indicator and assert the Contexts header accessory matches.
-    await clickSelector(evaluate, 'button[data-testid="sidebar-scope-indicator"]');
+    // Toggle back via the Status Bar and assert the Contexts header accessory matches.
+    await clickSelector(evaluate, 'button[data-testid="statusbar-scope-toggle"]');
     const backOk = await (async () => {
       const start = Date.now();
       while (Date.now() - start < 20000) {
         const now = await evaluate(`
           (() => {
             const a = document.querySelector('button[data-testid="contexts-scope-toggle"]');
-            const b = document.querySelector('button[data-testid="sidebar-scope-indicator"]');
+            const b = document.querySelector('button[data-testid="statusbar-scope-toggle"]');
             const la = a ? (a.innerText || "").trim() : null;
             const lb = b ? (b.innerText || "").trim() : null;
             return la && lb ? la === lb : false;
@@ -654,8 +655,8 @@ async function run() {
       }
       return false;
     })();
-    if (!backOk) fail("Main header scope indicator did not stay in sync with Contexts header toggle");
-    console.log("✅ Verified scoping indicator is always visible + toggles stay in sync (main + contexts header)");
+    if (!backOk) fail("Status bar scope toggle did not stay in sync with Contexts header toggle");
+    console.log("✅ Verified scoping indicator is always visible + toggles stay in sync (status bar + contexts header)");
 
     // NOTE: Project-scoped persistence across relaunch is proven deterministically in
     // `tests/run-prod-renderer-smoke.mjs` because in-app relaunch can disrupt CDP connectivity.
@@ -867,6 +868,40 @@ async function run() {
       fail("Could not discover created workbook id in UI (workbook may not have been created or list did not refresh)");
     }
     console.log(`✅ Created workbook "${wbName}" (${workbookId})`);
+
+    // Create a second workbook that is NOT part of the active "[WB] ..." context.
+    // We'll use this to prove Chat @ mentions are truly scoped (not just "top N" luck).
+    await clickSelector(evaluate, 'button[data-testid="workbooks-create"]');
+    await waitForSelector(evaluate, 'input[data-testid="input-dialog-input"]', 20000);
+    // IMPORTANT: Mention parsing only supports single-token "@query" (no whitespace).
+    // Use an underscore token so the mention menu stays open while we type the query.
+    const otherWbToken = `ZZZ_OTHER_WB_${Date.now()}`;
+    await setInputValue(evaluate, 'input[data-testid="input-dialog-input"]', otherWbToken);
+    const okBtn2 = 'button[data-testid="input-dialog-ok"]';
+    const okPresent2 = await evaluate(`!!document.querySelector(${jsString(okBtn2)})`);
+    if (okPresent2) await clickSelector(evaluate, okBtn2);
+    await waitForGone(evaluate, 'input[data-testid="input-dialog-input"]', 20000);
+
+    const otherWorkbookId = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 20000) {
+        const id = await evaluate(`
+          (() => {
+            const items = Array.from(document.querySelectorAll('[data-testid^="workbooks-item-"]'));
+            const hit = items.find(el => (el.innerText || "").includes(${jsString(otherWbToken)}));
+            if (!hit) return null;
+            const tid = hit.getAttribute("data-testid") || "";
+            return tid.startsWith("workbooks-item-") ? tid.slice("workbooks-item-".length) : null;
+          })()
+        `);
+        if (id) return id;
+        await sleep(150);
+      }
+      return null;
+    })();
+
+    if (!otherWorkbookId) fail("Could not discover second workbook id in UI");
+    console.log(`✅ Created second workbook "${otherWbToken}" (${otherWorkbookId})`);
 
     // Chat context picker should refresh its Quick Workbooks list without a full reload.
     // Open the Context menu and assert the new workbook appears.
@@ -1809,12 +1844,24 @@ async function run() {
     }
 
     // Sanity: Chat @ mention menu opens and inserts a workbook:// reference.
+    // Additionally: in Scoped mode, Chat @ mentions must be filtered to the ACTIVE context's workbooks (not all project workbooks).
+    // We prove this by searching for the second workbook's token and asserting "No matches".
+    await ensureContextScopingMode(evaluate, "context");
     await clickSelector(evaluate, 'textarea[data-testid="chat-input"]');
-    await typeText(evaluate, 'textarea[data-testid="chat-input"]', '@');
+    await typeText(evaluate, 'textarea[data-testid="chat-input"]', `@${otherWbToken}`);
     const chatMenuOk = await waitForSelector(evaluate, 'div[data-testid="chat-mention-menu"]', 20000);
     if (!chatMenuOk) fail("Chat @ mention menu did not appear");
+    const noMatchesOk = await waitForTextContains(evaluate, 'div[data-testid="chat-mention-menu"]', "No matches", 20000);
+    if (!noMatchesOk) fail("Chat @ mentions did not appear scoped (expected 'No matches' when searching for an out-of-context workbook)");
+
+    // Now open the menu without a query and assert the ACTIVE workbook is present and selectable.
+    await clickSelector(evaluate, 'textarea[data-testid="chat-input"]');
+    await typeText(evaluate, 'textarea[data-testid="chat-input"]', '@');
     const chatItemOk = await waitForSelector(evaluate, 'button[data-testid^="chat-mention-item-"]', 30000);
     if (!chatItemOk) fail("Chat @ mention menu appeared but no items were available");
+    const activeWorkbookTid = `chat-mention-item-workbook-${encodeURIComponent(String(workbookId || ""))}`;
+    const activeMentionOk = await waitForSelector(evaluate, `button[data-testid="${activeWorkbookTid}"]`, 20000);
+    if (!activeMentionOk) fail("Active workbook was not present in Chat @ mention list under Scoped mode");
     const firstChatMention = await evaluate(`
       (() => {
         const btn = document.querySelector('button[data-testid^="chat-mention-item-"]');

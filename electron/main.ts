@@ -150,7 +150,38 @@ function setAppMenu() {
   template.push({ role: "viewMenu" });
   template.push({ label: "Demos", submenu: demosSubmenu });
   template.push({ role: "windowMenu" });
-  template.push({ role: "helpMenu" });
+  // Ensure Help is present (Windows/Linux menubar parity).
+  // Keep it minimal and deterministic for MVP: an About item.
+  if (process.platform === "darwin") {
+    template.push({ role: "helpMenu" });
+  } else {
+    template.push({
+      label: "Help",
+      submenu: [
+        {
+          label: "About",
+          click: async () => {
+            try {
+              const v = app.getVersion();
+              dialog.showMessageBox({
+                type: "info",
+                title: "About insightLM-LT",
+                message: `insightLM-LT ${v}`,
+                buttons: ["OK"],
+              });
+            } catch (e) {
+              dialog.showMessageBox({
+                type: "info",
+                title: "About insightLM-LT",
+                message: "insightLM-LT",
+                buttons: ["OK"],
+              });
+            }
+          },
+        },
+      ],
+    });
+  }
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);

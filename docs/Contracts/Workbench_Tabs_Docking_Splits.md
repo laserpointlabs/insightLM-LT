@@ -10,16 +10,16 @@
     - VS Code release notes: tab title context menu contributions (`editor/title/context`) and split-in-group commands (`workbench.action.splitEditorInGroup`, etc.)
 
 #### Must‑match behaviors (checklist — what we will copy)
-- [ ] **Editor groups**: split the editor area into multiple groups (vertical + horizontal).
-- [ ] **Tabs per group**: each group has its own tab strip; switching tabs doesn’t collapse other groups.
-- [ ] **Move tabs between groups** (drag/drop or command-driven).
+- [x] **Editor groups**: split the editor area into multiple groups (vertical + horizontal).
+- [x] **Tabs per group**: each group has its own tab strip; switching tabs doesn’t collapse other groups.
+- [x] **Move tabs between groups** (command-driven is sufficient for MVP).
 - [ ] **Open to the side** (create a new group + move/open tab there).
 - [ ] **Dockable Chat**:
-  - [ ] Chat can be shown as a **sidebar view** and as an **editor tab**
+  - [x] Chat can be shown as a **sidebar view** and as an **editor tab**
   - [ ] Chat can be docked to a VS Code-style **panel region** (bottom/right/left/top) without breaking existing tabs
-- [ ] **Persistence**: group layout + open tabs persist per Project/Workspace.
+- [x] **Persistence (renderer reload)**: split layout persists across `View → Reload` / renderer reload.
 - [ ] **Unsaved close protection**:
-  - [ ] Closing a dirty tab prompts deterministically: **Save / Don’t Save / Cancel**
+  - [x] Closing a dirty tab prompts deterministically: **Save / Don’t Save / Cancel**
   - [ ] Bulk closes (Close All / Close Others / Close Saved) handle dirty tabs deterministically
 
 #### Explicit non‑goals (for this pass)
@@ -34,10 +34,10 @@
 - `tests/automation-smoke-ui.mjs` (deterministic smoke: split groups + move tab + dock Chat)
 
 #### Proof (deterministic smoke)
-- [ ] Open 2 docs → split editor → assert both groups visible with independent tabs.
-- [ ] Move a tab to the other group → assert it appears there.
+- [x] Open 2 docs → split editor → assert both groups visible with independent tabs. (`tests/automation-smoke-ui.mjs`)
+- [x] Move a tab to the other group → assert it appears there. (`tests/automation-smoke-ui.mjs`)
 - [ ] Dock Chat to panel/sidecar → assert Chat stays visible while tabs remain navigable.
-- [ ] Dirty tab close → prompt appears → Cancel keeps tab open, Don’t Save closes, Save persists then closes.
+- [x] Dirty tab close → prompt appears → Cancel keeps tab open, Don’t Save closes, Save persists then closes. (`tests/automation-smoke-ui.mjs`)
 
 ---
 

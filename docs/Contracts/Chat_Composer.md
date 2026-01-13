@@ -11,6 +11,9 @@
 - [x] **Autosize**: input grows with content up to a max height; after that it becomes internally scrollable (no overlap).
 - [x] **Wrapping**: normal word-wrap; long tokens do not create horizontal overflow.
 - [x] **Mentions**: typing `@` opens a menu anchored to the composer; selecting an item inserts cleanly **without caret jumping** or text shifting.
+- [x] **Mentions respect scope (Chat only)**:
+  - When Scope = **Scoped**, `@` suggestions include **only** the active Context’s workbooks/folders/files (no “entire project” leakage).
+  - When Scope = **All**, `@` suggestions include all project workbooks/folders/files.
 - [x] **Chips/refs**: referenced items render as stable chips (no inline overlay hacks inside the textarea).
 - [x] **IME-safe**: don’t send while the user is composing text (composition events).
 - [x] **Deterministic UX**: clear disabled states; explicit empty/error states remain.
@@ -53,6 +56,7 @@
 
 #### Proof (deterministic smoke)
 - [x] Insert `@` mention → verify chip present.
+- [x] Scoped mention filtering: in Scoped mode, searching `@<out-of-context workbook>` shows **“No matches”** (`tests/automation-smoke-ui.mjs`).
 - [x] Draft persistence across tab switches.
 - [x] Send message → verify it renders.
 - [x] Multi-line typing → assert textarea **height grows** up to `maxRows`, then becomes internally scrollable.

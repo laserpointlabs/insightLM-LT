@@ -150,6 +150,7 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
   const didHydrateSplitRef = useRef(false);
   const [splitHydrateNonce, setSplitHydrateNonce] = useState(0);
   const suppressActiveTabPersistRef = useRef(false);
+  const splitHydrateAttemptRef = useRef<{ startedAt: number; tries: number }>({ startedAt: 0, tries: 0 });
 
   const allIds = useRef<Set<string>>(new Set());
   allIds.current = new Set(documents.map((d) => d.id));
@@ -291,6 +292,7 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     } catch {
       // ignore
     }
+    let markDone = true;
     try {
       const raw = localStorage.getItem(SPLIT_STORAGE_KEY);
       if (!raw) {
@@ -311,6 +313,25 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
 
       const aIds = Array.isArray(parsed.groupA) ? parsed.groupA.map((x: any) => docIdForIdentity(x)).filter(Boolean) as string[] : [];
       const bIds = Array.isArray(parsed.groupB) ? parsed.groupB.map((x: any) => docIdForIdentity(x)).filter(Boolean) as string[] : [];
+
+      // Determinism: on renderer reload, tabs are restored sequentially. If we hydrate split too early,
+      // we can fail to resolve groupB identities and accidentally collapse to "single" and persist that.
+      const wantsSplit = parsed.mode === "right" || parsed.mode === "down";
+      const expectedBCount = Array.isArray(parsed.groupB) ? parsed.groupB.length : 0;
+      if (wantsSplit && expectedBCount > 0 && bIds.length === 0) {
+        const now = Date.now();
+        const st = splitHydrateAttemptRef.current;
+        if (!st.startedAt) st.startedAt = now;
+        st.tries += 1;
+        // Retry for a short window; fail-soft after to avoid hanging forever.
+        if (now - st.startedAt < 4000 && st.tries < 30) {
+          markDone = false;
+          setTimeout(() => {
+            if (!didHydrateSplitRef.current) setSplitHydrateNonce((n) => n + 1);
+          }, 150);
+          return;
+        }
+      }
       const assigned = new Set<string>([...aIds, ...bIds]);
       const remaining = documents.map((d) => d.id).filter((id) => !assigned.has(id));
       const nextA = [...aIds, ...remaining];
@@ -357,7 +378,7 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     } catch {
       // ignore
     } finally {
-      didHydrateSplitRef.current = true;
+      if (markDone) didHydrateSplitRef.current = true;
     }
   }, [documents.length, docIdForIdentity, splitHydrateNonce]);
 

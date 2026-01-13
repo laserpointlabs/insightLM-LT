@@ -355,7 +355,7 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
         try {
           await window.electronAPI?.contextScope?.setMode?.("context");
           setScopeChipMode("context");
-          window.dispatchEvent(new CustomEvent("context:scoping"));
+          window.dispatchEvent(new CustomEvent("context:scoping", { detail: { mode: "context" } }));
         } catch {
           // ignore
         }
@@ -449,8 +449,32 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
       return;
     }
     try {
-      const all = await window.electronAPI.workbook.getAll();
-      const workbooks = Array.isArray(all) ? all : [];
+      const [all, scopeRes, activeRes] = await Promise.all([
+        window.electronAPI.workbook.getAll(),
+        window.electronAPI?.contextScope?.getMode
+          ? window.electronAPI.contextScope.getMode().catch(() => ({ mode: "context" as const }))
+          : Promise.resolve({ mode: "context" as const }),
+        window.electronAPI?.mcp?.call
+          ? window.electronAPI.mcp
+              .call("context-manager", "tools/call", { name: "get_active_context", arguments: {} })
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+      const scopeMode: "all" | "context" =
+        scopeRes?.mode === "all" || scopeRes?.mode === "context" ? scopeRes.mode : "context";
+
+      const workbooksRaw = Array.isArray(all) ? all : [];
+      const activeWorkbookIds: string[] =
+        scopeMode === "context" && Array.isArray((activeRes as any)?.active?.workbook_ids)
+          ? (activeRes as any).active.workbook_ids.map((x: any) => String(x)).filter(Boolean)
+          : [];
+
+      const allowed = scopeMode === "context" ? new Set(activeWorkbookIds) : null;
+      const workbooks = allowed
+        ? workbooksRaw.filter((w: any) => allowed.has(String(w?.id || "")))
+        : workbooksRaw;
+
       const items: MentionItem[] = [];
       for (const wb of workbooks.filter((w: any) => !w?.archived)) {
         const wbId = String(wb?.id || "");
@@ -1589,7 +1613,7 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
                       try {
                         await window.electronAPI?.contextScope?.setMode?.(next);
                         setScopeChipMode(next);
-                        window.dispatchEvent(new CustomEvent("context:scoping"));
+                        window.dispatchEvent(new CustomEvent("context:scoping", { detail: { mode: next } }));
                       } catch {
                         // ignore
                       }

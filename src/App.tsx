@@ -13,12 +13,12 @@ import { useWorkbenchStore } from "./store/workbenchStore";
 import { extensionRegistry } from "./services/extensionRegistry";
 import { jupyterExtensionManifest } from "./extensions/jupyter";
 import { spreadsheetExtensionManifest } from "./extensions/spreadsheet";
-import { ExtensionToggle } from "./components/Extensions/ExtensionToggle";
 import { ToastCenter } from "./components/Notifications/ToastCenter";
 import { initAutomationUI } from "./testing/automationUi";
 import { testIds } from "./testing/testIds";
 import { notifyError, notifyInfo, notifySuccess } from "./utils/notify";
 import { SearchIcon } from "./components/Icons";
+import { StatusBar } from "./components/StatusBar";
 
 function App() {
   const [dashboardActionButton, setDashboardActionButton] = useState<React.ReactNode>(null);
@@ -594,95 +594,56 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-gray-50">
+    <div className="flex h-screen w-screen flex-col bg-gray-50">
       <ToastCenter />
-      {/* Activity Bar */}
-      <ActivityBar />
+      <div className="flex min-h-0 flex-1">
+        {/* Activity Bar */}
+        <ActivityBar />
 
-      {/* Sidebar */}
-      <div
-        className="flex flex-col border-r border-gray-300 bg-white overflow-x-hidden"
-        style={{ width: `${sidebarWidth}px` }}
-        data-testid={testIds.sidebar.container}
-      >
-        <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
-          <div className="min-w-0">
-            <h1 className="text-sm font-semibold text-gray-700">insightLM-LT</h1>
-            <div
-              className="mt-0.5 w-full truncate text-left text-[10px] text-gray-500"
-              title={projectDataDir ? `Project dataDir:\n${projectDataDir}` : "Project"}
-              data-testid={testIds.sidebar.project.container}
-            >
-              <span className="text-gray-500">Project: </span>
-              <span className="font-medium text-gray-700" data-testid={testIds.sidebar.project.name}>
-                {projectLabel}
-              </span>
+        {/* Sidebar */}
+        <div
+          className="flex flex-col border-r border-gray-300 bg-white overflow-x-hidden"
+          style={{ width: `${sidebarWidth}px` }}
+          data-testid={testIds.sidebar.container}
+        >
+          <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+            {renderWorkbenchContent()}
+          </div>
+        </div>
+
+        {/* Horizontal Resizable Separator */}
+        <ResizablePane
+          direction="horizontal"
+          onResize={setSidebarWidth}
+          initialSize={sidebarWidth}
+          minSize={200}
+          maxSize={800}
+        />
+
+        {/* Main Content Area */}
+        <div className="flex-1 bg-white">
+          {openDocuments.length > 0 ? (
+            <DocumentViewer documents={openDocuments} onClose={closeDocument} onJumpToContexts={jumpToContexts} />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-gray-400">Click a document to view it</p>
             </div>
-            <button
-              type="button"
-              className="mt-0.5 w-full truncate text-left text-[10px] text-gray-500 hover:text-gray-700"
-              onClick={jumpToContexts}
-              title="Jump to Contexts"
-              data-testid={testIds.sidebar.activeContextJump}
-            >
-              <span data-testid={testIds.sidebar.scopeText}>
-                Scope:{" "}
-                <span className="font-medium text-gray-700">
-                  {contextScopeMode === "all"
-                    ? "All workbooks"
-                    : activeContextName
-                      ? activeContextName
-                      : "Active context"}
-                </span>
-              </span>
-            </button>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className={`flex items-center rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                contextScopeMode === "all"
-                  ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  : "bg-blue-600 text-white hover:bg-blue-700"
-              }`}
-              onClick={toggleContextScoping}
-              title={
-                contextScopeMode === "all"
-                  ? "Scoping: All workbooks (click to enable context scoping)"
-                  : "Scoping: Active context only (click to disable)"
-              }
-              aria-label="Toggle context scoping"
-              data-testid={testIds.sidebar.scopeIndicator}
-            >
-              {contextScopeMode === "all" ? "ALL" : "SCOPED"}
-            </button>
-            <ExtensionToggle />
-          </div>
-        </div>
-        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
-          {renderWorkbenchContent()}
+          )}
         </div>
       </div>
 
-      {/* Horizontal Resizable Separator */}
-      <ResizablePane
-        direction="horizontal"
-        onResize={setSidebarWidth}
-        initialSize={sidebarWidth}
-        minSize={200}
-        maxSize={800}
+      <StatusBar
+        projectLabel={projectLabel}
+        projectDataDir={projectDataDir}
+        scopeMode={contextScopeMode}
+        activeContextName={activeContextName}
+        onToggleScope={() => {
+          toggleContextScoping().catch((e) => {
+            notifyError(e instanceof Error ? e.message : "Failed to toggle scope", "Scope");
+          });
+        }}
+        onJumpToContexts={jumpToContexts}
       />
-
-      {/* Main Content Area */}
-      <div className="flex-1 bg-white">
-        {openDocuments.length > 0 ? (
-          <DocumentViewer documents={openDocuments} onClose={closeDocument} onJumpToContexts={jumpToContexts} />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-gray-400">Click a document to view it</p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
