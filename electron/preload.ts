@@ -8,7 +8,18 @@ try {
   const cleanTabs =
     String(process.env.INSIGHTLM_CLEAN_TABS_ON_START || "").toLowerCase() === "1" ||
     String(process.env.INSIGHTLM_CLEAN_TABS_ON_START || "").toLowerCase() === "true";
-  if (cleanTabs) {
+  // IMPORTANT: `View → Reload` reloads the renderer and re-runs preload. We only want to
+  // "clean tabs on start" for a fresh renderer process (smoke/dev determinism), not for
+  // an in-app reload where users expect tabs/splits to persist.
+  const isFreshRendererProcess = (() => {
+    try {
+      // `process.uptime()` is per-process and continues across renderer reloads.
+      return typeof process?.uptime === "function" ? process.uptime() < 5 : false;
+    } catch {
+      return false;
+    }
+  })();
+  if (cleanTabs && isFreshRendererProcess) {
     const g: any = globalThis as any;
     g.addEventListener?.("DOMContentLoaded", () => {
       try {
@@ -103,6 +114,20 @@ try {
       ipcRenderer.invoke("file:getPath", workbookId, relativePath),
     readBinary: (workbookId: string, relativePath: string) =>
       ipcRenderer.invoke("file:readBinary", workbookId, relativePath),
+  },
+
+  // App-wide events (main → renderer)
+  events: {
+    onWorkbooksChanged: (cb: (payload: any) => void) => {
+      const handler = (_evt: any, payload: any) => cb(payload);
+      ipcRenderer.on("insightlm:workbooks:changed", handler);
+      return () => ipcRenderer.removeListener("insightlm:workbooks:changed", handler);
+    },
+    onWorkbookFilesChanged: (cb: (payload: { workbookId?: string }) => void) => {
+      const handler = (_evt: any, payload: any) => cb(payload || {});
+      ipcRenderer.on("insightlm:workbooks:filesChanged", handler);
+      return () => ipcRenderer.removeListener("insightlm:workbooks:filesChanged", handler);
+    },
   },
 
   // Archive operations

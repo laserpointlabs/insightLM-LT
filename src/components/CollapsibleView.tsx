@@ -14,6 +14,7 @@ interface CollapsibleViewProps {
   actionButton?: ReactNode;
   collapsedActionButton?: ReactNode;
   testId?: string;
+  contentTestId?: string;
 }
 
 export function CollapsibleView({
@@ -25,9 +26,10 @@ export function CollapsibleView({
   actionButton,
   collapsedActionButton,
   testId,
+  contentTestId,
 }: CollapsibleViewProps) {
   return (
-    <div className="flex h-full flex-col border-b border-gray-200">
+    <div className="flex h-full min-h-0 flex-col border-b border-gray-200">
       {/* Header with collapse button */}
       <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-2 py-1">
         <button
@@ -51,7 +53,12 @@ export function CollapsibleView({
 
       {/* Content */}
       {!isCollapsed && (
-        <div className="flex-1 overflow-hidden">{children}</div>
+        <div
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+          data-testid={contentTestId}
+        >
+          {children}
+        </div>
       )}
     </div>
   );

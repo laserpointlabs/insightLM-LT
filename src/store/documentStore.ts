@@ -10,6 +10,11 @@ interface DocumentStore {
 
   openDocument: (doc: Omit<OpenDocument, "id">) => Promise<void>;
   closeDocument: (id: string) => void;
+  /**
+   * Refresh open documents from disk when we receive a workbook files-changed event.
+   * Safety: does NOT overwrite tabs with unsaved changes.
+   */
+  refreshOpenDocumentsForWorkbook: (workbookId: string) => Promise<{ refreshed: number; skippedDirty: number }>;
   updateDocumentContent: (id: string, content: string) => void;
   setEditing: (id: string, editing: boolean) => void;
   setUnsavedContent: (id: string, content: string) => void;
@@ -31,6 +36,48 @@ interface DocumentStore {
 }
 
 let nextDocId = 1;
+type RefreshResult = { refreshed: number; skippedDirty: number };
+const refreshDebounceByWorkbook = new Map<
+  string,
+  { timer: any; promise: Promise<RefreshResult>; resolve: (r: RefreshResult) => void }
+>();
+
+async function runRefresh(
+  workbookId: string,
+  get: () => DocumentStore,
+  set: any,
+): Promise<RefreshResult> {
+  const wb = String(workbookId || "").trim();
+  if (!wb) return { refreshed: 0, skippedDirty: 0 };
+
+  const { openDocuments } = get();
+  const targets = openDocuments.filter(
+    (d) => d.type !== "dashboard" && d.type !== "chat" && d.workbookId === wb && !!d.path,
+  );
+  if (!targets.length) return { refreshed: 0, skippedDirty: 0 };
+
+  let refreshed = 0;
+  let skippedDirty = 0;
+
+  for (const doc of targets) {
+    if (!doc.workbookId || !doc.path) continue;
+    if (get().hasUnsavedChanges(doc.id)) {
+      skippedDirty += 1;
+      continue;
+    }
+    try {
+      const content = await window.electronAPI.file.read(doc.workbookId, doc.path);
+      set((state: DocumentStore) => ({
+        openDocuments: state.openDocuments.map((d) => (d.id === doc.id ? { ...d, content } : d)),
+      }));
+      refreshed += 1;
+    } catch {
+      // ignore: best-effort refresh
+    }
+  }
+
+  return { refreshed, skippedDirty };
+}
 
 const OPEN_TABS_STORAGE_KEY = "insightlm.openTabs.v1";
 
@@ -448,6 +495,41 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           : state.lastOpenedDocId;
       return { openDocuments: remaining, lastOpenedDocId: nextLast };
     }),
+
+  refreshOpenDocumentsForWorkbook: async (workbookId: string) => {
+    const wb = String(workbookId || "").trim();
+    if (!wb) return { refreshed: 0, skippedDirty: 0 };
+
+    // Debounce event storms (e.g., many writes during tool loops): do ONE trailing refresh.
+    const existing = refreshDebounceByWorkbook.get(wb);
+    if (existing) {
+      try {
+        clearTimeout(existing.timer);
+      } catch {
+        // ignore
+      }
+      existing.timer = setTimeout(async () => {
+        const res = await runRefresh(wb, get, set);
+        existing.resolve(res);
+        refreshDebounceByWorkbook.delete(wb);
+      }, 200);
+      return existing.promise;
+    }
+
+    let resolve!: (r: RefreshResult) => void;
+    const promise = new Promise<RefreshResult>((r) => (resolve = r));
+    const entry = {
+      timer: setTimeout(async () => {
+        const res = await runRefresh(wb, get, set);
+        resolve(res);
+        refreshDebounceByWorkbook.delete(wb);
+      }, 200),
+      promise,
+      resolve,
+    };
+    refreshDebounceByWorkbook.set(wb, entry);
+    return promise;
+  },
 
   updateDocumentContent: (id, content) =>
     set((state) => ({

@@ -13,7 +13,7 @@ This file is the **single source of truth** for roadmap planning.
 These are captured as numbered items for easy reference. They also appear (grouped) throughout the roadmap below.
 
 ### Chat / Tabs / Views
-- [ ] **1) Chat draft text is lost when switching tabs**: type in chat input → switch to another tab → return → typed text is gone (persist draft per tab/thread, or warn before losing).
+- [x] **1) Chat draft text is lost when switching tabs**: type in chat input → switch to another tab → return → typed text is gone (persist draft per tab/thread, or warn before losing).
 - [ ] **2) Opening Chat in a tabbed layout collapses/forces-close the left column view**: opening Chat into a tab area collapses/slides the left column/canvas (layout must remain stable).
 - [ ] **3) First-open refresh required for `.is` docs or Sheets**: after launch, opening a `.is` document or a sheet sometimes requires a manual refresh.
 - [ ] **4) `@` mention caret/selection offset after inserting a chip**: after selecting an `@` suggestion and inserting the chip, caret resumes in the wrong place.
@@ -38,6 +38,9 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 
 ### LLM prompting (system prompt guidance)
 - [ ] **16) Add system prompt instructions for returning Sheets + Notebooks**: document expected formats; keep MCP/tool routing decoupled (fail-soft).
+
+### Chat / Planning / Governance (untriaged)
+- [ ] **17) Flashing chat tab when typing**: tab UI flashes while typing in the chat composer.
 
 ### Sheets (LLM authoring contract + MCP tools)
 - [ ] Define “Insight Sheet” authoring contract so LLM never guesses `.is` format: add Spreadsheet MCP tool surface (create/open/read-range/set-cells/view-state) + schema/examples. See `docs/MCP/SPREADSHEET_MCP_CONTRACT.md`.
@@ -108,11 +111,13 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 - [ ] Create proper production/dev smoke test `app.config` / config wiring
 
 ### Known bugs / corrections (MVP-level)
-- [ ] Tab focus bug: after saving a tab, the last tab is brought forward (should keep the current/saved tab active)
+- [x] Tab focus bug: after saving a tab, the last tab is brought forward (should keep the current/saved tab active)
 - [ ] Add link from dashboard card to supporting information (sources/content)
 - [ ] Fix Chat Settings to work without selecting a context (also see duplicate item under “Other fixes…”)
 - [ ] Fix overflow on right side of the canvas
-- [ ] Tabs/layout (VS Code parity): support editor groups (split vertical/horizontal) + allow Chat to dock as a sidecar/panel so users can view Chat and other tabs simultaneously (avoid constant switching). (Reference Map required)
+- [ ] Tabs/layout (VS Code parity):
+  - [x] Support editor groups (split vertical/horizontal) so users can view Chat + documents simultaneously.
+  - [ ] Allow Chat to dock as a sidecar/panel (beyond “Chat as a tab”). (Reference Map required)
 
 ### Notes
 - Notes: Need to work on CRUD operations by LLM
@@ -160,10 +165,10 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 - [ ] Add regression tests for folder move collisions and rename cascades
 
 ### Security / Demo proof (Project-scoped access)
-- [ ] Enforce + prove “Project-only” data access for Chat/RAG: deny absolute paths, path traversal (`..`), and symlink escape; add deterministic “deny” test. See `docs/Standards/PROJECT_DATA_ACCESS_BOUNDARY.md`.
+- [x] Enforce + prove “Project-only” data access for Chat/RAG: deny absolute paths, path traversal (`..`), and symlink escape; add deterministic “deny” test. See `docs/Standards/PROJECT_DATA_ACCESS_BOUNDARY.md`.
 
 ### Projects (Workspace parity)
-- [ ] Add first-class Projects (VS Code Workspace parity): File → New/Open/Open Recent + project-scoped persistence (layout/tabs/chat/contexts/workbooks/dashboards). See `docs/Standards/PROJECTS_WORKSPACES.md`.
+- [x] Add first-class Projects (VS Code Workspace parity): File → New/Open/Open Recent + project-scoped persistence (layout/tabs/chat/contexts/workbooks/dashboards). See `docs/Standards/PROJECTS_WORKSPACES.md`.
 
 ---
 
@@ -198,7 +203,7 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 - [ ] Right-click in document: “Ask chat to add text/diagram here...” (inline authoring helpers)
 
 ### Chat becomes iDA (Integrated Digital Assistant)
-- [x] Update Chat Area (rename label from Chat → iDA)
+- [ ] Update Chat Area (rename label from Chat → iDA)
 - [x] Add @(Focused Context)
 - [ ] Add /(Commands), Rules; save as hidden workbook; allow importing a central/general workbook of this type
 - [ ] Add actions and command `/Commands`
@@ -266,18 +271,18 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 - [x] Auto close the chat view when we pop-out to the tabbed view
 - [ ] Workbooks listed naturally to context so a user can select without special “single workbook context view” (also in context chip)
 - [x] Add automationState.workbooks mapping (name → id/path) to enable deterministic Workbooks UI automation using existing testIds
-- [ ] Improved handling of views open/collapsed state to prevent overlapping edge of screen
+- [x] Improved handling of views open/collapsed state to prevent overlapping/off-screen views (stable order + scroll-first + deterministic sizing)
 - [ ] Remove the words “Context:” and “Scope:” from chat text area chips
 - [ ] Context chip label is showing above the actual chip; should be just above chip
 
 ### Other fixes and bugs (later)
 - [ ] Change move icon to ↓↑
 - [ ] Add loading rotator and reports to user during Windows loading phase
-- [ ] Add split for chat tab and other tabs so user can review and chat at same time
+- [x] Add split for chat tab and other tabs so user can review and chat at same time
 - [ ] Animate the “Thinking…” indicator in chat
 - [ ] Fix the double sources
   - [ ] Improve the visual appeal of sources in AI chat response
-- [ ] Add split to tabs area to allow side-by-side viewer of multiple tabs
+- [x] Add split to tabs area to allow side-by-side viewer of multiple tabs
 - [ ] Clean up smoke testing workbooks and dashboards
 - [ ] Allow AI access to application context (current tabs, chat modes, chat data, open workbenches, loaded extensions, etc.)
 - [x] Add workbook search
@@ -293,7 +298,7 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 - [ ] Improve document tab capability (drag order, rename, etc.)
 - [ ] File context modal (save as… → PDF/Word/Excel)
 - [ ] Double click view to collapse views below and expand view fully
-- [ ] Quickworkbooks should highlight selected context workbook in Contexts view (or add “active” indicator)
+- [x] Quickworkbooks should highlight selected context workbook in Contexts view (or add “active” indicator)
 - [ ] Add copy/paste (Ctrl+C/V/etc.) commands to Workbooks view
 - [ ] Dashboard scoping question: should dashboard always be scoped by an `@`? If so, add `@All` option?
 
@@ -312,3 +317,36 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 
 ### Process / policy
 - [ ] Decoupling checks after every commit? or branch merge?
+
+---
+
+## Backlog additions (Jan 12, 2026) — captured
+
+### Chat / Context / UX
+- [ ] Should we filter Chat composer `@` results for the **current context**? (Or intentionally allow cross-context jumps.)
+- [ ] Add `/` rules for a user type (slash commands / rule invocation).
+- [ ] Incorporate a **planning** flow in chat for complex problems (may use a team if needed).
+
+### Markdown / Docs
+- [ ] Add a **slide show** tool for Markdown documents.
+- [ ] Add **math** rendering to Markdown + Chat composer.
+
+### Response quality / Safety
+- [ ] Add confidence level (and importance?) to each response; when confidence < 70%, run `team_evaluation`.
+  - [ ] Allow the LLM to select the team based on the context.
+  - [ ] Maybe generate the team based on context.
+    - [ ] Add a test suite to evaluate responses (possible human-in-the-loop).
+  - [ ] Persona MCP server + knowledge pack (proof?).
+- [ ] Bias evaluation module (detect/identify bias).
+
+### Packaging / Architecture
+- [ ] Portable and decoupled as much as possible.
+- [ ] Add decoupling check per smoke.
+
+---
+
+## UI / Layout follow-ups (next)
+- [ ] **Status bar (bottom)**: add a VS Code-like status bar row at the bottom of the workbench.
+  - [ ] Move **Project** indicator (currently in the top area) into the status bar.
+  - [ ] Move **Scope** indicator (Scoped/All + active context summary) into the status bar.
+- [ ] **Top title bar**: move the menu bar into the very top title/header row (VS Code/Cursor-style) to maximize vertical workspace area.

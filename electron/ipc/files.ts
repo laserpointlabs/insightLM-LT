@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
 import { FileService } from "../services/fileService";
 import { getWorkbookService } from "./workbooks";
 import { RAGIndexService } from "../services/ragIndexService";
@@ -9,6 +9,16 @@ let ragIndexService: RAGIndexService | null = null;
 export function setupFileIPC(ragService?: RAGIndexService) {
   ragIndexService = ragService || null;
   fileService = new FileService(getWorkbookService());
+
+  const broadcast = (channel: string, payload?: any) => {
+    try {
+      for (const w of BrowserWindow.getAllWindows()) {
+        w.webContents.send(channel, payload);
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   ipcMain.handle(
     "file:add",
@@ -22,6 +32,8 @@ export function setupFileIPC(ragService?: RAGIndexService) {
             console.error("Error auto-indexing file:", err);
           });
         }
+        broadcast("insightlm:workbooks:changed", {});
+        broadcast("insightlm:workbooks:filesChanged", { workbookId });
       } catch (error) {
         console.error("Error adding file:", error);
         throw error;
@@ -46,6 +58,8 @@ export function setupFileIPC(ragService?: RAGIndexService) {
     async (_, workbookId: string, oldPath: string, newName: string) => {
       try {
         await fileService.renameDocument(workbookId, oldPath, newName);
+        broadcast("insightlm:workbooks:changed", {});
+        broadcast("insightlm:workbooks:filesChanged", { workbookId });
       } catch (error) {
         console.error("Error renaming file:", error);
         throw error;
@@ -64,6 +78,8 @@ export function setupFileIPC(ragService?: RAGIndexService) {
             console.error("Error removing file from index:", err);
           });
         }
+        broadcast("insightlm:workbooks:changed", {});
+        broadcast("insightlm:workbooks:filesChanged", { workbookId });
       } catch (error) {
         console.error("Error deleting file:", error);
         throw error;
@@ -85,6 +101,11 @@ export function setupFileIPC(ragService?: RAGIndexService) {
           relativePath,
           targetWorkbookId,
         );
+        broadcast("insightlm:workbooks:changed", {});
+        broadcast("insightlm:workbooks:filesChanged", { workbookId: sourceWorkbookId });
+        if (String(targetWorkbookId) !== String(sourceWorkbookId)) {
+          broadcast("insightlm:workbooks:filesChanged", { workbookId: targetWorkbookId });
+        }
       } catch (error) {
         console.error("Error moving file:", error);
         throw error;
@@ -110,6 +131,11 @@ export function setupFileIPC(ragService?: RAGIndexService) {
           targetFolder,
           options,
         );
+        broadcast("insightlm:workbooks:changed", {});
+        broadcast("insightlm:workbooks:filesChanged", { workbookId: sourceWorkbookId });
+        if (String(targetWorkbookId) !== String(sourceWorkbookId)) {
+          broadcast("insightlm:workbooks:filesChanged", { workbookId: targetWorkbookId });
+        }
       } catch (error) {
         console.error("Error moving file to folder:", error);
         throw error;
@@ -133,6 +159,8 @@ export function setupFileIPC(ragService?: RAGIndexService) {
             console.error("Error auto-indexing updated file:", err);
           });
         }
+        broadcast("insightlm:workbooks:changed", {});
+        broadcast("insightlm:workbooks:filesChanged", { workbookId });
       } catch (error) {
         console.error("Error writing file:", error);
         throw error;

@@ -17,7 +17,7 @@ import { ExtensionToggle } from "./components/Extensions/ExtensionToggle";
 import { ToastCenter } from "./components/Notifications/ToastCenter";
 import { initAutomationUI } from "./testing/automationUi";
 import { testIds } from "./testing/testIds";
-import { notifyError, notifySuccess } from "./utils/notify";
+import { notifyError, notifyInfo, notifySuccess } from "./utils/notify";
 import { SearchIcon } from "./components/Icons";
 
 function App() {
@@ -29,12 +29,14 @@ function App() {
   const [contextScopeMode, setContextScopeMode] = useState<"all" | "context">("context");
   const [projectLabel, setProjectLabel] = useState<string>("Project");
   const [projectDataDir, setProjectDataDir] = useState<string>("");
-  const { openDocuments, closeDocument, openDocument } = useDocumentStore();
+  const { openDocuments, closeDocument, openDocument, refreshOpenDocumentsForWorkbook } = useDocumentStore();
   const {
     sidebarWidth,
+    chatHeight,
     viewHeights,
     collapsedViews,
     setSidebarWidth,
+    setChatHeight,
     setViewHeight,
     toggleViewCollapse,
   } = useLayoutStore();
@@ -148,6 +150,85 @@ function App() {
   // Lightweight automation mode: bots can force-show hover-only controls via `window.__insightlmAutomationUI.setMode(true)`.
   useEffect(() => {
     return initAutomationUI();
+  }, []);
+
+  // Bridge main-process workbooks/file change notifications into DOM events (for view auto-refresh),
+  // and invalidate workbook-rag cache so new/edited files become queryable immediately.
+  useEffect(() => {
+    const offChanged = window.electronAPI?.events?.onWorkbooksChanged?.(() => {
+      try {
+        window.dispatchEvent(new CustomEvent("workbooks:changed"));
+      } catch {
+        // ignore
+      }
+      // Best-effort global cache clear (directory stamp lag on Windows can otherwise cause stale RAG results).
+      (async () => {
+        try {
+          if (!window.electronAPI?.mcp?.call) return;
+          await window.electronAPI.mcp.call("workbook-rag", "tools/call", {
+            name: "rag_clear_cache",
+            arguments: {},
+          });
+        } catch {
+          // ignore
+        }
+      })();
+    });
+
+    const offFiles = window.electronAPI?.events?.onWorkbookFilesChanged?.((payload: any) => {
+      const workbookId = String(payload?.workbookId || "").trim();
+      try {
+        window.dispatchEvent(new CustomEvent("workbooks:changed"));
+      } catch {
+        // ignore
+      }
+      try {
+        window.dispatchEvent(new CustomEvent("workbooks:filesChanged", { detail: { workbookId } }));
+      } catch {
+        // ignore
+      }
+      (async () => {
+        try {
+          if (!window.electronAPI?.mcp?.call) return;
+          await window.electronAPI.mcp.call("workbook-rag", "tools/call", {
+            name: "rag_clear_cache",
+            arguments: workbookId ? { workbook_id: workbookId } : {},
+          });
+        } catch {
+          // ignore
+        }
+      })();
+
+      // If a file was changed on disk (often by Chat/tools), refresh any open tabs in that workbook.
+      // Never stomp user edits: skip dirty tabs and surface a non-blocking info toast.
+      (async () => {
+        try {
+          if (!workbookId) return;
+          const res = await refreshOpenDocumentsForWorkbook(workbookId);
+          if (res?.skippedDirty) {
+            notifyInfo(
+              "Some open files changed on disk, but you have unsaved edits—skipping auto-reload for those tabs.",
+              "Files changed",
+            );
+          }
+        } catch {
+          // ignore
+        }
+      })();
+    });
+
+    return () => {
+      try {
+        offChanged?.();
+      } catch {
+        // ignore
+      }
+      try {
+        offFiles?.();
+      } catch {
+        // ignore
+      }
+    };
   }, []);
 
   // Best-effort "Active context" indicator in the sidebar header.
@@ -266,6 +347,20 @@ function App() {
     }, 0);
   }, [activeWorkbenchId, collapsedViews, setActiveWorkbench, toggleViewCollapse]);
 
+  // Fail-soft: allow components that don't receive the callback prop (or where it is temporarily undefined)
+  // to request a jump to Contexts via a window event.
+  useEffect(() => {
+    const onJump = () => {
+      try {
+        jumpToContexts();
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener("insightlm:jumpToContexts", onJump as any);
+    return () => window.removeEventListener("insightlm:jumpToContexts", onJump as any);
+  }, [jumpToContexts]);
+
   const renderWorkbenchContent = () => {
     // For Insight Workbench (file), show all views stacked vertically with resizing
     if (activeWorkbenchId === "file") {
@@ -313,208 +408,176 @@ function App() {
 
       const workbooksHeaderActions = workbookActionButton;
 
+      const dashboardsHeaderAccessory = undefined;
+      const contextsHeaderAccessory = (
+        <button
+          type="button"
+          onClick={toggleContextScoping}
+          className={`flex items-center rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+            contextScopeMode === "all"
+              ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              : "bg-blue-600 text-white hover:bg-blue-700"
+          }`}
+          title={
+            contextScopeMode === "all"
+              ? "Scoping: All workbooks (click to enable context scoping)"
+              : "Scoping: Active context only (click to disable)"
+          }
+          aria-label="Toggle context scoping"
+          data-testid={testIds.contexts.scopeToggle}
+        >
+          {contextScopeMode === "all" ? "ALL" : "SCOPED"}
+        </button>
+      );
+
       return (
-        <div className="flex h-full flex-col">
-          {/* Dashboards View - First */}
-          {!isDashboardsCollapsed ? (
-            <div
-              style={{
-                flexBasis: `${viewHeights.dashboards}px`,
-                flexShrink: 0,
-                minHeight: "50px",
-              }}
-              className="overflow-hidden"
-            >
-              <CollapsibleView
-                title="Dashboards"
-                isCollapsed={isDashboardsCollapsed}
-                onToggleCollapse={() => toggleViewCollapse("dashboards")}
-                actionButton={dashboardActionButton}
-                testId={testIds.sidebar.headers.dashboards}
-              >
-                <DashboardView onActionButton={setDashboardActionButton} />
-              </CollapsibleView>
-            </div>
-          ) : (
-            <div className="border-b border-gray-200">
-              <CollapsibleView
-                title="Dashboards"
-                isCollapsed={isDashboardsCollapsed}
-                onToggleCollapse={() => toggleViewCollapse("dashboards")}
-                actionButton={dashboardActionButton}
-                testId={testIds.sidebar.headers.dashboards}
-              >
-                <div />
-              </CollapsibleView>
-            </div>
-          )}
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          {(() => {
+            // Stable view order: Dashboards → Contexts → Workbooks → Chat (no reordering / no "jump to top").
+            // Split sizing model: preferred heights, allow shrink, last expanded non-chat view grows to fill remainder.
+            const expandedNonChat: Array<"dashboards" | "contexts" | "workbooks"> = [];
+            if (!isDashboardsCollapsed) expandedNonChat.push("dashboards");
+            if (!isContextsCollapsed) expandedNonChat.push("contexts");
+            if (!isWorkbooksCollapsed) expandedNonChat.push("workbooks");
+            const lastExpandedNonChat = expandedNonChat.length ? expandedNonChat[expandedNonChat.length - 1] : null;
 
-          {/* Resizable Separator between Dashboards and Contexts */}
-          {!isDashboardsCollapsed && (
-            <ResizablePane
-              direction="vertical"
-              onResize={(height) => {
-                setViewHeight("dashboards", height);
-              }}
-              initialSize={viewHeights.dashboards}
-              minSize={50}
-              maxSize={800}
-            />
-          )}
-
-          {/* Contexts View - Second */}
-          {!isContextsCollapsed ? (
-            <div
-              style={{
-                flexBasis: `${viewHeights.contexts}px`,
-                flexShrink: 0,
+            const nonChatStyle = (viewId: "dashboards" | "contexts" | "workbooks") => {
+              if (collapsedViews.has(viewId)) return { flex: "0 0 auto" as const };
+              const base = {
                 minHeight: "50px",
-              }}
-              className="overflow-hidden"
-            >
-              <CollapsibleView
-                title="Contexts"
-                isCollapsed={isContextsCollapsed}
-                onToggleCollapse={() => toggleViewCollapse("contexts")}
-                headerAccessory={
-                  <button
-                    type="button"
-                    onClick={toggleContextScoping}
-                    className={`flex items-center rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                      contextScopeMode === "all"
-                        ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                    }`}
-                    title={
-                      contextScopeMode === "all"
-                        ? "Scoping: All workbooks (click to enable context scoping)"
-                        : "Scoping: Active context only (click to disable)"
-                    }
-                    aria-label="Toggle context scoping"
-                    data-testid={testIds.contexts.scopeToggle}
+                flexBasis: `${viewHeights[viewId]}px`,
+                flexShrink: 1,
+                flexGrow: 0,
+              } as const;
+              if (viewId === lastExpandedNonChat) return { ...base, flexGrow: 1 };
+              return base;
+            };
+
+            const showDashboardsSeparator = !isDashboardsCollapsed && (!isContextsCollapsed || !isWorkbooksCollapsed);
+            const showContextsSeparator = !isContextsCollapsed && !isWorkbooksCollapsed;
+
+            const chatStyle = isChatCollapsed
+              ? ({ flex: "0 0 auto" as const, minHeight: "28px" })
+              : ({
+                  minHeight: "150px",
+                  flexBasis: `${chatHeight}px`,
+                  flexShrink: 1,
+                  flexGrow: 0,
+                } as const);
+
+            return (
+              <>
+                {/* Non-chat stack is scroll-first under constrained space. */}
+                <div
+                  className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden"
+                  data-testid={testIds.sidebar.viewsScroll}
+                >
+                  <div
+                    style={nonChatStyle("dashboards")}
+                    className="min-h-0 overflow-hidden"
+                    data-testid={testIds.sidebar.view.dashboards}
                   >
-                    {contextScopeMode === "all" ? "ALL" : "SCOPED"}
-                  </button>
-                }
-                actionButton={contextsActionButton}
-                testId={testIds.sidebar.headers.contexts}
-              >
-                <ContextsView
-                  onActionButton={setContextsActionButton}
-                  onActiveContextChanged={handleActiveContextChanged}
-                  scopeMode={contextScopeMode}
-                />
-              </CollapsibleView>
-            </div>
-          ) : (
-            <div className="border-b border-gray-200">
-              <CollapsibleView
-                title="Contexts"
-                isCollapsed={isContextsCollapsed}
-                onToggleCollapse={() => toggleViewCollapse("contexts")}
-                headerAccessory={
-                  <button
-                    type="button"
-                    onClick={toggleContextScoping}
-                    className={`flex items-center rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                      contextScopeMode === "all"
-                        ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                    }`}
-                    title={
-                      contextScopeMode === "all"
-                        ? "Scoping: All workbooks (click to enable context scoping)"
-                        : "Scoping: Active context only (click to disable)"
-                    }
-                    aria-label="Toggle context scoping"
-                    data-testid={testIds.contexts.scopeToggle}
+                    <CollapsibleView
+                      title="Dashboards"
+                      isCollapsed={isDashboardsCollapsed}
+                      onToggleCollapse={() => toggleViewCollapse("dashboards")}
+                      actionButton={dashboardActionButton}
+                      headerAccessory={dashboardsHeaderAccessory}
+                      testId={testIds.sidebar.headers.dashboards}
+                      contentTestId={testIds.sidebar.viewBody.dashboards}
+                    >
+                      <DashboardView onActionButton={setDashboardActionButton} />
+                    </CollapsibleView>
+                  </div>
+
+                  {showDashboardsSeparator && (
+                    <ResizablePane
+                      direction="vertical"
+                      onResize={(height) => setViewHeight("dashboards", height)}
+                      initialSize={viewHeights.dashboards}
+                      minSize={50}
+                      maxSize={1000}
+                    />
+                  )}
+
+                  <div
+                    style={nonChatStyle("contexts")}
+                    className="min-h-0 overflow-hidden"
+                    data-testid={testIds.sidebar.view.contexts}
                   >
-                    {contextScopeMode === "all" ? "ALL" : "SCOPED"}
-                  </button>
-                }
-                actionButton={contextsActionButton}
-                testId={testIds.sidebar.headers.contexts}
-              >
-                <div />
-              </CollapsibleView>
-            </div>
-          )}
+                    <CollapsibleView
+                      title="Contexts"
+                      isCollapsed={isContextsCollapsed}
+                      onToggleCollapse={() => toggleViewCollapse("contexts")}
+                      headerAccessory={contextsHeaderAccessory}
+                      actionButton={contextsActionButton}
+                      testId={testIds.sidebar.headers.contexts}
+                      contentTestId={testIds.sidebar.viewBody.contexts}
+                    >
+                      <ContextsView
+                        onActionButton={setContextsActionButton}
+                        onActiveContextChanged={handleActiveContextChanged}
+                        scopeMode={contextScopeMode}
+                      />
+                    </CollapsibleView>
+                  </div>
 
-          {/* Resizable Separator between Contexts and Workbooks */}
-          {!isContextsCollapsed && (
-            <ResizablePane
-              direction="vertical"
-              onResize={(height) => {
-                setViewHeight("contexts", height);
-              }}
-              initialSize={viewHeights.contexts}
-              minSize={50}
-              maxSize={800}
-            />
-          )}
+                  {showContextsSeparator && (
+                    <ResizablePane
+                      direction="vertical"
+                      onResize={(height) => setViewHeight("contexts", height)}
+                      initialSize={viewHeights.contexts}
+                      minSize={50}
+                      maxSize={1000}
+                    />
+                  )}
 
-          {/* Workbooks View - Third */}
-          {!isWorkbooksCollapsed ? (
-            <div
-              style={{
-                flexBasis: `${viewHeights.workbooks}px`,
-                flexShrink: 0,
-                minHeight: "50px",
-              }}
-              className="overflow-hidden"
-            >
-              <CollapsibleView
-                title="Workbooks"
-                isCollapsed={isWorkbooksCollapsed}
-                onToggleCollapse={() => toggleViewCollapse("workbooks")}
-                actionButton={workbooksHeaderActions}
-                collapsedActionButton={workbooksSearchButton}
-                testId={testIds.sidebar.headers.workbooks}
-              >
-                <WorkbooksView onActionButton={setWorkbookActionButton} />
-              </CollapsibleView>
-            </div>
-          ) : (
-            <div className="border-b border-gray-200">
-              <CollapsibleView
-                title="Workbooks"
-                isCollapsed={isWorkbooksCollapsed}
-                onToggleCollapse={() => toggleViewCollapse("workbooks")}
-                actionButton={workbooksHeaderActions}
-                collapsedActionButton={workbooksSearchButton}
-                testId={testIds.sidebar.headers.workbooks}
-              >
-                <div />
-              </CollapsibleView>
-            </div>
-          )}
+                  <div
+                    style={nonChatStyle("workbooks")}
+                    className="min-h-0 overflow-hidden"
+                    data-testid={testIds.sidebar.view.workbooks}
+                  >
+                    <CollapsibleView
+                      title="Workbooks"
+                      isCollapsed={isWorkbooksCollapsed}
+                      onToggleCollapse={() => toggleViewCollapse("workbooks")}
+                      actionButton={workbooksHeaderActions}
+                      collapsedActionButton={workbooksSearchButton}
+                      testId={testIds.sidebar.headers.workbooks}
+                      contentTestId={testIds.sidebar.viewBody.workbooks}
+                    >
+                      <WorkbooksView onActionButton={setWorkbookActionButton} />
+                    </CollapsibleView>
+                  </div>
+                </div>
 
-          {/* Resizable Separator between Workbooks and Chat */}
-          {/* Show separator if Workbooks is expanded (regardless of Chat state) */}
-          {!isWorkbooksCollapsed && (
-            <ResizablePane
-              direction="vertical"
-              onResize={(height) => {
-                setViewHeight("workbooks", height);
-              }}
-              initialSize={viewHeights.workbooks}
-              minSize={50}
-              maxSize={800}
-            />
-          )}
+                {/* Chat height resizer (works regardless of which other views are collapsed). */}
+                {!isChatCollapsed && (
+                  <ResizablePane
+                    direction="vertical"
+                    invert
+                    onResize={(h) => setChatHeight(h)}
+                    initialSize={chatHeight}
+                    minSize={150}
+                    maxSize={600}
+                  />
+                )}
 
-          {/* Chat View - Fourth */}
-          <div className="flex-1 overflow-hidden" style={{ minHeight: isChatCollapsed ? "auto" : "50px" }}>
-            <CollapsibleView
-              title="Chat"
-              isCollapsed={isChatCollapsed}
-              onToggleCollapse={() => toggleViewCollapse("chat")}
-              actionButton={chatActionButton}
-              testId={testIds.sidebar.headers.chat}
-            >
-              <Chat chatKey="sidebar" onActionButton={setChatActionButton} onJumpToContexts={jumpToContexts} />
-            </CollapsibleView>
-          </div>
+                <div style={chatStyle} className="flex-shrink-0 min-h-0 overflow-hidden" data-testid={testIds.sidebar.view.chat}>
+                  <CollapsibleView
+                    title="Chat"
+                    isCollapsed={isChatCollapsed}
+                    onToggleCollapse={() => toggleViewCollapse("chat")}
+                    actionButton={chatActionButton}
+                    testId={testIds.sidebar.headers.chat}
+                    contentTestId={testIds.sidebar.viewBody.chat}
+                  >
+                    <Chat chatKey="sidebar" onActionButton={setChatActionButton} onJumpToContexts={jumpToContexts} />
+                  </CollapsibleView>
+                </div>
+              </>
+            );
+          })()}
         </div>
       );
     }
@@ -538,8 +601,9 @@ function App() {
 
       {/* Sidebar */}
       <div
-        className="flex flex-col border-r border-gray-300 bg-white"
+        className="flex flex-col border-r border-gray-300 bg-white overflow-x-hidden"
         style={{ width: `${sidebarWidth}px` }}
+        data-testid={testIds.sidebar.container}
       >
         <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
           <div className="min-w-0">
@@ -595,7 +659,7 @@ function App() {
             <ExtensionToggle />
           </div>
         </div>
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
           {renderWorkbenchContent()}
         </div>
       </div>

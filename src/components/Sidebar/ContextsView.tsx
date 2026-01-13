@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AddIcon, RefreshIcon } from "../Icons";
+import { AddIcon, ChevronRightIcon, RefreshIcon } from "../Icons";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import { testIds } from "../../testing/testIds";
@@ -29,6 +29,7 @@ export function ContextsView({
 }: ContextsViewProps = {}) {
   const [contexts, setContexts] = useState<ContextSummary[]>([]);
   const [activeContextId, setActiveContextId] = useState<string | null>(null);
+  const [activeContextWorkbookIds, setActiveContextWorkbookIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +65,40 @@ export function ContextsView({
 
   const canUseMCP = !!window.electronAPI?.mcp?.call;
   const QUICK_WB_PREFIX = "[WB] ";
+  const QUICK_WB_COLLAPSE_KEY = "insightlm.contexts.quickWorkbooksCollapsed.v1";
+  const CTX_CARD_WB_COLLAPSE_KEY = "insightlm.contexts.cardWorkbooksCollapsed.v1";
+  const [isQuickWorkbooksCollapsed, setIsQuickWorkbooksCollapsed] = useState<boolean>(() => {
+    try {
+      return String(localStorage.getItem(QUICK_WB_COLLAPSE_KEY) || "") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const [collapsedContextWorkbookLists, setCollapsedContextWorkbookLists] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(CTX_CARD_WB_COLLAPSE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(arr)) return new Set(arr.map((x) => String(x)));
+      return new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const setContextWorkbookListCollapsed = useCallback((contextId: string, collapsed: boolean) => {
+    setCollapsedContextWorkbookLists((prev) => {
+      const next = new Set(prev);
+      if (collapsed) next.add(contextId);
+      else next.delete(contextId);
+      try {
+        localStorage.setItem(CTX_CARD_WB_COLLAPSE_KEY, JSON.stringify(Array.from(next)));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   // Keep in sync if parent-controlled scope changes (e.g. Chat chips).
   useEffect(() => {
@@ -101,6 +136,8 @@ export function ContextsView({
       });
       const activeId = activeRes?.active?.id ?? null;
       setActiveContextId(activeId);
+      const wbIds = Array.isArray(activeRes?.active?.workbook_ids) ? activeRes.active.workbook_ids : [];
+      setActiveContextWorkbookIds(wbIds.map((x: any) => String(x)));
 
       // Expose deterministic UI state for automation (so automation can map name -> id without async eval).
       setAutomationState({
@@ -244,6 +281,20 @@ export function ContextsView({
       window.removeEventListener("context:scoping", onScoping as any);
     };
   }, [loadContexts, refreshScopeMode]);
+
+  // Keep the Workbooks list inside ContextsView up-to-date when Workbooks change elsewhere (create/import/rename/delete).
+  // This avoids requiring a manual refresh after creating a new workbook.
+  useEffect(() => {
+    const onWorkbooksChanged = () => {
+      loadWorkbooks().catch(() => {});
+    };
+    window.addEventListener("workbooks:changed", onWorkbooksChanged as any);
+    window.addEventListener("demos:changed", onWorkbooksChanged as any);
+    return () => {
+      window.removeEventListener("workbooks:changed", onWorkbooksChanged as any);
+      window.removeEventListener("demos:changed", onWorkbooksChanged as any);
+    };
+  }, [loadWorkbooks]);
   useEffect(() => {
     if (!onActionButton) return;
     onActionButton(
@@ -320,6 +371,25 @@ export function ContextsView({
     arr.sort((a, b) => String(a.name).localeCompare(String(b.name)) || String(a.id).localeCompare(String(b.id)));
     return arr;
   }, [workbooks]);
+
+  const activeQuickWorkbookId = useMemo(() => {
+    // If active context is a single-workbook quick context, we highlight that workbook in the quick list.
+    if (!Array.isArray(activeContextWorkbookIds) || activeContextWorkbookIds.length !== 1) return null;
+    const id = String(activeContextWorkbookIds[0] || "").trim();
+    return id || null;
+  }, [activeContextWorkbookIds]);
+
+  const toggleQuickWorkbooksCollapsed = useCallback(() => {
+    setIsQuickWorkbooksCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(QUICK_WB_COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   const visibleContexts = useMemo(() => {
     // Hide auto-created single-workbook contexts from the main list to reduce clutter;
@@ -426,26 +496,48 @@ export function ContextsView({
 
         {/* Quick single-workbook activation (no manual context creation needed) */}
         {quickWorkbooks.length > 0 && (
-          <div className="mb-2 rounded border border-gray-200 bg-white p-2">
-            <div className="mb-1 text-xs font-semibold text-gray-800">Quick: Workbooks</div>
-            <div className="flex flex-col gap-1">
-              {quickWorkbooks.slice(0, 12).map((wb) => (
-                <button
-                  key={wb.id}
-                  type="button"
-                  className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-gray-50"
-                  onClick={() => ensureQuickWorkbookContextActive({ id: wb.id, name: wb.name })}
-                  title={`Activate workbook "${wb.name}"`}
-                  data-testid={testIds.contexts.quickWorkbook(wb.id)}
-                >
-                  <span className="truncate">{wb.name}</span>
-                  <span className="shrink-0 text-[10px] text-gray-400">Workbook</span>
-                </button>
-              ))}
-              {quickWorkbooks.length > 12 && (
-                <div className="px-2 text-[10px] text-gray-400">+ {quickWorkbooks.length - 12} more…</div>
-              )}
-            </div>
+          <div className="mb-2 rounded border border-gray-200 bg-white">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-2 px-2 py-2 text-left"
+              onClick={toggleQuickWorkbooksCollapsed}
+              data-testid={testIds.contexts.quickWorkbooks.toggle}
+              aria-expanded={!isQuickWorkbooksCollapsed}
+              title={isQuickWorkbooksCollapsed ? "Show Quick Workbooks" : "Hide Quick Workbooks"}
+            >
+              <div className="flex items-center gap-1 text-xs font-semibold text-gray-800">
+                <ChevronRightIcon className={`h-3 w-3 transition-transform ${isQuickWorkbooksCollapsed ? "" : "rotate-90"}`} />
+                Quick: Workbooks
+              </div>
+              <div className="text-[10px] text-gray-500">{quickWorkbooks.length}</div>
+            </button>
+
+            {!isQuickWorkbooksCollapsed && (
+              <div className="flex flex-col gap-1 border-t border-gray-100 p-2" data-testid={testIds.contexts.quickWorkbooks.container}>
+                {quickWorkbooks.slice(0, 12).map((wb) => {
+                  const isActive = activeQuickWorkbookId === String(wb.id);
+                  return (
+                    <button
+                      key={wb.id}
+                      type="button"
+                      className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs ${
+                        isActive ? "bg-blue-50 text-blue-800 ring-1 ring-blue-200" : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                      onClick={() => ensureQuickWorkbookContextActive({ id: wb.id, name: wb.name })}
+                      title={`Activate workbook "${wb.name}"`}
+                      data-testid={testIds.contexts.quickWorkbook(wb.id)}
+                      data-active={isActive ? "true" : "false"}
+                    >
+                      <span className="truncate">{wb.name}</span>
+                      <span className="shrink-0 text-[10px] text-gray-500">{isActive ? "Active" : "Workbook"}</span>
+                    </button>
+                  );
+                })}
+                {quickWorkbooks.length > 12 && (
+                  <div className="px-2 text-[10px] text-gray-400">+ {quickWorkbooks.length - 12} more…</div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -455,6 +547,8 @@ export function ContextsView({
 
         {visibleContexts.map((ctx) => {
           const isActive = ctx.id === activeContextId;
+          const wbCount = (ctx.workbook_ids || []).length;
+          const wbCollapsed = collapsedContextWorkbookLists.has(ctx.id);
           return (
             <div
               key={ctx.id}
@@ -472,7 +566,7 @@ export function ContextsView({
                     )}
                   </div>
                   <div className="mt-0.5 text-[11px] text-gray-500">
-                    {ctx.workbook_ids?.length || 0} workbooks
+                    {wbCount} workbooks
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-1">
@@ -511,18 +605,39 @@ export function ContextsView({
                 </div>
               </div>
 
-              <div className="mt-2 space-y-1">
-                {(ctx.workbook_ids || []).slice(0, 6).map((wid) => (
-                  <div key={wid} className="truncate text-[11px] text-gray-600">
-                    - {workbookNameById.get(wid) || wid}
-                  </div>
-                ))}
-                {(ctx.workbook_ids || []).length > 6 && (
-                  <div className="text-[11px] text-gray-400">
-                    + {(ctx.workbook_ids || []).length - 6} more
-                  </div>
-                )}
-              </div>
+              {wbCount > 0 && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] text-gray-700 hover:bg-white/60"
+                    onClick={() => setContextWorkbookListCollapsed(ctx.id, !wbCollapsed)}
+                    aria-expanded={!wbCollapsed}
+                    data-testid={testIds.contexts.card.workbooksToggle(ctx.id)}
+                    title={wbCollapsed ? "Show workbooks" : "Hide workbooks"}
+                  >
+                    <span className="flex items-center gap-1">
+                      <ChevronRightIcon className={`h-3 w-3 transition-transform ${wbCollapsed ? "" : "rotate-90"}`} />
+                      Workbooks
+                    </span>
+                    <span className="text-[10px] text-gray-500">{wbCount}</span>
+                  </button>
+
+                  {!wbCollapsed && (
+                    <div className="mt-1 space-y-1" data-testid={testIds.contexts.card.workbooksList(ctx.id)}>
+                      {(ctx.workbook_ids || []).slice(0, 6).map((wid) => (
+                        <div key={wid} className="truncate text-[11px] text-gray-600">
+                          - {workbookNameById.get(wid) || wid}
+                        </div>
+                      ))}
+                      {(ctx.workbook_ids || []).length > 6 && (
+                        <div className="text-[11px] text-gray-400">
+                          + {(ctx.workbook_ids || []).length - 6} more
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

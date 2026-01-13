@@ -7,6 +7,7 @@ import { notifyError, notifySuccess } from "../../utils/notify";
 import { MentionItem, MentionTextInput } from "../MentionTextInput";
 import { useDocumentStore } from "../../store/documentStore";
 import { useLayoutStore } from "../../store/layoutStore";
+import { useWorkbenchStore } from "../../store/workbenchStore";
 import { useChatDraftStore, type ChatDraftRef } from "../../store/chatDraftStore";
 
 type PersistedChatMessage = {
@@ -15,7 +16,13 @@ type PersistedChatMessage = {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
-  meta?: any;
+  meta?: {
+    // Persisted per-message context state so history remains readable when users toggle scope.
+    scopeMode?: "all" | "context";
+    // Activity trace persisted on assistant messages (when present).
+    activity?: Array<{ stepId: string; text: string; status: "running" | "ok" | "error"; ts: number; detail?: string }>;
+    [k: string]: any;
+  };
 };
 
 interface ChatProps {
@@ -47,6 +54,45 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const { openDocument } = useDocumentStore();
   const { collapsedViews, toggleViewCollapse } = useLayoutStore();
+  const { activeWorkbenchId, setActiveWorkbench } = useWorkbenchStore();
+  const jumpToContextsLocal = useCallback(() => {
+    try {
+      // Ensure we're in the Insight (file) workbench where Contexts exist.
+      if (activeWorkbenchId !== "file") {
+        setActiveWorkbench("file");
+      }
+      // Expand Contexts if collapsed.
+      if (collapsedViews.has("contexts")) {
+        toggleViewCollapse("contexts");
+      }
+      // Extra hardening: if the view is still collapsed for any reason (stale state, timing),
+      // directly click the Contexts header to expand it (deterministic UI effect).
+      try {
+        const btn = document.querySelector(
+          `button[data-testid="${testIds.sidebar.headers.contexts}"]`,
+        ) as HTMLButtonElement | null;
+        const expanded = btn?.getAttribute("aria-expanded") === "true";
+        if (btn && !expanded) btn.click();
+      } catch {
+        // ignore
+      }
+      // Scroll the Contexts header into view (best-effort).
+      setTimeout(() => {
+        try {
+          const el = document.querySelector(
+            `[data-testid="${testIds.sidebar.headers.contexts}"]`,
+          ) as HTMLElement | null;
+          el?.scrollIntoView({ block: "nearest" });
+          el?.focus?.();
+        } catch {
+          // ignore
+        }
+      }, 0);
+    } catch {
+      // ignore
+    }
+  }, [activeWorkbenchId, collapsedViews, setActiveWorkbench, toggleViewCollapse]);
+
 
   const [contextPicker, setContextPicker] = useState<{
     loading: boolean;
@@ -67,6 +113,7 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
     quickWorkbooks: [],
     error: null,
   });
+  const QUICK_WB_PREFIX = "[WB] ";
   const [scopeChipMode, setScopeChipMode] = useState<"all" | "context">("context");
   const contextChipRef = useRef<HTMLButtonElement | null>(null);
   const [contextMenuPos, setContextMenuPos] = useState<null | { top: number; left: number; width: number }>(null);
@@ -210,11 +257,11 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
     }
   }, []);
 
-  const refreshContextPicker = useCallback(async () => {
+  const refreshContextPicker = useCallback(async (opts?: { force?: boolean }) => {
     const now = Date.now();
     if (ctxRefreshInFlightRef.current) return;
     // Throttle rapid event storms (e.g., many context:changed dispatches during automation).
-    if (now - ctxRefreshLastRef.current < 750) return;
+    if (!opts?.force && now - ctxRefreshLastRef.current < 750) return;
     ctxRefreshLastRef.current = now;
     if (!window.electronAPI?.mcp?.call) {
       setContextPicker((p) => ({
@@ -238,10 +285,24 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
         window.electronAPI?.workbook?.getAll ? window.electronAPI.workbook.getAll() : Promise.resolve([]),
       ]);
       const contextsRaw = Array.isArray(listRes?.contexts) ? listRes.contexts : [];
-      const contexts = contextsRaw
+      // Avoid confusing duplication: Chat already has a "Quick: Workbooks" section, which creates/activates
+      // single-workbook auto contexts named "[WB] ...". Do not also show those in the "Contexts" list below.
+      const nonQuickContextsRaw = contextsRaw.filter((c: any) => {
+        try {
+          const name = String(c?.name || "");
+          const wbIds = Array.isArray(c?.workbook_ids) ? c.workbook_ids : [];
+          const folders = c?.folders;
+          const foldersEmpty = folders == null || (Array.isArray(folders) && folders.length === 0);
+          const isQuick = name.startsWith(QUICK_WB_PREFIX) && wbIds.length === 1 && foldersEmpty;
+          return !isQuick;
+        } catch {
+          return true;
+        }
+      });
+      const contextsNoQuick = nonQuickContextsRaw
         .map((c: any) => ({ id: String(c?.id || ""), name: String(c?.name || c?.id || "") }))
         .filter((c: any) => c.id && c.name);
-      contexts.sort((a: any, b: any) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+      contextsNoQuick.sort((a: any, b: any) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
       const activeId = activeRes?.active?.id ? String(activeRes.active.id) : null;
       const activeName = activeRes?.active?.name ? String(activeRes.active.name) : null;
 
@@ -259,7 +320,7 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
       setContextPicker((p) => ({
         ...p,
         loading: false,
-        contexts,
+        contexts: contextsNoQuick,
         activeId,
         activeName,
         activeWorkbookIds: activeWbIds,
@@ -282,7 +343,6 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
     }
   }, []);
 
-  const QUICK_WB_PREFIX = "[WB] ";
   const activateQuickWorkbook = useCallback(
     async (wb: { id: string; name: string }) => {
       try {
@@ -508,9 +568,15 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
     const onScope = () => refreshScopeChipMode();
     window.addEventListener("context:changed", onChanged as any);
     window.addEventListener("context:scoping", onScope as any);
+    // Keep Chat's context picker in sync when workbooks are created/renamed/deleted elsewhere.
+    // This avoids requiring a full View → Reload to see new workbooks in the "Quick: Workbooks" list.
+    window.addEventListener("workbooks:changed", onChanged as any);
+    window.addEventListener("demos:changed", onChanged as any);
     return () => {
       window.removeEventListener("context:changed", onChanged as any);
       window.removeEventListener("context:scoping", onScope as any);
+      window.removeEventListener("workbooks:changed", onChanged as any);
+      window.removeEventListener("demos:changed", onChanged as any);
     };
   }, [refreshContextPicker, refreshScopeChipMode]);
 
@@ -540,6 +606,13 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
     };
   }, [contextPicker.open]);
 
+  // Always refresh the picker contents when opening the menu so newly-created workbooks appear
+  // without requiring a full View → Reload.
+  useEffect(() => {
+    if (!contextPicker.open) return;
+    refreshContextPicker({ force: true });
+  }, [contextPicker.open, refreshContextPicker]);
+
   useEffect(() => {
     if (!contextPicker.open) return;
     const onDown = (e: PointerEvent) => {
@@ -561,13 +634,17 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
 
   useEffect(() => {
     // Mention items should reflect current scoping mode + active context.
-    loadMentionItems();
-    const onScope = () => loadMentionItems();
+    loadMentionItems().catch(() => {});
+    const onScope = () => loadMentionItems().catch(() => {});
     window.addEventListener("context:changed", onScope as any);
     window.addEventListener("context:scoping", onScope as any);
+    window.addEventListener("workbooks:changed", onScope as any);
+    window.addEventListener("workbooks:filesChanged", onScope as any);
     return () => {
       window.removeEventListener("context:changed", onScope as any);
       window.removeEventListener("context:scoping", onScope as any);
+      window.removeEventListener("workbooks:changed", onScope as any);
+      window.removeEventListener("workbooks:filesChanged", onScope as any);
     };
   }, [loadMentionItems]);
 
@@ -687,6 +764,17 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
     const ctxId = contextStatus.activeContextId;
     if (!ctxId) return;
 
+    // Capture scope at send-time so the transcript reflects what was true for this Q/A.
+    // (Users can toggle scope between messages; history must remain readable.)
+    let sendScopeMode: "all" | "context" = "context";
+    try {
+      const res = await window.electronAPI?.contextScope?.getMode?.();
+      const m = res?.mode === "all" || res?.mode === "context" ? res.mode : "context";
+      sendScopeMode = m;
+    } catch {
+      // ignore (default "context")
+    }
+
     const raw = input.trim();
     const refs = Array.isArray(draftRefs) ? draftRefs : [];
     setInput("");
@@ -723,6 +811,7 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
         contextId: ctxId,
         role: "user",
         content: userMessageWithRefs,
+        meta: { scopeMode: sendScopeMode },
       });
       const userMsg = appendedUser?.message as PersistedChatMessage | undefined;
       if (userMsg) {
@@ -761,7 +850,10 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
         content: response,
         // Persist activity trace with the assistant message (so it stays in the transcript on reload),
         // but DO NOT include it in the LLM prompt history.
-        meta: activityRef.current?.length ? { activity: activityRef.current } : undefined,
+        meta: {
+          scopeMode: sendScopeMode,
+          ...(activityRef.current?.length ? { activity: activityRef.current } : {}),
+        },
       });
       const assistantMsg = appendedAssistant?.message as PersistedChatMessage | undefined;
       if (assistantMsg) {
@@ -777,6 +869,7 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
             contextId: ctxId2,
             role: "assistant",
             content: `Error: ${error instanceof Error ? error.message : "Failed to get response"}`,
+            meta: { scopeMode: sendScopeMode },
           });
           const assistantErr = appended?.message as PersistedChatMessage | undefined;
           if (assistantErr) {
@@ -1094,6 +1187,20 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
                   >
                     <div className="text-[10px] text-gray-500">
                       {m.role} · {new Date(m.timestamp).toLocaleString()}
+                      {m?.meta?.scopeMode && (
+                        <span
+                          className={`ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                            m.meta.scopeMode === "context"
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-red-50 text-red-700"
+                          }`}
+                          data-testid={testIds.chat.messageScope(m.id)}
+                          data-scope-mode={m.meta.scopeMode}
+                          title={m.meta.scopeMode === "context" ? "Scope: Context" : "Scope: All workbooks (Project)"}
+                        >
+                          {m.meta.scopeMode === "context" ? "SCOPED" : "ALL"}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-1 whitespace-pre-wrap text-xs text-gray-800">
                       {m.content}
@@ -1289,6 +1396,22 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
                       data-chat-message-id={msg.id}
                     >
                       <div className="w-full max-w-[85%]">
+                        {!!msg?.meta?.scopeMode && msg.id && (
+                          <div className={`mb-1 flex ${isUser ? "justify-end" : "justify-start"}`}>
+                            <span
+                              className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                msg.meta.scopeMode === "context"
+                                  ? "bg-blue-50 text-blue-700"
+                                  : "bg-red-50 text-red-700"
+                              }`}
+                              data-testid={testIds.chat.messageScope(msg.id)}
+                              data-scope-mode={msg.meta.scopeMode}
+                              title={msg.meta.scopeMode === "context" ? "Scope: Context" : "Scope: All workbooks (Project)"}
+                            >
+                              {msg.meta.scopeMode === "context" ? "SCOPED" : "ALL"}
+                            </span>
+                          </div>
+                        )}
             <ChatMessage role={msg.role} content={msg.content} />
                         {!isUser &&
                           msg?.meta?.activity &&
@@ -1583,9 +1706,16 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
                       <button
                         type="button"
                         className="text-xs text-blue-600 hover:underline"
+                        data-testid={testIds.chat.contextMenuGoToContexts}
                         onClick={() => {
+                          // Jump first (deterministic visible effect), then close the menu.
+                          try {
+                            onJumpToContexts?.();
+                          } catch {
+                            // ignore
+                          }
+                          jumpToContextsLocal();
                           setContextPicker((p) => ({ ...p, open: false }));
-                          onJumpToContexts?.();
                         }}
                       >
                         Go to Contexts…

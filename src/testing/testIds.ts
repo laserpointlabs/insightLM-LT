@@ -7,6 +7,21 @@ export const testIds = {
     event: "activitybar-item-event",
   },
   sidebar: {
+    container: "sidebar-container",
+    viewsScroll: "sidebar-views-scroll",
+    collapsedDock: "sidebar-collapsed-dock",
+    view: {
+      dashboards: "sidebar-view-dashboards",
+      contexts: "sidebar-view-contexts",
+      workbooks: "sidebar-view-workbooks",
+      chat: "sidebar-view-chat",
+    },
+    viewBody: {
+      dashboards: "sidebar-viewbody-dashboards",
+      contexts: "sidebar-viewbody-contexts",
+      workbooks: "sidebar-viewbody-workbooks",
+      chat: "sidebar-viewbody-chat",
+    },
     headers: {
       dashboards: "sidebar-dashboards-header",
       contexts: "sidebar-contexts-header",
@@ -26,6 +41,14 @@ export const testIds = {
     refresh: "contexts-refresh",
     scopeToggle: "contexts-scope-toggle",
     scopeMode: "contexts-scope-mode",
+    quickWorkbooks: {
+      toggle: "contexts-quick-workbooks-toggle",
+      container: "contexts-quick-workbooks",
+    },
+    card: {
+      workbooksToggle: (contextId: string) => `contexts-card-workbooks-toggle-${encodeURIComponent(String(contextId || ""))}`,
+      workbooksList: (contextId: string) => `contexts-card-workbooks-list-${encodeURIComponent(String(contextId || ""))}`,
+    },
     modal: {
       name: "contexts-modal-name",
       workbookCheckbox: "contexts-modal-workbook-checkbox",
@@ -47,6 +70,7 @@ export const testIds = {
     popout: "chat-popout",
     contextChip: "chat-context-chip",
     contextMenu: "chat-context-menu",
+    contextMenuGoToContexts: "chat-context-menu-go-to-contexts",
     contextItem: (contextId: string) => `chat-context-item-${encodeURIComponent(String(contextId || ""))}`,
     contextQuickWorkbook: (workbookId: string) =>
       `chat-context-quick-workbook-${encodeURIComponent(String(workbookId || ""))}`,
@@ -58,6 +82,8 @@ export const testIds = {
     },
     message: (messageId: string) =>
       `chat-message-${encodeURIComponent(String(messageId || ""))}`,
+    messageScope: (messageId: string) =>
+      `chat-message-scope-${encodeURIComponent(String(messageId || ""))}`,
     emptyState: {
       container: "chat-empty-state",
       message: "chat-empty-state-message",
@@ -115,6 +141,15 @@ export const testIds = {
     cancel: "confirm-dialog-cancel",
     confirm: "confirm-dialog-confirm",
   },
+  unsavedCloseDialog: {
+    backdrop: "unsaved-close-dialog-backdrop",
+    dialog: "unsaved-close-dialog",
+    title: "unsaved-close-dialog-title",
+    message: "unsaved-close-dialog-message",
+    save: "unsaved-close-dialog-save",
+    dontSave: "unsaved-close-dialog-dont-save",
+    cancel: "unsaved-close-dialog-cancel",
+  },
   dashboards: {
     sidebar: {
       create: "dashboards-create",
@@ -151,6 +186,35 @@ export const testIds = {
       sourcesPanel: (queryId: string) => `dashboard-tile-sources-panel-${queryId}`,
       explainPanel: (queryId: string) => `dashboard-tile-explain-panel-${queryId}`,
     },
+  },
+  documentViewer: {
+    tabs: "document-viewer-tabs",
+    tab: (docId: string) => `document-viewer-tab-${encodeURIComponent(String(docId || ""))}`,
+    tabClose: (docId: string) => `document-viewer-tab-close-${encodeURIComponent(String(docId || ""))}`,
+    tabContextMenu: "document-viewer-tab-context-menu",
+    tabContextClose: "document-viewer-tab-context-close",
+    tabContextCloseOthers: "document-viewer-tab-context-close-others",
+    tabContextCloseSaved: "document-viewer-tab-context-close-saved",
+    tabContextCloseAll: "document-viewer-tab-context-close-all",
+    split: {
+      container: "document-viewer-split-container",
+      groupA: "document-viewer-group-a",
+      groupB: "document-viewer-group-b",
+      tabsA: "document-viewer-tabs-a",
+      tabsB: "document-viewer-tabs-b",
+      paneA: "document-viewer-pane-a",
+      paneB: "document-viewer-pane-b",
+      splitRight: "document-viewer-split-right",
+      splitDown: "document-viewer-split-down",
+      moveToOtherGroup: "document-viewer-move-to-other-group",
+    },
+    saveBar: "document-viewer-save-bar",
+    saveButton: "document-viewer-save-button",
+    content: "document-viewer-content",
+    error: "document-viewer-error",
+    errorClose: "document-viewer-error-close",
+    loadError: "document-viewer-load-error",
+    loadErrorClose: "document-viewer-load-error-close",
   },
   workbooks: {
     header: {
@@ -228,18 +292,7 @@ export const testIds = {
       cancel: "move-doc-cancel",
     },
   },
-  documentViewer: {
-    tabs: "document-tabs",
-    tab: (docId: string) => `document-tab-${docId}`,
-    tabClose: (docId: string) => `document-tab-close-${docId}`,
-    content: "document-viewer-content",
-    error: "document-viewer-error",
-    errorClose: "document-viewer-error-close",
-    loadError: "document-viewer-load-error",
-    loadErrorClose: "document-viewer-load-error-close",
-    saveBar: "document-savebar",
-    saveButton: "document-save",
-  },
+  // NOTE: legacy duplicate `documentViewer` keys were removed to avoid object-literal overwrite bugs.
   notebook: {
     viewer: "notebook-viewer",
     cell: (index: number) => `notebook-cell-${index}`,

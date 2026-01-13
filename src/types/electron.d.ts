@@ -61,6 +61,10 @@ export interface ElectronAPI {
     getPath: (workbookId: string, relativePath: string) => Promise<string>;
     readBinary: (workbookId: string, relativePath: string) => Promise<string>;
   };
+  events?: {
+    onWorkbooksChanged: (cb: (payload: any) => void) => () => void;
+    onWorkbookFilesChanged: (cb: (payload: { workbookId?: string }) => void) => () => void;
+  };
   archive: {
     workbook: (workbookId: string) => Promise<void>;
     unarchiveWorkbook: (workbookId: string) => Promise<void>;

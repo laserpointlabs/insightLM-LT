@@ -101,8 +101,8 @@ async function connectCDP() {
       if (msg.method === "Runtime.exceptionThrown") {
         const details = msg?.params?.exceptionDetails;
         const text =
-          String(details?.text || "") ||
           String(details?.exception?.description || "") ||
+          String(details?.text || "") ||
           String(details?.exception?.value || "");
         exceptionEvents.push({ text });
       }
@@ -398,12 +398,26 @@ async function connectWithRetry(timeoutMs = 45000, wantProjectNameContains = nul
   throw new Error(`Failed to reconnect CDP after relaunch: ${lastErr}`);
 }
 
+async function setViewport(call, width, height) {
+  try {
+    await call("Emulation.setDeviceMetricsOverride", {
+      width: Number(width),
+      height: Number(height),
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+  } catch (e) {
+    // Fail-soft: don't break smoke if CDP implementation differs; layout assertions will still run.
+    console.warn("WARN: could not set viewport via CDP Emulation:", e?.message || String(e));
+  }
+}
+
 async function run() {
   console.log(`🧪 UI automation smoke (CDP @ ${DEBUG_HOST}:${DEBUG_PORT})`);
 
-  let ws, evaluate, consoleEvents, exceptionEvents;
+  let ws, call, evaluate, consoleEvents, exceptionEvents;
   try {
-    ({ ws, evaluate, consoleEvents, exceptionEvents } = await connectCDP());
+    ({ ws, call, evaluate, consoleEvents, exceptionEvents } = await connectCDP());
   } catch (e) {
     fail(e instanceof Error ? e.message : "Failed to connect to CDP");
   }
@@ -443,6 +457,137 @@ async function run() {
         await sleep(300);
       }
     }
+
+    // Views/Layout sanity (VS Code-like): collapsed bottom view docks; no horizontal overflow when constrained.
+    await setViewport(call, 900, 560);
+    await waitForSelector(evaluate, 'div[data-testid="sidebar-container"]', 20000);
+    await waitForSelector(evaluate, 'div[data-testid="sidebar-views-scroll"]', 20000);
+
+    // Ensure Workbooks + Chat headers exist.
+    await waitForSelector(evaluate, 'button[data-testid="sidebar-workbooks-header"]', 20000);
+    await waitForSelector(evaluate, 'button[data-testid="sidebar-chat-header"]', 20000);
+
+    // Expand Dashboards/Workbooks (so we can test that collapsing the lowest view "docks" and doesn't get pushed off-screen).
+    await ensureExpanded(evaluate, "sidebar-dashboards-header");
+    await ensureExpanded(evaluate, "sidebar-workbooks-header");
+
+    // Collapse Workbooks and Chat (lowest view should dock to bottom; Workbooks should dock directly above Chat).
+    const wbExpandedNow = await evaluate(
+      `document.querySelector('button[data-testid="sidebar-workbooks-header"]')?.getAttribute("aria-expanded") === "true"`,
+    );
+    if (wbExpandedNow) await clickSelector(evaluate, 'button[data-testid="sidebar-workbooks-header"]');
+
+    const chatExpandedNow = await evaluate(
+      `document.querySelector('button[data-testid="sidebar-chat-header"]')?.getAttribute("aria-expanded") === "true"`,
+    );
+    if (chatExpandedNow) await clickSelector(evaluate, 'button[data-testid="sidebar-chat-header"]');
+
+    const layoutOk = await evaluate(`
+      (() => {
+        const sb = document.querySelector('div[data-testid="sidebar-container"]');
+        const sc = document.querySelector('div[data-testid="sidebar-views-scroll"]');
+        const chat = document.querySelector('button[data-testid="sidebar-chat-header"]');
+        const wb = document.querySelector('button[data-testid="sidebar-workbooks-header"]');
+        if (!sb || !sc || !chat || !wb) return { ok: false, why: "missing elements" };
+        const sbR = sb.getBoundingClientRect();
+        const chatR = chat.getBoundingClientRect();
+        const wbR = wb.getBoundingClientRect();
+        const eps = 6; // px tolerance for borders/shadows
+        const chatDocked = chatR.bottom <= sbR.bottom + eps && chatR.bottom >= sbR.bottom - 48;
+        const wbAboveChat = wbR.bottom <= chatR.top + eps;
+        const noHorizOverflow = sc.scrollWidth <= sc.clientWidth + 1;
+        return {
+          ok: !!(chatDocked && wbAboveChat && noHorizOverflow),
+          chatDocked,
+          wbAboveChat,
+          noHorizOverflow,
+          sb: { bottom: sbR.bottom, height: sbR.height },
+          chat: { top: chatR.top, bottom: chatR.bottom },
+          wb: { top: wbR.top, bottom: wbR.bottom },
+          sc: { clientW: sc.clientWidth, scrollW: sc.scrollWidth },
+        };
+      })()
+    `);
+    if (!layoutOk?.ok) fail(`Views/layout docking/overflow check failed: ${JSON.stringify(layoutOk).slice(0, 1200)}`);
+    console.log("✅ Sidebar views: collapsed bottom docks; no horizontal overflow (constrained viewport)");
+
+    // Sidebar view bodies must scroll vertically (regression: overflow was hidden, losing scrollbars and pushing Chat off-screen).
+    const assertViewBodyScrollable = async (viewBodyTid) => {
+      const res = await evaluate(`
+        (() => {
+          const el = document.querySelector('div[data-testid="${viewBodyTid}"]');
+          if (!el) return { ok: false, why: "missing" };
+          const cs = window.getComputedStyle(el);
+          return {
+            ok: cs.overflowY === "auto" || cs.overflowY === "scroll",
+            overflowY: cs.overflowY,
+            overflowX: cs.overflowX,
+          };
+        })()
+      `);
+      if (!res?.ok) fail(`View body not scrollable (${viewBodyTid}): ${JSON.stringify(res)}`);
+    };
+    await ensureExpanded(evaluate, "sidebar-dashboards-header");
+    await ensureExpanded(evaluate, "sidebar-contexts-header");
+    await ensureExpanded(evaluate, "sidebar-workbooks-header");
+    await ensureExpanded(evaluate, "sidebar-chat-header");
+    await assertViewBodyScrollable("sidebar-viewbody-dashboards");
+    await assertViewBodyScrollable("sidebar-viewbody-contexts");
+    await assertViewBodyScrollable("sidebar-viewbody-workbooks");
+    await assertViewBodyScrollable("sidebar-viewbody-chat");
+    console.log("✅ Sidebar views: view bodies scroll vertically (overflow-y auto)");
+
+    // Single-view fill behavior: if only Dashboards (or only Contexts) is expanded, it should fill the available scroll region.
+    const assertSingleViewFills = async (viewHeaderTid, viewContainerTid, collapseOthers /* array of header selectors */) => {
+      // Collapse all listed headers first.
+      for (const sel of collapseOthers) {
+        const isExp = await evaluate(`document.querySelector(${jsString(sel)})?.getAttribute("aria-expanded") === "true"`);
+        if (isExp) await clickSelector(evaluate, sel);
+      }
+      // Expand desired view.
+      await ensureExpanded(evaluate, viewHeaderTid);
+      // Ensure chat is collapsed for a stable bottom dock baseline.
+      const chatExp = await evaluate(
+        `document.querySelector('button[data-testid="sidebar-chat-header"]')?.getAttribute("aria-expanded") === "true"`,
+      );
+      if (chatExp) await clickSelector(evaluate, 'button[data-testid="sidebar-chat-header"]');
+
+      const metrics = await evaluate(`
+        (() => {
+          const sc = document.querySelector('div[data-testid="sidebar-views-scroll"]');
+          const v = document.querySelector('div[data-testid="${viewContainerTid}"]');
+          if (!sc || !v) return { ok: false, why: "missing" };
+          const scR = sc.getBoundingClientRect();
+          const vR = v.getBoundingClientRect();
+          const eps = 10;
+
+          // VS Code-like behavior: collapsed view headers remain visible and consume space,
+          // so the single expanded view should fill the REMAINING area, not necessarily the entire scroll region.
+          const children = Array.from(sc.children || []);
+          const otherHeights = children
+            .filter((el) => el && el.getAttribute && el.getAttribute("data-testid") !== "${viewContainerTid}")
+            .map((el) => el.getBoundingClientRect().height)
+            .reduce((a, b) => a + b, 0);
+
+          const expectedMin = Math.max(0, scR.height - otherHeights - eps);
+          const fills = vR.height >= expectedMin;
+          return { ok: fills, fills, expectedMin, scH: scR.height, vH: vR.height, otherHeights };
+        })()
+      `);
+      if (!metrics?.ok) fail(`Single-view fill failed for ${viewContainerTid}: ${JSON.stringify(metrics)}`);
+    };
+
+    await assertSingleViewFills(
+      "sidebar-dashboards-header",
+      "sidebar-view-dashboards",
+      ['button[data-testid="sidebar-contexts-header"]', 'button[data-testid="sidebar-workbooks-header"]'],
+    );
+    await assertSingleViewFills(
+      "sidebar-contexts-header",
+      "sidebar-view-contexts",
+      ['button[data-testid="sidebar-dashboards-header"]', 'button[data-testid="sidebar-workbooks-header"]'],
+    );
+    console.log("✅ Sidebar views: single expanded view fills available area (Dashboards + Contexts)");
 
     // Context scoping: indicator must be visible in BOTH the main header and the Contexts section header,
     // even when Contexts is collapsed.
@@ -518,6 +663,9 @@ async function run() {
     // Force deterministic mode for the rest of the smoke: Scoped (context).
     await ensureContextScopingMode(evaluate, "context");
     console.log("✅ Ensured context scoping is Scoped");
+
+    // Keep Chat mounted so it can receive "workbooks:changed" and refresh the Context picker list.
+    await ensureExpanded(evaluate, "sidebar-chat-header");
 
     // Expand Workbooks and create a workbook.
     await ensureExpanded(evaluate, "sidebar-workbooks-header");
@@ -645,8 +793,8 @@ async function run() {
             console.warn("⚠️ Seeded notebook did not produce output/artifacts in time; skipping seeded-demo assertions");
           } else {
             // Save notebook (ensures outputs persist in file)
-            await waitForSelector(evaluate, 'button[data-testid="document-save"]', 20000);
-            await clickSelector(evaluate, 'button[data-testid="document-save"]');
+            await waitForSelector(evaluate, 'button[data-testid="document-viewer-save-button"]', 20000);
+            await clickSelector(evaluate, 'button[data-testid="document-viewer-save-button"]');
             console.log("✅ Ran notebook cell + saved notebook");
 
             // Re-open notebook to confirm output persisted (reloads content from disk)
@@ -672,7 +820,8 @@ async function run() {
 
     await clickSelector(evaluate, 'button[data-testid="workbooks-create"]');
     await waitForSelector(evaluate, 'input[data-testid="input-dialog-input"]', 20000);
-    const wbName = `Auto Smoke WB ${Date.now()}`;
+    // Use a name that sorts near the top so it will appear in the Chat "Quick: Workbooks" list (which is capped).
+    const wbName = `AAA Smoke WB ${Date.now()}`;
     await setInputValue(evaluate, 'input[data-testid="input-dialog-input"]', wbName);
     // Fail-soft: on some builds the dialog may auto-submit quickly; only click OK if still present.
     const okBtn = 'button[data-testid="input-dialog-ok"]';
@@ -718,6 +867,54 @@ async function run() {
       fail("Could not discover created workbook id in UI (workbook may not have been created or list did not refresh)");
     }
     console.log(`✅ Created workbook "${wbName}" (${workbookId})`);
+
+    // Chat context picker should refresh its Quick Workbooks list without a full reload.
+    // Open the Context menu and assert the new workbook appears.
+    await ensureExpanded(evaluate, "sidebar-chat-header");
+    await waitForSelector(evaluate, 'button[data-testid="chat-context-chip"]', 20000);
+    await clickSelector(evaluate, 'button[data-testid="chat-context-chip"]');
+    await waitForSelector(evaluate, 'div[data-testid="chat-context-menu"]', 20000);
+    const quickTid = `chat-context-quick-workbook-${encodeURIComponent(String(workbookId || ""))}`;
+    const quickOk = await waitForSelector(evaluate, `button[data-testid="${quickTid}"]`, 20000);
+    if (!quickOk) fail("New workbook did not appear in Chat context picker Quick: Workbooks list (expected no View→Reload)");
+
+    // Click the quick workbook to create/activate the auto "[WB] ..." context, then ensure it does NOT appear
+    // in the normal Contexts list (prevents confusing duplicates in the picker).
+    await clickSelector(evaluate, `button[data-testid="${quickTid}"]`);
+    await sleep(300);
+    await clickSelector(evaluate, 'button[data-testid="chat-context-chip"]');
+    await waitForSelector(evaluate, 'div[data-testid="chat-context-menu"]', 20000);
+    const hasWbContextDuplicate = await evaluate(`
+      (() => {
+        const items = Array.from(document.querySelectorAll('button[data-testid^="chat-context-item-"]'));
+        return items.some((el) => (el.innerText || "").includes(${jsString(`[WB] ${wbName}`)}));
+      })()
+    `);
+    if (hasWbContextDuplicate) fail("Chat context picker shows duplicate [WB] context in Contexts list (should be excluded)");
+
+    // "Go to Contexts…" must reliably jump/expand Contexts view.
+    await clickSelector(evaluate, 'button[data-testid="chat-context-menu-go-to-contexts"]');
+    const contextsExpanded = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 8000) {
+        const ok = await evaluate(`!!document.querySelector('div[data-testid="sidebar-viewbody-contexts"]')`);
+        if (ok) return true;
+        await sleep(150);
+      }
+      return false;
+    })();
+    if (!contextsExpanded) fail('Chat context menu "Go to Contexts…" did not expand Contexts view');
+    // Return to chat/workbooks for the remainder of the flow.
+    await ensureExpanded(evaluate, "sidebar-chat-header");
+    await ensureExpanded(evaluate, "sidebar-workbooks-header");
+
+    // Close the menu (click chip again).
+    const menuStillOpen = await evaluate(`!!document.querySelector('div[data-testid="chat-context-menu"]')`);
+    if (menuStillOpen) {
+      await clickSelector(evaluate, 'button[data-testid="chat-context-chip"]');
+      await waitForGone(evaluate, 'div[data-testid="chat-context-menu"]', 20000);
+    }
+    console.log("✅ Chat context picker updates when a new workbook is created (no View→Reload)");
 
     // Create a new notebook via the Jupyter workbook action, open it, run `%pwd`, and assert
     // cwd resolves to the notebook's directory (no fallbacks).
@@ -848,7 +1045,7 @@ async function run() {
     if (!nb2?.id) fail("Could not read second notebook tab id");
 
     // Switch back to notebook1 by clicking its TAB (important: should NOT update lastOpenedDocId).
-    await clickSelector(evaluate, `div[data-testid="document-tab-${nb1.id}"]`);
+    await clickSelector(evaluate, `div[data-testid="document-viewer-tab-${encodeURIComponent(String(nb1.id || ""))}"]`);
     const backTabOk = await waitForTextContains(
       evaluate,
       'div[data-testid="document-viewer-content"]',
@@ -859,7 +1056,7 @@ async function run() {
 
     // Make an edit so the save bar appears.
     await setInputValue(evaluate, 'div[data-testid="notebook-cell-0"] textarea', "%pwd\\n");
-    const saveBarOk = await waitForSelector(evaluate, 'div[data-testid="document-savebar"]', 20000);
+    const saveBarOk = await waitForSelector(evaluate, 'div[data-testid="document-viewer-save-bar"]', 20000);
     if (!saveBarOk) fail("Expected save bar to appear after notebook edit");
 
     // Trigger Ctrl+S (the exact repro path).
@@ -869,7 +1066,7 @@ async function run() {
         return true;
       })()
     `);
-    await waitForGone(evaluate, 'div[data-testid="document-savebar"]', 20000);
+    await waitForGone(evaluate, 'div[data-testid="document-viewer-save-bar"]', 20000);
 
     // Assert the active tab did NOT change to notebook2 after saving notebook1.
     const afterSave = await evaluate(`
@@ -884,9 +1081,87 @@ async function run() {
     }
     console.log("✅ Ctrl+S save keeps the saved tab active (no tab jump)");
 
+  // Dirty tab close protection (no silent data loss)
+  // Use the notebook editor path (textarea exists) to deterministically create unsaved changes.
+  const dirtyToken = `dirty-close-${Date.now()}`;
+  const dirtyNotebookRelPath = `documents/auto-smoke-dirty-close-${Date.now()}.ipynb`;
+  const dirtyNotebookContent = JSON.stringify(
+    {
+      cells: [
+        {
+          cell_type: "code",
+          source: `%pwd\n# ${dirtyToken}\n`,
+          metadata: {},
+          outputs: [],
+          execution_count: null,
+        },
+      ],
+      metadata: { kernelspec: { name: "python3", display_name: "Python 3", language: "python" } },
+      nbformat: 4,
+      nbformat_minor: 2,
+    },
+    null,
+    2,
+  );
+  await evaluate(`
+    (async () => {
+      await window.electronAPI.file.write(${jsString(workbookId)}, ${jsString(dirtyNotebookRelPath)}, ${jsString(dirtyNotebookContent)});
+      return true;
+    })()
+  `);
+  const refreshBtn2 = 'button[data-testid="workbooks-refresh"]';
+  const refreshPresent2 = await evaluate(`!!document.querySelector(${jsString(refreshBtn2)})`);
+  if (refreshPresent2) await clickSelector(evaluate, refreshBtn2);
+  const dirtyNotebookTid = `div[data-testid="workbooks-doc-${workbookId}-${encodeURIComponent(dirtyNotebookRelPath)}"]`;
+  const dnOk = await waitForSelector(evaluate, dirtyNotebookTid, 20000);
+  if (!dnOk) fail("Dirty-close notebook did not appear in Workbooks tree");
+  await clickSelector(evaluate, dirtyNotebookTid);
+  await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="ipynb"]', 20000);
+  await waitForSelector(evaluate, 'div[data-testid="notebook-viewer"]', 20000);
+  // Make it dirty (ensure save bar appears)
+  await setInputValue(evaluate, 'div[data-testid="notebook-cell-0"] textarea', `%pwd\n# ${dirtyToken}\n# edit\n`);
+  const dirtySaveBarOk = await waitForSelector(evaluate, 'div[data-testid="document-viewer-save-bar"]', 20000);
+  if (!dirtySaveBarOk) fail("Expected save bar to appear after dirty-close notebook edit");
+
+  const activeTabId = await evaluate(
+    `document.querySelector('div[data-testid="document-viewer-content"]')?.getAttribute("data-active-doc-id") || ""`,
+  );
+  if (!activeTabId) fail("No active doc id for dirty-close test");
+
+  // Close the tab via close button → expect unsaved dialog.
+  await clickSelector(evaluate, `button[data-testid="document-viewer-tab-close-${encodeURIComponent(String(activeTabId))}"]`);
+  await waitForSelector(evaluate, 'div[data-testid="unsaved-close-dialog"]', 10000);
+  // Cancel should keep the tab open.
+  await clickSelector(evaluate, 'button[data-testid="unsaved-close-dialog-cancel"]');
+  await waitForGone(evaluate, 'div[data-testid="unsaved-close-dialog"]', 10000);
+  const stillOpen = await evaluate(
+    `!!document.querySelector('div[data-testid="document-viewer-tab-${encodeURIComponent(String(activeTabId))}"]')`,
+  );
+  if (!stillOpen) fail("Dirty tab closed even after Cancel");
+  // Close again, choose Don't Save → should close without persisting token.
+  await clickSelector(evaluate, `button[data-testid="document-viewer-tab-close-${encodeURIComponent(String(activeTabId))}"]`);
+  await waitForSelector(evaluate, 'div[data-testid="unsaved-close-dialog"]', 10000);
+  await clickSelector(evaluate, 'button[data-testid="unsaved-close-dialog-dont-save"]');
+  await waitForGone(evaluate, 'div[data-testid="unsaved-close-dialog"]', 10000);
+  const closed = await evaluate(
+    `!document.querySelector('div[data-testid="document-viewer-tab-${encodeURIComponent(String(activeTabId))}"]')`,
+  );
+  if (!closed) fail("Dirty tab did not close after Don't Save");
+  const rawAfterDontSave = await evaluate(`
+    (async () => {
+      try {
+        const res = await window.electronAPI.file.read(${jsString(workbookId)}, ${jsString(dirtyNotebookRelPath)});
+        return String(res?.content || "");
+      } catch { return ""; }
+    })()
+  `);
+  if (String(rawAfterDontSave).includes("# edit")) fail("Don't Save unexpectedly persisted dirty content");
+
+  console.log("✅ Dirty tab close protection (Save/Don't Save/Cancel) prevents silent data loss");
+
     // Ctrl+S already performed a save; don't require the save bar/button to still be visible.
     // If it is visible (e.g. slow persistence), click it as a best-effort extra save.
-    const saveBtn = 'button[data-testid="document-save"]';
+    const saveBtn = 'button[data-testid="document-viewer-save-button"]';
     const saveVisible = await evaluate(`!!document.querySelector(${jsString(saveBtn)})`);
     if (saveVisible) {
       await clickSelector(evaluate, saveBtn);
@@ -933,6 +1208,56 @@ async function run() {
     await sleep(300);
     console.log(`✅ Created + activated context "${ctxName}" (${contextId})`);
 
+    // Context card: workbook list collapsible (should not dominate Contexts view for large contexts).
+    const cardToggleSel = `button[data-testid="contexts-card-workbooks-toggle-${encodeURIComponent(contextId)}"]`;
+    const cardListSel = `div[data-testid="contexts-card-workbooks-list-${encodeURIComponent(contextId)}"]`;
+    await waitForSelector(evaluate, cardToggleSel, 20000);
+    await waitForSelector(evaluate, cardListSel, 20000);
+    await clickSelector(evaluate, cardToggleSel); // collapse
+    await sleep(200);
+    const listGone = await evaluate(`!document.querySelector(${jsString(cardListSel)})`);
+    if (!listGone) fail("Context card workbooks list did not collapse");
+    await clickSelector(evaluate, cardToggleSel); // expand
+    await waitForSelector(evaluate, cardListSel, 20000);
+    console.log("✅ Context card: workbook list collapsible");
+
+    // Contexts view: Quick Workbooks collapsible + active highlight
+    // Collapse then expand to prove the toggle works deterministically.
+    await waitForSelector(evaluate, 'button[data-testid="sidebar-contexts-header"]', 20000);
+    await ensureExpanded(evaluate, "sidebar-contexts-header");
+    await waitForSelector(evaluate, 'button[data-testid="contexts-quick-workbooks-toggle"]', 20000);
+    await clickSelector(evaluate, 'button[data-testid="contexts-quick-workbooks-toggle"]'); // collapse
+    await sleep(200);
+    const quickHidden = await evaluate(`!document.querySelector('div[data-testid="contexts-quick-workbooks"]')`);
+    if (!quickHidden) fail("Contexts quick workbooks did not collapse");
+    await clickSelector(evaluate, 'button[data-testid="contexts-quick-workbooks-toggle"]'); // expand
+    await sleep(200);
+    await waitForSelector(evaluate, 'div[data-testid="contexts-quick-workbooks"]', 20000);
+
+    // Click the first quick workbook and assert it is marked active (data-active=true).
+    const firstQuickTid = await evaluate(`
+      (() => {
+        const btn = document.querySelector('button[data-testid^="contexts-quick-workbook-"]');
+        return btn ? (btn.getAttribute("data-testid") || "") : null;
+      })()
+    `);
+    if (!firstQuickTid) fail("No quick workbook button found in Contexts");
+    await clickSelector(evaluate, `button[data-testid="${firstQuickTid}"]`);
+    await sleep(400);
+    const activeOk = await evaluate(`
+      (() => {
+        const el = document.querySelector('button[data-testid="${firstQuickTid}"]');
+        return el ? String(el.getAttribute("data-active") || "") === "true" : false;
+      })()
+    `);
+    if (!activeOk) fail("Quick workbook did not show active highlight after activation");
+    console.log("✅ Contexts Quick Workbooks: collapsible + active highlight");
+
+    // Restore the originally created Context as ACTIVE for subsequent chat/empty-state steps.
+    // (Quick workbook activation changes the active context; later we delete `contextId` and expect chat to show empty state.)
+    await clickSelector(evaluate, `button[data-testid="contexts-activate-${contextId}"]`);
+    await sleep(300);
+
     // Expand workbook row.
     await clickSelector(evaluate, `span[data-testid="workbooks-toggle-${workbookId}"]`);
 
@@ -943,6 +1268,90 @@ async function run() {
     await setInputValue(evaluate, 'input[data-testid="input-dialog-input"]', mdName);
     await clickSelector(evaluate, 'button[data-testid="input-dialog-ok"]');
     console.log("✅ Created markdown doc");
+
+    // Regression proof: new files should be queryable immediately (no waiting + no View→Reload).
+    // Write a unique token, then assert workbook-rag can grep it right away.
+    const refreshProbeToken = `refresh-probe-${Date.now()}`;
+    const probeWrite = await evaluate(`
+      (async () => {
+        try {
+          if (!window.electronAPI?.file?.write) return { ok: false, why: "electronAPI.file.write unavailable" };
+          await window.electronAPI.file.write(${jsString(workbookId)}, "documents/auto-smoke.md", ${jsString(
+      `This is a refresh probe: ${refreshProbeToken}\n`,
+    )});
+          return { ok: true };
+        } catch (e) {
+          return { ok: false, why: e instanceof Error ? e.message : String(e) };
+        }
+      })()
+    `);
+    if (!probeWrite?.ok) fail(`Failed to write refresh probe: ${JSON.stringify(probeWrite)}`);
+
+    // Open the markdown doc and assert it live-updates when written again (no manual refresh / no "Sources" click).
+    const mdTid = `div[data-testid="workbooks-doc-${workbookId}-${encodeURIComponent("documents/auto-smoke.md")}"]`;
+    await waitForSelector(evaluate, mdTid, 20000);
+    await clickSelector(evaluate, mdTid);
+    await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="md"]', 20000);
+
+    const liveToken = `live-update-${Date.now()}`;
+    const liveWriteOk = await evaluate(`
+      (async () => {
+        try {
+          await window.electronAPI.file.write(${jsString(workbookId)}, "documents/auto-smoke.md", ${jsString(
+            `Live update token: ${liveToken}\n`,
+          )});
+          return true;
+        } catch { return false; }
+      })()
+    `);
+    if (!liveWriteOk) fail("Failed to write live-update token to auto-smoke.md");
+
+    const liveOk = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 10000) {
+        const ok = await evaluate(`
+          (() => {
+            const el = document.querySelector('div[data-testid="document-viewer-content"]');
+            if (!el) return false;
+            const snip = String(el.getAttribute("data-active-content-snippet") || "");
+            return snip.includes(${jsString(liveToken)});
+          })()
+        `);
+        if (ok) return true;
+        await sleep(150);
+      }
+      return false;
+    })();
+    if (!liveOk) fail("Open document did not live-update after file.write (expected UI to reflect new content)");
+    console.log("✅ Open document live-updates after file.write (no manual refresh)");
+
+    const probeGrep = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 10000) {
+        const attempt = await evaluate(`
+          (async () => {
+            if (!window.electronAPI?.mcp?.call) return { ok: false, error: "electronAPI.mcp.call unavailable" };
+            try {
+              const res = await window.electronAPI.mcp.call("workbook-rag", "tools/call", {
+                name: "rag_grep",
+                arguments: { pattern: ${jsString(refreshProbeToken)}, regex: false, workbook_ids: [${jsString(workbookId)}] },
+              });
+              return { ok: true, res };
+            } catch (e) {
+              return { ok: false, error: e instanceof Error ? e.message : String(e) };
+            }
+          })()
+        `);
+        if (attempt?.ok) {
+          const text = JSON.stringify(attempt?.res || "");
+          if (text.includes(refreshProbeToken)) return { ok: true, res: attempt.res };
+        }
+        await sleep(200);
+      }
+      return { ok: false, error: "timeout" };
+    })();
+    if (!probeGrep?.ok) fail(`workbook-rag did not find newly-written token quickly (expected ${refreshProbeToken}, error=${String(probeGrep?.error || "unknown")})`);
+    console.log("✅ Verified new file is immediately queryable (refresh/index cache invalidation)");
 
     // Rename the doc (root doc path is deterministic).
     const docPath = `documents/${mdName}`;
@@ -1333,15 +1742,45 @@ async function run() {
     `);
     if (!chatDoc?.id) fail("Could not read active chat tab id after popout");
 
+    // Editor splits (2 groups): show Chat + a Notebook side-by-side.
+    // Split Right, then move Chat to the other group, and assert both panes exist.
+    await clickSelector(evaluate, 'button[data-testid="document-viewer-split-right"]');
+    const splitOk = await waitForSelector(evaluate, 'div[data-testid="document-viewer-split-container"]', 20000);
+    if (!splitOk) fail("Split Right did not create split container");
+
+    // Focus the Chat tab and move it to the other group.
+    await clickSelector(evaluate, `div[data-testid="document-viewer-tab-${encodeURIComponent(String(chatDoc.id || ""))}"]`);
+    await clickSelector(evaluate, 'button[data-testid="document-viewer-move-to-other-group"]');
+    await sleep(300);
+
+    const panesOk = await evaluate(`
+      (() => {
+        const a = document.querySelector('div[data-testid="document-viewer-pane-a"]');
+        const b = document.querySelector('div[data-testid="document-viewer-pane-b"]');
+        return { hasA: !!a, hasB: !!b };
+      })()
+    `);
+    if (!panesOk?.hasA || !panesOk?.hasB) fail(`Split panes not present after split: ${JSON.stringify(panesOk)}`);
+
+    const hasChatSomewhere = await evaluate(`
+      (() => {
+        const nodes = Array.from(document.querySelectorAll('div[data-testid="document-viewer-pane-a"], div[data-testid="document-viewer-pane-b"]'));
+        return nodes.some((n) => (n.innerText || "").includes("Chat") || !!n.querySelector('textarea[data-testid="chat-input"]'));
+      })()
+    `);
+    if (!hasChatSomewhere) fail("Expected Chat to be visible in one of the split panes after move");
+
+    console.log("✅ Editor splits: Chat + doc can be shown side-by-side (2 groups)");
+
     const draft = `draft ${Date.now()}`;
     await clickSelector(evaluate, 'textarea[data-testid="chat-input"]');
     await typeText(evaluate, 'textarea[data-testid="chat-input"]', draft);
 
     // Switch to an existing notebook tab and back.
     if (nb1?.id) {
-      await clickSelector(evaluate, `div[data-testid="document-tab-${nb1.id}"]`);
+      await clickSelector(evaluate, `div[data-testid="document-viewer-tab-${encodeURIComponent(String(nb1.id || ""))}"]`);
       await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="ipynb"]', 20000);
-      await clickSelector(evaluate, `div[data-testid="document-tab-${chatDoc.id}"]`);
+      await clickSelector(evaluate, `div[data-testid="document-viewer-tab-${encodeURIComponent(String(chatDoc.id || ""))}"]`);
       await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="chat"]', 20000);
       await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]:not([disabled])', 20000);
       const draftOk = await evaluate(`
@@ -1389,27 +1828,54 @@ async function run() {
     if (!chipOk) fail("Selecting a chat @ mention did not create a ref chip");
     console.log("✅ Chat @ mention creates ref chip");
 
-    const msg = `smoke ping ${Date.now()}`;
-    await typeText(evaluate, 'textarea[data-testid="chat-input"]', msg);
-    await clickSelector(evaluate, 'button[data-testid="chat-send"]');
-
-    // Verify at least one user message exists.
-    const userMsgOk = await (async () => {
+    const findUserMessageIdByText = async (needle) => {
       const start = Date.now();
       while (Date.now() - start < 20000) {
-        const ok = await evaluate(`
+        const id = await evaluate(`
           (() => {
-            const nodes = Array.from(document.querySelectorAll('[data-chat-message][data-role="user"]'));
-            return nodes.some(n => (n.innerText || "").includes(${jsString(msg)}));
+            const nodes = Array.from(document.querySelectorAll('[data-chat-message][data-role="user"][data-chat-message-id]'));
+            const hit = nodes.find(n => (n.innerText || "").includes(${jsString(needle)}));
+            return hit ? String(hit.getAttribute("data-chat-message-id") || "") : null;
           })()
         `);
-        if (ok) return true;
+        if (id) return id;
         await sleep(150);
       }
-      return false;
-    })();
-    if (!userMsgOk) fail("Chat message was not rendered in UI");
-    console.log("✅ Sent chat message");
+      return null;
+    };
+
+    const assertMessageScopeBadge = async (messageId, expected /* "context" | "all" */) => {
+      const tid = `chat-message-scope-${encodeURIComponent(String(messageId || ""))}`;
+      const ok = await waitForSelector(evaluate, `span[data-testid="${tid}"]`, 20000);
+      if (!ok) fail(`Missing scope badge for message ${messageId}`);
+      const mode = await evaluate(`document.querySelector('span[data-testid="${tid}"]')?.getAttribute("data-scope-mode") || null`);
+      if (mode !== expected) fail(`Scope badge mismatch for ${messageId}: expected ${expected}, got ${String(mode)}`);
+    };
+
+    // Send two messages under different scopes; badges must persist per message (history readability).
+    await ensureContextScopingMode(evaluate, "context");
+    await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]', 20000);
+    await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]:not([disabled])', 20000);
+    const msgScoped = `scoped ping ${Date.now()}`;
+    await typeText(evaluate, 'textarea[data-testid="chat-input"]', msgScoped);
+    await clickSelector(evaluate, 'button[data-testid="chat-send"]');
+    const scopedId = await findUserMessageIdByText(msgScoped);
+    if (!scopedId) fail("Scoped chat message was not rendered in UI");
+    await assertMessageScopeBadge(scopedId, "context");
+
+    await ensureContextScopingMode(evaluate, "all");
+    await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]', 20000);
+    await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]:not([disabled])', 20000);
+    const msgAll = `all ping ${Date.now()}`;
+    await typeText(evaluate, 'textarea[data-testid="chat-input"]', msgAll);
+    await clickSelector(evaluate, 'button[data-testid="chat-send"]');
+    const allId = await findUserMessageIdByText(msgAll);
+    if (!allId) fail("All-scope chat message was not rendered in UI");
+    await assertMessageScopeBadge(allId, "all");
+
+    // Previously sent message must keep its original badge even after toggling scope.
+    await assertMessageScopeBadge(scopedId, "context");
+    console.log("✅ Chat transcript records per-message scope (Scoped vs All)");
 
     // Now delete the active context (this clears active context) and verify Chat shows deterministic empty-state.
     await ensureExpanded(evaluate, "sidebar-contexts-header");
@@ -1588,6 +2054,80 @@ async function run() {
       await clickSelector(evaluate, `button[data-testid="dashboard-tile-viz-${csvGraphId}-graph"]`);
       console.log("✅ Created CSV graph tile and set Graph visualization (result rendering is provider-dependent, not asserted)");
     }
+
+    // Renderer reload persistence: split layout should survive View → Reload.
+    // (Do this at the very end; doc IDs will change after reload.)
+    const splitPersistDebug = await evaluate(`
+      (() => {
+        try {
+          const raw = localStorage.getItem("insightlm.editorSplit.v1");
+          return raw ? JSON.parse(raw) : null;
+        } catch { return null; }
+      })()
+    `);
+    if (!splitPersistDebug || String(splitPersistDebug?.mode || "single") === "single") {
+      fail(`Split layout was not persisted before reload (debug=${JSON.stringify(splitPersistDebug)})`);
+    }
+
+    await evaluate(`location.reload()`);
+    await waitForSelector(evaluate, "body", 20000);
+
+    await waitForSelector(evaluate, 'button[data-testid="activitybar-item-file"]', 20000);
+    await clickSelector(evaluate, 'button[data-testid="activitybar-item-file"]');
+
+    const restoreDone = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 30000) {
+        const state = await evaluate(`
+          (() => {
+            const restoring = (window.__insightlmRestoringTabs === true);
+            const el = document.querySelector('div[data-testid="document-viewer-content"]');
+            const activeId = el ? String(el.getAttribute("data-active-doc-id") || "") : "";
+            return { restoring, hasActive: !!activeId };
+          })()
+        `);
+        if (state && state.restoring === false && state.hasActive) return true;
+        await sleep(200);
+      }
+      return false;
+    })();
+    if (!restoreDone) {
+      const dbg = await evaluate(`
+        (() => {
+          let split = null;
+          let tabs = null;
+          try { split = localStorage.getItem("insightlm.editorSplit.v1"); } catch {}
+          try { tabs = localStorage.getItem("insightlm.openTabs.v1"); } catch {}
+          const el = document.querySelector('div[data-testid="document-viewer-content"]');
+          const activeId = el ? String(el.getAttribute("data-active-doc-id") || "") : "";
+          const restoring = (typeof window.__insightlmRestoringTabs === "undefined") ? "undefined" : String(window.__insightlmRestoringTabs);
+          return { restoring, activeId, split: split ? split.slice(0, 300) : null, openTabs: tabs ? tabs.slice(0, 300) : null };
+        })()
+      `);
+      fail(`Renderer reload: tab restore did not finish in time (debug=${JSON.stringify(dbg)})`);
+    }
+
+    const splitRestored = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 30000) {
+        const ok = await evaluate(`!!document.querySelector('div[data-testid="document-viewer-split-container"]')`);
+        if (ok) return true;
+        await sleep(200);
+      }
+      return false;
+    })();
+    if (!splitRestored) {
+      const after = await evaluate(`
+        (() => {
+          try {
+            const raw = localStorage.getItem("insightlm.editorSplit.v1");
+            return raw ? JSON.parse(raw) : null;
+          } catch { return null; }
+        })()
+      `);
+      fail(`Split layout did not persist after renderer reload (expected split container). persisted=${JSON.stringify(after)}`);
+    }
+    console.log("✅ Split layout persists after renderer reload");
 
     // Final: fail hard on uncaught exceptions and known-fatal console errors.
     const fatalConsole = (consoleEvents || []).filter((e) => {

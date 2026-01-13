@@ -109,6 +109,31 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
 
   const DOC_DRAG_MIME = "application/x-insightlm-doc";
   const FOLDER_DRAG_MIME = "application/x-insightlm-folder";
+  const emitWorkbooksChanged = useCallback(() => {
+    try {
+      window.dispatchEvent(new CustomEvent("workbooks:changed"));
+    } catch {
+      // ignore
+    }
+  }, []);
+  const emitWorkbookFilesChanged = useCallback((workbookId: string) => {
+    try {
+      window.dispatchEvent(new CustomEvent("workbooks:filesChanged", { detail: { workbookId } }));
+    } catch {
+      // ignore
+    }
+  }, []);
+  const clearRagCache = useCallback(async (opts?: { workbookId?: string }) => {
+    try {
+      if (!window.electronAPI?.mcp?.call) return;
+      await window.electronAPI.mcp.call("workbook-rag", "tools/call", {
+        name: "rag_clear_cache",
+        arguments: { workbook_id: opts?.workbookId },
+      });
+    } catch {
+      // fail-soft: cache clearing is best-effort
+    }
+  }, []);
   const getDocRelativePath = (doc: any): string => {
     const p = typeof doc?.path === "string" ? doc.path.replace(/\\/g, "/") : "";
     if (p) return p;
@@ -479,7 +504,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
   // Refresh workbooks when native Demos menu loads data (or other out-of-band updates occur).
   useEffect(() => {
     const handler = () => {
-      loadWorkbooks();
+      loadWorkbooks().catch(() => {});
     };
     window.addEventListener("workbooks:changed", handler as any);
     window.addEventListener("demos:changed", handler as any);
@@ -516,19 +541,26 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
       onConfirm: async (name: string) => {
         setInputDialog((prev) => ({ ...prev, isOpen: false }));
         try {
-          await window.electronAPI.workbook.create(name);
+          const created = await window.electronAPI.workbook.create(name);
           await loadWorkbooks();
+          emitWorkbooksChanged();
+          // New workbooks often require cache invalidation for immediate RAG visibility on Windows.
+          await clearRagCache();
+          const createdId = created?.id ? String(created.id) : "";
+          if (createdId) emitWorkbookFilesChanged(createdId);
           notifySuccess(`Workbook "${name}" created`, "Workbooks");
         } catch (err) {
           notifyError(err instanceof Error ? err.message : "Failed to create workbook", "Workbooks");
         }
       },
     });
-  }, [loadWorkbooks]);
+  }, [clearRagCache, emitWorkbookFilesChanged, emitWorkbooksChanged, loadWorkbooks]);
 
   const handleRefreshWorkbooks = useCallback(async () => {
     await loadWorkbooks();
-  }, [loadWorkbooks]);
+    emitWorkbooksChanged();
+    await clearRagCache();
+  }, [clearRagCache, emitWorkbooksChanged, loadWorkbooks]);
 
   const handleCollapseAll = useCallback(() => {
     setExpandedWorkbooks(new Set());
@@ -614,6 +646,8 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
         try {
           await window.electronAPI.workbook.rename(workbookId, newName);
           await loadWorkbooks();
+          emitWorkbooksChanged();
+          await clearRagCache({ workbookId });
           notifySuccess("Workbook renamed", "Workbooks");
         } catch (err) {
           notifyError(err instanceof Error ? err.message : "Failed to rename workbook", "Workbooks");
@@ -641,6 +675,8 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
         try {
           await window.electronAPI.workbook.delete(workbookId);
           await loadWorkbooks();
+          emitWorkbooksChanged();
+          await clearRagCache();
           notifySuccess("Workbook deleted", "Workbooks");
         } catch (err) {
           notifyError(err instanceof Error ? err.message : "Failed to delete workbook", "Workbooks");
@@ -658,6 +694,7 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     try {
       await window.electronAPI.archive.workbook(workbookId);
       await loadWorkbooks();
+      emitWorkbooksChanged();
       notifySuccess("Workbook archived", "Workbooks");
     } catch (err) {
       notifyError(err instanceof Error ? err.message : "Failed to archive workbook", "Workbooks");
@@ -1060,6 +1097,9 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
         try {
           await window.electronAPI.file.write(workbookId, relPath, "");
           await loadWorkbooks();
+          emitWorkbooksChanged();
+          emitWorkbookFilesChanged(workbookId);
+          await clearRagCache({ workbookId });
 
           // Ensure the destination area is visible for humans immediately.
           setExpandedWorkbooks((prev) => new Set(prev).add(workbookId));
@@ -1157,6 +1197,9 @@ export function WorkbooksView({ onActionButton }: WorkbooksViewProps = {}) {
     }
 
     await loadWorkbooks();
+    emitWorkbooksChanged();
+    emitWorkbookFilesChanged(workbookId);
+    await clearRagCache({ workbookId });
     if (failed === 0) notifySuccess(`Added ${moved} file(s) to "${folderName}"`, "Workbooks");
     else {
       notifyInfo(`Added ${moved} file(s) to "${folderName}", ${failed} failed`, "Workbooks");

@@ -21,3 +21,13 @@
 - **Notes**:
   - Phases 1–4 pass; only Phase 0 fails.
   - CI annotations also mention `git.exe` exit 128, but the first failing assertion is the Phase 0 notebook creation error above.
+
+## 2026-01-12 — Workbook delete/rename must cascade to contexts + active context (no stale refs)
+- **GitHub issue (AVIAN tracking)**: `https://github.com/AVIAN-LLC/insightLM-LT/issues/4`
+- **Problem**: deleting/renaming a workbook can leave stale references (Chat context picker, contexts’ `workbook_ids`, quick `[WB]` contexts, active context pointer, chat threads).
+
+## 2026-01-13 — Automation regression: duplicate `testIds.documentViewer` key (fixed)
+- **Problem**: `src/testing/testIds.ts` accidentally defined `documentViewer` twice; the latter overwrote the former silently at runtime.
+- **Impact**: UI and smoke selectors drifted (tabs/save ids), creating flaky or broken automation.
+- **Fix**: Removed the duplicate key and standardized on one authoritative `testIds.documentViewer` block.
+- **Write-up**: `docs/Testing/TESTIDS_DUPLICATE_KEY_POSTMORTEM.md`

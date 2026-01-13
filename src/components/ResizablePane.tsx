@@ -6,6 +6,12 @@ interface ResizablePaneProps {
   initialSize: number;
   minSize?: number;
   maxSize?: number;
+  /**
+   * When true, vertical dragging inverts the delta (useful for resizing a bottom panel like Chat):
+   * - Dragging UP increases size
+   * - Dragging DOWN decreases size
+   */
+  invert?: boolean;
   className?: string;
 }
 
@@ -15,6 +21,7 @@ export function ResizablePane({
   initialSize,
   minSize = 100,
   maxSize = Infinity,
+  invert = false,
   className = "",
 }: ResizablePaneProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -38,7 +45,8 @@ export function ResizablePane({
     const handleMouseMove = (e: MouseEvent) => {
       const currentPos = direction === "horizontal" ? e.clientX : e.clientY;
       // Calculate delta: positive = drag right/down
-      const delta = currentPos - startPosRef.current;
+      let delta = currentPos - startPosRef.current;
+      if (invert && direction === "vertical") delta = -delta;
 
       // Calculate new size from the starting size (captured at drag start)
       // For vertical: dragging down (positive delta) increases the view above
