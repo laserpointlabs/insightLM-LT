@@ -350,3 +350,13 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
   - [x] Move **Project** indicator (currently in the top area) into the status bar.
   - [x] Move **Scope** indicator (Scoped/All + active context summary) into the status bar.
 - [x] **Top title bar**: move the menu bar into the very top title/header row (VS Code/Cursor-style) to maximize vertical workspace area.
+
+---
+
+## Extensions Workbench (completed)
+- [x] **Extensions Activity Bar icon**: add a new icon to the left Activity Bar for Extensions.
+- [x] **Extensions Workbench**: clicking opens an Extensions workbench (like Data/Analysis/Event placeholders).
+- [x] **Extensions list**: list registered extensions from `extensionRegistry` with stable testIds.
+- [x] **Enable/disable checkbox**: checkbox per extension toggles enabled state (best-effort start/stop MCP server; fail-soft).
+- [x] **Extension details tab**: clicking an extension opens a main editor tab showing manifest-driven details (decoupled).
+- [x] **Deterministic smoke**: `npm run smoke:run` covers list + toggle + open details tab.
