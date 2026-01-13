@@ -5,6 +5,7 @@ import { PDFViewer } from "./PDFViewer";
 import { TextViewer } from "./TextViewer";
 import { DashboardViewer } from "./DashboardViewer";
 import { Chat } from "../Sidebar/Chat";
+import { ExtensionDetailsTab } from "../Extensions/ExtensionDetailsTab";
 import { UnsavedChangesDialog } from "../UnsavedChangesDialog";
 import { ResizablePane } from "../ResizablePane";
 import { useDocumentStore } from "../../store/documentStore";
@@ -12,7 +13,7 @@ import { extensionRegistry } from "../../services/extensionRegistry";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import { testIds } from "../../testing/testIds";
 import { getFileTypeIcon } from "../../utils/fileTypeIcon";
-import { ChatIcon, DashboardIcon } from "../Icons";
+import { ChatIcon, DashboardIcon, ExtensionsIcon } from "../Icons";
 
 class ViewerErrorBoundary extends React.Component<
   { filename?: string; onCloseCurrent?: () => void; children: React.ReactNode },
@@ -100,10 +101,11 @@ export interface OpenDocument {
   content?: string;
   /** If set, the document failed to load from disk (e.g. file missing). */
   loadError?: string;
-  type?: "document" | "dashboard" | "config" | "chat"; // Document type
+  type?: "document" | "dashboard" | "config" | "chat" | "extension"; // Document type
   dashboardId?: string; // For dashboard documents
   configKey?: "llm"; // For config documents
   chatKey?: string; // For chat documents
+  extensionId?: string; // For extension details tabs
 }
 
 interface DocumentViewerProps {
@@ -118,7 +120,8 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     | { type: "chat"; chatKey: string }
     | { type: "document"; workbookId: string; path: string }
     | { type: "dashboard"; dashboardId: string }
-    | { type: "config"; configKey: string };
+    | { type: "config"; configKey: string }
+    | { type: "extension"; extensionId: string };
   type PersistedSplitLayout = {
     version: 1;
     mode: "single" | "right" | "down";
@@ -187,7 +190,7 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     async (docId: string) => {
       const doc = documents.find((d) => d.id === docId);
       if (!doc) return;
-      if (doc.type === "dashboard" || doc.type === "chat") return;
+      if (doc.type === "dashboard" || doc.type === "chat" || doc.type === "extension") return;
       const ext = getFileExtension(doc.filename || "");
       if (!isEditableFileType(ext)) return;
 
@@ -239,6 +242,7 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     if (type === "chat") return { type: "chat", chatKey: String(doc?.chatKey || "main").trim() || "main" };
     if (type === "dashboard") return doc?.dashboardId ? { type: "dashboard", dashboardId: String(doc.dashboardId) } : null;
     if (type === "config") return doc?.configKey ? { type: "config", configKey: String(doc.configKey) } : null;
+    if (type === "extension") return (doc as any)?.extensionId ? { type: "extension", extensionId: String((doc as any).extensionId) } : null;
     if (!doc?.workbookId || !doc?.path) return null;
     return { type: "document", workbookId: String(doc.workbookId), path: String(doc.path) };
   }
@@ -264,6 +268,9 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
           return d.id;
         }
         if (t === "config" && dt === "config" && String((d as any).configKey || "") === String((ident as any).configKey || "")) {
+          return d.id;
+        }
+        if (t === "extension" && dt === "extension" && String((d as any).extensionId || "") === String((ident as any).extensionId || "")) {
           return d.id;
         }
         if (t === "document" && dt === "document" && String(d.workbookId || "") === String((ident as any).workbookId || "") && String(d.path || "") === String((ident as any).path || "")) {
@@ -469,14 +476,32 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     }
   }, [documents.length]);
 
-  // Assign newly opened doc (lastOpenedDocId) to focused group if it's not already in a group.
+  // Ensure lastOpenedDocId is actually activated (even if it was already open),
+  // and if it's a newly opened doc, assign it to the focused group.
   useEffect(() => {
     const id = lastOpenedDocId;
     if (!id) return;
     if (!allIds.current.has(id)) return;
     const inA = groupAIds.includes(id);
     const inB = groupBIds.includes(id);
-    if (inA || inB) return;
+    if (inA) {
+      setActiveAId(id);
+      setFocusedGroup("a");
+      return;
+    }
+    if (inB) {
+      if (splitMode === "single") {
+        // In single mode, normalize: keep everything in group A.
+        setGroupBIds((prev) => prev.filter((x) => x !== id));
+        setGroupAIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+        setActiveAId(id);
+        setFocusedGroup("a");
+        return;
+      }
+      setActiveBId(id);
+      setFocusedGroup("b");
+      return;
+    }
     if (focusedGroup === "b" && splitMode !== "single") {
       setGroupBIds((prev) => [...prev, id]);
       setActiveBId(id);
@@ -547,6 +572,11 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
           <Chat onJumpToContexts={onJumpToContexts} chatKey={doc.chatKey || "main"} />
         </div>
       );
+    }
+
+    if (doc.type === "extension") {
+      const extensionId = String((doc as any).extensionId || "").trim();
+      return <ExtensionDetailsTab extensionId={extensionId} />;
     }
 
     if (doc.type === "dashboard" && doc.dashboardId) {
@@ -690,6 +720,8 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
                       <DashboardIcon className="h-3 w-3" />
                     ) : doc.type === "chat" ? (
                       <ChatIcon className="h-3 w-3" />
+                    ) : doc.type === "extension" ? (
+                      <ExtensionsIcon className="h-3 w-3" />
                     ) : (
                       getFileTypeIcon(doc.filename, { size: "xs" })
                     )}

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type WorkbenchId = "file" | "data" | "analysis" | "event";
+export type WorkbenchId = "file" | "extensions" | "data" | "analysis" | "event";
 
 export type WorkbenchView = "workbooks" | "dashboards" | "chat";
 
@@ -26,6 +26,12 @@ const WORKBENCHES: Workbench[] = [
     name: "Insight Workbench",
     views: ["dashboards", "workbooks", "chat"],
     icon: "file",
+  },
+  {
+    id: "extensions",
+    name: "Extensions Workbench",
+    views: [],
+    icon: "extensions",
   },
   {
     id: "data",

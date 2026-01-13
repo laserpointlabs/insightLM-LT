@@ -258,6 +258,17 @@ class ExtensionRegistry {
       await electronAPI.extensions.setEnabled(manifest.id, enabled, manifest.mcpServer);
     } catch (err) {
       console.warn(`ExtensionRegistry: failed to sync MCP server for ${manifest.id}`, err);
+      // Fail-soft: broadcast a UI event so the shell can show a non-blocking toast.
+      try {
+        const msg = err instanceof Error ? err.message : String(err);
+        window.dispatchEvent(
+          new CustomEvent("extensions:syncError", {
+            detail: { extensionId: manifest.id, enabled, message: msg || "Failed to update extension server" },
+          }),
+        );
+      } catch {
+        // ignore
+      }
     }
   }
 }

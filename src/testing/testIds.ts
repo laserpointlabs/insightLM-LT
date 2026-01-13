@@ -9,11 +9,24 @@ export const testIds = {
     jumpToContexts: "statusbar-jump-to-contexts",
   },
   activityBar: {
-    item: (workbenchId: "file" | "data" | "analysis" | "event") => `activitybar-item-${workbenchId}`,
+    item: (workbenchId: "file" | "extensions" | "data" | "analysis" | "event") => `activitybar-item-${workbenchId}`,
     file: "activitybar-item-file",
+    extensions: "activitybar-item-extensions",
     data: "activitybar-item-data",
     analysis: "activitybar-item-analysis",
     event: "activitybar-item-event",
+  },
+  extensions: {
+    container: "extensions-workbench",
+    emptyState: "extensions-empty-state",
+    item: (extensionId: string) => `extensions-item-${encodeURIComponent(String(extensionId || ""))}`,
+    toggle: (extensionId: string) => `extensions-toggle-${encodeURIComponent(String(extensionId || ""))}`,
+    details: {
+      container: "extensions-details",
+      name: "extensions-details-name",
+      id: "extensions-details-id",
+      enabled: "extensions-details-enabled",
+    },
   },
   sidebar: {
     container: "sidebar-container",

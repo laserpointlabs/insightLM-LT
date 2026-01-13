@@ -459,6 +459,60 @@ async function run() {
       }
     }
 
+    // Extensions workbench: list + toggle + open details tab (manifest-driven, decoupled).
+    const extBtn = 'button[data-testid="activitybar-item-extensions"]';
+    const hasExtBtn = await waitForSelector(evaluate, extBtn, 20000);
+    if (!hasExtBtn) fail("Missing Activity Bar Extensions icon");
+    await clickSelector(evaluate, extBtn);
+    await waitForSelector(evaluate, 'div[data-testid="extensions-workbench"]', 20000);
+
+    // Expect built-in extensions to be registered (at least Jupyter + Spreadsheet in this repo).
+    const hasAnyExt = await waitForSelector(evaluate, 'div[data-testid^="extensions-item-"]', 20000);
+    if (!hasAnyExt) fail("Extensions workbench opened but no extensions were listed");
+
+    // Toggle one extension deterministically (pick the first tile).
+    const firstExt = await evaluate(`
+      (() => {
+        const el = document.querySelector('div[data-testid^="extensions-item-"]');
+        return el ? String(el.getAttribute("data-testid") || "") : null;
+      })()
+    `);
+    if (!firstExt) fail("Could not locate first extension tile");
+    const extIdEnc = firstExt.slice("extensions-item-".length);
+    const toggleTid = `extensions-toggle-${extIdEnc}`;
+    const beforeToggle = await evaluate(`(() => !!document.querySelector('input[data-testid="${toggleTid}"]') && document.querySelector('input[data-testid="${toggleTid}"]').checked)()`);
+    await clickSelector(evaluate, `input[data-testid="${toggleTid}"]`);
+    const extToggleFlipped = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 15000) {
+        const now = await evaluate(`(() => document.querySelector('input[data-testid="${toggleTid}"]') ? document.querySelector('input[data-testid="${toggleTid}"]').checked : null)()`);
+        if (now !== null && now !== beforeToggle) return true;
+        await sleep(150);
+      }
+      return false;
+    })();
+    if (!extToggleFlipped) fail("Extension enable toggle did not flip");
+
+    // Open details tab by clicking the tile (button inside tile).
+    await clickSelector(evaluate, `div[data-testid="${firstExt}"] button[title="Open extension details"]`);
+    await waitForSelector(evaluate, 'div[data-testid="extensions-details"]', 20000);
+    const detailsOk = await evaluate(`
+      (() => {
+        const idEl = document.querySelector('span[data-testid="extensions-details-id"]');
+        const nameEl = document.querySelector('div[data-testid="extensions-details-name"]');
+        return { hasId: !!idEl, hasName: !!nameEl, id: idEl ? (idEl.innerText || "").trim() : null };
+      })()
+    `);
+    if (!detailsOk?.hasId || !detailsOk?.hasName) fail(`Extension details tab missing expected fields: ${JSON.stringify(detailsOk)}`);
+    console.log("✅ Extensions workbench: list + toggle + open details tab");
+
+    // Return to File workbench before sidebar view assertions (Dashboards/Contexts/Workbooks/Chat live there).
+    const fileWorkbench2 = 'button[data-testid="activitybar-item-file"]';
+    const hasFile2 = await waitForSelector(evaluate, fileWorkbench2, 20000);
+    if (!hasFile2) fail("Missing Activity Bar File workbench icon (after Extensions test)");
+    await clickSelector(evaluate, fileWorkbench2);
+    await waitForSelector(evaluate, 'button[data-testid="sidebar-dashboards-header"]', 20000);
+
     // Views/Layout sanity (VS Code-like): collapsed bottom view docks; no horizontal overflow when constrained.
     await setViewport(call, 900, 560);
     await waitForSelector(evaluate, 'div[data-testid="sidebar-container"]', 20000);

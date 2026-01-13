@@ -316,3 +316,21 @@ export function PopOutIcon({ className = "h-4 w-4" }: { className?: string }) {
     </svg>
   );
 }
+
+export function ExtensionsIcon({ className = "h-4 w-4" }: { className?: string }) {
+  // A simple "puzzle piece" style icon for Extensions.
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6.2 2.5h2.1c.7 0 1.2.5 1.2 1.2v.6c0 .4.4.7.8.5.3-.2.7-.3 1.1-.3 1 0 1.8.8 1.8 1.8S13.4 8 12.4 8c-.4 0-.8-.1-1.1-.3-.4-.2-.8.1-.8.5v.6c0 .7-.5 1.2-1.2 1.2H8.7c-.4 0-.7.4-.5.8.2.3.3.7.3 1.1 0 1-.8 1.8-1.8 1.8S5 13.9 5 12.9c0-.4.1-.8.3-1.1.2-.4-.1-.8-.5-.8H4.2c-.7 0-1.2-.5-1.2-1.2V8.7c0-.4.4-.7.8-.5.3.2.7.3 1.1.3 1 0 1.8-.8 1.8-1.8S6 4.9 5 4.9c-.4 0-.8.1-1.1.3-.4.2-.8-.1-.8-.5v-.6c0-.7.5-1.2 1.2-1.2h2z" />
+    </svg>
+  );
+}

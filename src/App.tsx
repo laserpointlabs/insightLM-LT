@@ -19,6 +19,7 @@ import { testIds } from "./testing/testIds";
 import { notifyError, notifyInfo, notifySuccess } from "./utils/notify";
 import { SearchIcon } from "./components/Icons";
 import { StatusBar } from "./components/StatusBar";
+import { ExtensionsWorkbench } from "./components/Extensions/ExtensionsWorkbench";
 
 function App() {
   const [dashboardActionButton, setDashboardActionButton] = useState<React.ReactNode>(null);
@@ -102,6 +103,13 @@ function App() {
             if (!configKey) continue;
             const filename = String(t?.filename || "config").trim() || "config";
             await openDocument({ type: "config", configKey, filename } as any);
+            continue;
+          }
+          if (type === "extension") {
+            const extensionId = String(t?.extensionId || "").trim();
+            if (!extensionId) continue;
+            const filename = String(t?.filename || "Extension").trim() || "Extension";
+            await openDocument({ type: "extension", extensionId, filename } as any);
             continue;
           }
         }
@@ -578,6 +586,21 @@ function App() {
               </>
             );
           })()}
+        </div>
+      );
+    }
+
+    // Extensions workbench: list extensions and open details in main editor tabs.
+    if (activeWorkbenchId === "extensions") {
+      return (
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <ExtensionsWorkbench
+            onOpenDetails={(extensionId) => {
+              const m = extensionRegistry.getExtension(extensionId);
+              const filename = m?.name ? `${m.name}` : "Extension";
+              openDocument({ type: "extension", extensionId: String(extensionId || ""), filename } as any);
+            }}
+          />
         </div>
       );
     }

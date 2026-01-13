@@ -1,5 +1,6 @@
 import { useWorkbenchStore } from "../store/workbenchStore";
 import { testIds } from "../testing/testIds";
+import { ExtensionsIcon } from "./Icons";
 
 export function ActivityBar() {
   const { activeWorkbenchId, workbenches, setActiveWorkbench } = useWorkbenchStore();
@@ -74,6 +75,8 @@ export function ActivityBar() {
             />
           </svg>
         );
+      case "extensions":
+        return <ExtensionsIcon className="h-5 w-5" />;
       default:
         return null;
     }

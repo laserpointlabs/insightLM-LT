@@ -85,7 +85,8 @@ type PersistedTab =
   | { type: "chat"; chatKey: string; filename: string }
   | { type: "document"; workbookId: string; path: string; filename: string }
   | { type: "dashboard"; dashboardId: string; filename: string }
-  | { type: "config"; configKey: string; filename: string };
+  | { type: "config"; configKey: string; filename: string }
+  | { type: "extension"; extensionId: string; filename: string };
 
 function readPersistedTabs(): PersistedTab[] {
   try {
@@ -119,6 +120,12 @@ function readPersistedTabs(): PersistedTab[] {
           if (!configKey) return null;
           return { type: "config", configKey, filename } as PersistedTab;
         }
+        if (t?.type === "extension") {
+          const extensionId = String(t?.extensionId || "").trim();
+          const filename = String(t?.filename || "Extension").trim() || "Extension";
+          if (!extensionId) return null;
+          return { type: "extension", extensionId, filename } as PersistedTab;
+        }
         return null;
       })
       .filter(Boolean) as PersistedTab[];
@@ -141,6 +148,7 @@ function sameTab(a: PersistedTab, b: PersistedTab): boolean {
   if (a.type === "document") return a.workbookId === (b as any).workbookId && a.path === (b as any).path;
   if (a.type === "dashboard") return a.dashboardId === (b as any).dashboardId;
   if (a.type === "config") return a.configKey === (b as any).configKey;
+  if (a.type === "extension") return a.extensionId === (b as any).extensionId;
   return false;
 }
 
@@ -231,6 +239,37 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       try {
         persistTabOpen({ type: "chat", chatKey: String(key || "main"), filename: tempDoc.filename || "Chat" });
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    // Handle extension details documents (manifest-driven; no disk read).
+    if (doc.type === "extension") {
+      const extensionId = String((doc as any).extensionId || "").trim();
+      if (!extensionId) return;
+      const existing = get().openDocuments.find((d: any) => d.type === "extension" && String((d as any).extensionId || "") === extensionId);
+      if (existing) {
+        set(() => ({ lastOpenedDocId: existing.id }));
+        return;
+      }
+
+      const filename = String((doc as any).filename || "Extension").trim() || "Extension";
+      const tempDoc: OpenDocument = {
+        ...doc,
+        id: `doc-${nextDocId++}`,
+        type: "extension",
+        filename,
+      } as any;
+
+      set((state) => ({
+        openDocuments: [...state.openDocuments, tempDoc],
+        lastOpenedDocId: tempDoc.id,
+      }));
+
+      try {
+        persistTabOpen({ type: "extension", extensionId, filename });
       } catch {
         // ignore
       }
@@ -477,6 +516,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           persistTabClosed({ type: "dashboard", dashboardId: String((closing as any)?.dashboardId), filename: String(closing?.filename || "Dashboard") });
         } else if ((closing as any)?.type === "config" && (closing as any)?.configKey) {
           persistTabClosed({ type: "config", configKey: String((closing as any)?.configKey), filename: String(closing?.filename || "config") });
+        } else if ((closing as any)?.type === "extension" && (closing as any)?.extensionId) {
+          persistTabClosed({ type: "extension", extensionId: String((closing as any)?.extensionId), filename: String(closing?.filename || "Extension") });
         } else if ((closing as any)?.workbookId && (closing as any)?.path) {
           persistTabClosed({
             type: "document",
