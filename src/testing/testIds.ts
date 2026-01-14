@@ -336,5 +336,6 @@ export const testIds = {
   spreadsheet: {
     viewer: "spreadsheet-viewer",
     container: "spreadsheet-container",
+    retryInit: "spreadsheet-retry-init",
   },
 } as const;

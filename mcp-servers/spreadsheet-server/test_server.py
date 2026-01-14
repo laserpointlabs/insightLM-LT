@@ -121,5 +121,60 @@ def test_calculate_cell():
     
     return 0 if failed == 0 else 1
 
+
+def test_schema_tool():
+    """Test MCP tools/list + tools/call for spreadsheet.get_schema"""
+    print()
+    print("=" * 80)
+    print("TESTING SPREADSHEET SERVER - MCP schema tool")
+    print("=" * 80)
+
+    passed = 0
+    failed = 0
+
+    # tools/list should advertise spreadsheet.get_schema
+    list_req = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    try:
+        list_res = handle_request(list_req)
+        tools = list_res.get("result", {}).get("tools", [])
+        has = any((t or {}).get("name") == "spreadsheet.get_schema" for t in tools)
+        if has:
+            print("  [PASS] tools/list advertises spreadsheet.get_schema")
+            passed += 1
+        else:
+            print("  [FAIL] tools/list missing spreadsheet.get_schema")
+            failed += 1
+    except Exception as e:
+        print(f"  [FAIL] tools/list exception: {e}")
+        failed += 1
+
+    # tools/call should return schema_version + example
+    call_req = {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {"name": "spreadsheet.get_schema", "arguments": {}},
+    }
+    try:
+        call_res = handle_request(call_req)
+        r = call_res.get("result", {})
+        ok = bool(r.get("schema_version") and isinstance(r.get("example"), dict) and r["example"].get("version"))
+        if ok:
+            print(f"  [PASS] tools/call spreadsheet.get_schema returns schema_version={r.get('schema_version')}")
+            passed += 1
+        else:
+            print("  [FAIL] tools/call spreadsheet.get_schema returned invalid payload")
+            failed += 1
+    except Exception as e:
+        print(f"  [FAIL] tools/call exception: {e}")
+        failed += 1
+
+    print("=" * 80)
+    print(f"RESULTS: {passed} passed, {failed} failed")
+    print("=" * 80)
+    return 0 if failed == 0 else 1
+
 if __name__ == '__main__':
-    sys.exit(test_calculate_cell())
+    rc1 = test_calculate_cell()
+    rc2 = test_schema_tool()
+    sys.exit(0 if (rc1 == 0 and rc2 == 0) else 1)

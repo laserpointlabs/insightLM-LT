@@ -31,7 +31,11 @@ export async function createSpreadsheet(workbookId: string, name?: string): Prom
           id: 'sheet1',
           name: 'Sheet1',
           cells: {},
-          formats: {}
+          formats: {},
+          viewState: {
+            columnWidths: {},
+            rowHeights: {},
+          },
         }
       ]
     },

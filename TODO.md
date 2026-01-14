@@ -17,7 +17,7 @@ These are captured as numbered items for easy reference. They also appear (group
 - [ ] **2) Opening Chat in a tabbed layout collapses/forces-close the left column view**: opening Chat into a tab area collapses/slides the left column/canvas (layout must remain stable).
 - [ ] **3) First-open refresh required for `.is` docs or Sheets**: after launch, opening a `.is` document or a sheet sometimes requires a manual refresh.
 - [ ] **4) `@` mention caret/selection offset after inserting a chip**: after selecting an `@` suggestion and inserting the chip, caret resumes in the wrong place.
-- [ ] **5) Duplicate/extra “thinking” indicators in chat**: remove duplicate indicator; keep a single, correct “thinking/streaming” UI. (Related: “Remove initial thinking…” below.)
+- [x] **5) Duplicate/extra “thinking” indicators in chat**: remove duplicate indicator; keep a single, correct “thinking/streaming” UI. (Related: “Remove initial thinking…” below.)
 - [ ] **6) Streamed chat output should render as Markdown**: streaming responses should progressively render Markdown safely/deterministically.
 - [ ] **7) Chat should support “edit & rerun” + history revert**: Cursor/Continue parity; clear state model.
 - [ ] **8) Add HTML renderer (where applicable)**: safe HTML rendering where appropriate (likely chat output or specific viewers).
@@ -42,6 +42,13 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 
 ### Chat / Planning / Governance (untriaged)
 - [ ] **17) Flashing chat tab when typing**: tab UI flashes while typing in the chat composer.
+
+### Runtime stability / Services
+- [ ] **18) App left open overnight goes white + background servers are down and won’t recover**: leave the app open overnight (or long idle) → the main window becomes white/unresponsive; after a refresh/reload the UI may appear again but MCP/local “servers” (e.g., Rack Server) are stopped and do not restart even when opening/closing related UI panels.
+  - Repro: open app → ensure servers are running/usable → leave running overnight (screen lock / sleep / network change may occur) → observe white screen → reload/refresh window → attempt to use features that require servers; attempt to “restart” by closing/opening views.
+  - Expected: app remains responsive; services stay running or automatically reconnect/restart; closing/reopening panels should re-establish connections.
+  - Actual: renderer shows white screen; after refresh UI returns but servers remain down; UI actions don’t recover servers.
+  - Notes: likely related to sleep/hibernate/resume, long-lived websocket/IPC disconnect, child process lifecycle, or resource exhaustion; capture logs from Electron main + service manager around the failure window.
 
 ### Sheets (LLM authoring contract + MCP tools)
 - [ ] Define “Insight Sheet” authoring contract so LLM never guesses `.is` format: add Spreadsheet MCP tool surface (create/open/read-range/set-cells/view-state) + schema/examples. See `docs/MCP/SPREADSHEET_MCP_CONTRACT.md`.
@@ -264,7 +271,7 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
   - [x] Fix blank spaces after inline chip insertion
 - [x] Add toggle on Chat settings button (open/close)
 - [x] Update the context view when we set the context and scoping in chat text area so they match (verify)
-- [ ] Remove initial thinking and animate the actual thinking…
+- [x] Remove initial thinking and animate the actual thinking…
 - [x] Render mermaid in the chat text area
 - [x] Store chat tab state
 - [x] When a user selects a new context, auto change to scoped if in “all” state
@@ -280,9 +287,9 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 - [ ] Change move icon to ↓↑
 - [ ] Add loading rotator and reports to user during Windows loading phase
 - [x] Add split for chat tab and other tabs so user can review and chat at same time
-- [ ] Animate the “Thinking…” indicator in chat
-- [ ] Fix the double sources
-  - [ ] Improve the visual appeal of sources in AI chat response
+- [x] Animate the “Thinking…” indicator in chat
+- [x] Fix the double sources
+  - [x] Improve the visual appeal of sources in AI chat response
 - [x] Add split to tabs area to allow side-by-side viewer of multiple tabs
 - [ ] Clean up smoke testing workbooks and dashboards
 - [ ] Allow AI access to application context (current tabs, chat modes, chat data, open workbenches, loaded extensions, etc.)
@@ -361,3 +368,30 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 - [x] **Enable/disable checkbox**: checkbox per extension toggles enabled state (best-effort start/stop MCP server; fail-soft).
 - [x] **Extension details tab**: clicking an extension opens a main editor tab showing manifest-driven details (decoupled).
 - [x] **Deterministic smoke**: `npm run smoke:run` covers list + toggle + open details tab.
+
+---
+
+## Demo agenda (tomorrow)
+
+### Spreadsheet persistence (Luckysheet) — fix
+- [ ] Persist sheet view state: **column widths**, row heights, and basic styling/formatting across reloads.
+- [ ] Prove via a deterministic test: change widths/styles → reload app → verify preserved.
+
+### Demo #1 — AC1000 (prove)
+- [ ] Run + record deterministic proof for the AC1000 demo flow end-to-end.
+
+### Demo #2 — Trade Study (prove)
+- [ ] Run + record deterministic proof for the Trade Study demo flow end-to-end.
+
+### Demo #3 — Conceptualizer (new)
+- [ ] Define Conceptualizer workflow: ingest a CDD → generate requirements → conceptualize aircraft from CDD perspective.
+- [ ] Decide extension shape:
+  - [ ] Option A: dedicated **ontology/conceptualization extension**
+  - [ ] Option B: single combined extension (ontology + individuals/conceptualizer)
+- [ ] Draft tool surface + outputs (requirements artifacts, conceptual model artifacts) and how they are saved into workbooks.
+
+### Stretch demo — Lattice development (ODRAS-style)
+- [ ] Define “project lattice” workflow (ODRAS plugin precedent): build a lattice of projects coupled via **pub/sub**.
+- [ ] Decide whether this is:
+  - [ ] a new extension, or
+  - [ ] part of the Conceptualizer/ontology extension.

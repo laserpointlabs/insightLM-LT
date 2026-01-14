@@ -23,6 +23,14 @@ interface SpreadsheetData {
     cells: Record<string, any>;
     formats: Record<string, any>;
     conditionalFormats?: Record<string, any>; // Conditional formatting rules
+    /**
+     * View-state persistence (Luckysheet config) captured from the UI and reapplied on load.
+     * Keys are stringified indices ("0", "1", ...) to keep JSON stable.
+     */
+    viewState?: {
+      columnWidths?: Record<string, number>;
+      rowHeights?: Record<string, number>;
+    };
   }>;
 }
 
@@ -189,6 +197,18 @@ function convertToLuckysheetFormat(data: SpreadsheetData): any[] {
       order: index,
       status: 1, // 1 = visible
     };
+
+    // Apply view-state (column widths / row heights) if present.
+    // Luckysheet expects these under `config` (e.g. config.columnlen / config.rowlen).
+    if (sheet.viewState && (sheet.viewState.columnWidths || sheet.viewState.rowHeights)) {
+      sheetData.config = sheetData.config || {};
+      if (sheet.viewState.columnWidths) {
+        sheetData.config.columnlen = { ...(sheet.viewState.columnWidths as any) };
+      }
+      if (sheet.viewState.rowHeights) {
+        sheetData.config.rowlen = { ...(sheet.viewState.rowHeights as any) };
+      }
+    }
     
     // Add calcChain if there are formulas - IMPORTANT: index must match sheet.index
     if (calcChain.length > 0) {
@@ -243,23 +263,31 @@ function convertFromLuckysheetFormat(luckysheetData: any[], metadata: Spreadshee
     const cells: Record<string, any> = {};
     const formats: Record<string, any> = {};
     const conditionalFormats: Record<string, any> = {}; // Store conditional formatting rules
+    const viewState: { columnWidths?: Record<string, number>; rowHeights?: Record<string, number> } = {};
     
     if (sheet.celldata) {
       sheet.celldata.forEach((cell: any) => {
         // Convert row/col to cell reference (e.g., {r: 0, c: 0} -> "A1")
-        const col = String.fromCharCode(65 + cell.c); // A=65
+        const col = colNumToLetter(Number(cell.c || 0));
         const row = cell.r + 1; // 1-based
         const cellRef = `${col}${row}`;
         
         const cellData: any = {};
         
-        if (cell.f) {
-          // Has formula
-          cellData.formula = cell.f;
-          cellData.value = cell.v !== null && cell.v !== undefined ? cell.v : null;
+        // Luckysheet formula/value representation varies:
+        // - Formula cells often store { v: { f: "=A1*2", v: <calc>, m: <display>, ct: {...} } }
+        // - Some APIs may expose `cell.f` directly. Handle both.
+        const v = cell?.v;
+        const vObj = v && typeof v === "object" ? v : null;
+        const formula = (typeof cell?.f === "string" && cell.f) || (typeof vObj?.f === "string" ? vObj.f : null);
+        if (formula) {
+          cellData.formula = formula;
+        }
+        // Prefer calculated value if present, else fallback to v itself.
+        if (vObj) {
+          cellData.value = vObj.v !== undefined ? vObj.v : vObj.m !== undefined ? vObj.m : null;
         } else {
-          // Plain value
-          cellData.value = cell.v !== null && cell.v !== undefined ? cell.v : null;
+          cellData.value = v !== null && v !== undefined ? v : null;
         }
         
         cells[cellRef] = cellData;
@@ -268,6 +296,22 @@ function convertFromLuckysheetFormat(luckysheetData: any[], metadata: Spreadshee
           formats[cellRef] = cell.ct;
         }
       });
+    }
+
+    // Extract view-state (column widths / row heights) from Luckysheet config if present.
+    // Luckysheet stores these as config.columnlen / config.rowlen maps (keys are indices).
+    try {
+      const cfg = sheet?.config;
+      if (cfg && typeof cfg === "object") {
+        if (cfg.columnlen && typeof cfg.columnlen === "object") {
+          viewState.columnWidths = { ...(cfg.columnlen as any) };
+        }
+        if (cfg.rowlen && typeof cfg.rowlen === "object") {
+          viewState.rowHeights = { ...(cfg.rowlen as any) };
+        }
+      }
+    } catch {
+      // ignore
     }
     
     // Extract conditional formatting rules from Luckysheet sheet data
@@ -336,6 +380,9 @@ function convertFromLuckysheetFormat(luckysheetData: any[], metadata: Spreadshee
     // Add conditional formatting if present
     if (Object.keys(conditionalFormats).length > 0) {
       sheetData.conditionalFormats = conditionalFormats;
+    }
+    if (viewState.columnWidths || viewState.rowHeights) {
+      sheetData.viewState = viewState;
     }
     
     return sheetData;
@@ -1024,6 +1071,22 @@ export function SpreadsheetViewer({
             const cf = fileSheet.luckysheet_conditionformat_save || fileSheet.luckysheet_conditionformat || fileSheet.conditionformat || fileSheet.cf;
             sheet.luckysheet_conditionformat_save = cf;
           }
+
+          // View-state persistence: column widths / row heights may live under `config` and may be present
+          // in `getluckysheetfile()` even when `getAllSheets()` is missing/incomplete.
+          try {
+            if (fileSheet && typeof fileSheet === "object") {
+              const fileCfg = (fileSheet as any).config;
+              if (fileCfg && typeof fileCfg === "object") {
+                (sheet as any).config = (sheet as any).config || {};
+                const sheetCfg = (sheet as any).config;
+                if (fileCfg.columnlen && !sheetCfg.columnlen) sheetCfg.columnlen = fileCfg.columnlen;
+                if (fileCfg.rowlen && !sheetCfg.rowlen) sheetCfg.rowlen = fileCfg.rowlen;
+              }
+            }
+          } catch {
+            // ignore
+          }
         }
         
         const converted = convertFromLuckysheetFormat(dataToConvert, spreadsheet.metadata);
@@ -1417,6 +1480,30 @@ export function SpreadsheetViewer({
     };
   }, [spreadsheet, scriptsLoaded, saveSpreadsheet, initializeLuckysheet]);
 
+  const retryInit = useCallback(() => {
+    try {
+      setError(null);
+      // Best-effort: destroy any existing instance and re-init in-place.
+      try {
+        if ((window as any).luckysheet && typeof (window as any).luckysheet.destroy === "function") {
+          (window as any).luckysheet.destroy();
+        }
+      } catch {
+        // ignore
+      }
+      luckysheetInitialized.current = false;
+      if (containerRef.current) {
+        containerRef.current.innerHTML = "";
+      }
+      // Re-init if scripts + global are ready.
+      if ((window as any).luckysheet) {
+        initializeLuckysheet();
+      }
+    } catch {
+      // ignore
+    }
+  }, [initializeLuckysheet]);
+
   // Calculate formula via MCP server (for future use - currently Luckysheet handles formulas)
   // This is kept for when we want to use Python-driven formulas, but for now
   // we let Luckysheet's built-in engine handle formulas to avoid breaking existing functionality
@@ -1498,7 +1585,7 @@ export function SpreadsheetViewer({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full" data-testid={testIds.spreadsheet.loading}>
         <div className="text-gray-500">Loading spreadsheet...</div>
       </div>
     );
@@ -1506,15 +1593,28 @@ export function SpreadsheetViewer({
 
   if (error || !spreadsheet) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-red-500">Error: {error || 'Invalid spreadsheet format'}</div>
+      <div className="flex items-center justify-center h-full" data-testid={testIds.spreadsheet.error}>
+        <div className="max-w-xl rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="font-semibold">Spreadsheet failed to load</div>
+          <div className="mt-1">{error || 'Invalid spreadsheet format'}</div>
+          <div className="mt-3">
+            <button
+              type="button"
+              className="rounded bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+              data-testid={testIds.spreadsheet.retryInit}
+              onClick={retryInit}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!scriptsLoaded) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full" data-testid={testIds.spreadsheet.loading}>
         <div className="text-gray-500">Loading spreadsheet editor...</div>
       </div>
     );

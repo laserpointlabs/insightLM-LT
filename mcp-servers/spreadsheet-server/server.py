@@ -7,6 +7,8 @@ All formulas are visible in RAG context (no hidden equations).
 import os
 import sys
 import json
+import os
+import pathlib
 import re
 from typing import Dict, Any, Optional, List
 
@@ -172,6 +174,15 @@ def handle_request(request: dict) -> dict:
                 'result': {
                     'tools': [
                         {
+                            'name': 'spreadsheet.get_schema',
+                            'description': 'Return the canonical .is (Insight Sheet) JSON schema version and minimal examples. Use this to avoid guessing the .is format.',
+                            'inputSchema': {
+                                'type': 'object',
+                                'properties': {},
+                                'required': []
+                            }
+                        },
+                        {
                             'name': 'calculate_cell',
                             'description': 'Calculate a spreadsheet cell formula with context',
                             'inputSchema': {
@@ -204,6 +215,46 @@ def handle_request(request: dict) -> dict:
             # Handle tool calls
             tool_name = params.get('name', '')
             tool_args = params.get('arguments', {})
+
+            if tool_name == 'spreadsheet.get_schema':
+                example = {
+                    "version": "1.0",
+                    "metadata": {
+                        "name": "Example Insight Sheet",
+                        "created_at": "2026-01-01T00:00:00.000Z",
+                        "modified_at": "2026-01-01T00:00:00.000Z",
+                        "workbook_id": "<workbookId>"
+                    },
+                    "sheets": [
+                        {
+                            "id": "sheet1",
+                            "name": "Sheet1",
+                            "cells": {
+                                "A1": {"value": 10},
+                                "B1": {"value": 20},
+                                "C1": {"formula": "=A1+B1", "value": None}
+                            },
+                            "formats": {},
+                            "viewState": {
+                                "columnWidths": {"0": 120, "1": 120},
+                                "rowHeights": {"0": 24}
+                            }
+                        }
+                    ]
+                }
+                result = {
+                    "schema_version": "1.0",
+                    "notes": [
+                        "Do NOT guess .is JSON when tools exist. Use spreadsheet tools to create/edit sheets.",
+                        "viewState stores column widths/row heights (keys are stringified indices)."
+                    ],
+                    "example": example
+                }
+                return {
+                    'jsonrpc': '2.0',
+                    'id': request_id,
+                    'result': result
+                }
             
             if tool_name == 'calculate_cell':
                 formula = tool_args.get('formula', '')
@@ -220,13 +271,44 @@ def handle_request(request: dict) -> dict:
                 workbook_id = tool_args.get('workbook_id', '')
                 filename = tool_args.get('filename', '')
                 
-                # TODO: Load actual spreadsheet data
-                text_content = f"Spreadsheet: {filename}\n\n"
-                text_content += "Formulas are visible in this context (no hidden equations).\n"
+                # Best-effort: load actual .is JSON from the current project data dir.
+                # Fail-soft: if missing/unreadable, return minimal placeholder text.
+                text_content = f"Spreadsheet: {filename}\n\nFormulas are visible in this context (no hidden equations).\n"
+                formulas = {}
+                try:
+                    data_dir = os.environ.get("INSIGHTLM_DATA_DIR") or ""
+                    if data_dir:
+                        wb_root = pathlib.Path(data_dir) / "workbooks" / str(workbook_id)
+                        # Allow filename with or without documents/ prefix
+                        rel = str(filename)
+                        if not rel.startswith("documents/"):
+                            rel = "documents/" + rel
+                        target = (wb_root / rel).resolve()
+                        if str(target).startswith(str(wb_root.resolve())) and target.exists():
+                            raw = target.read_text(encoding="utf-8")
+                            parsed = json.loads(raw)
+                            sheets = parsed.get("sheets") if isinstance(parsed, dict) else None
+                            if isinstance(sheets, list):
+                                # Extract formulas for RAG visibility
+                                for s in sheets:
+                                    if not isinstance(s, dict):
+                                        continue
+                                    if str(s.get("id") or s.get("name") or "") != str(sheet_id):
+                                        continue
+                                    cells = s.get("cells")
+                                    if isinstance(cells, dict):
+                                        for ref, cell in cells.items():
+                                            if isinstance(cell, dict) and isinstance(cell.get("formula"), str):
+                                                formulas[str(ref)] = cell.get("formula")
+                                # Add a short schema hint for the LLM
+                                text_content += "\nSchema hint: .is JSON with {version, metadata, sheets[{id,name,cells,formats,viewState}]}\n"
+                except Exception:
+                    # ignore (fail-soft)
+                    pass
                 
                 result = {
                     'text_content': text_content,
-                    'formulas': {},
+                    'formulas': formulas,
                     'metadata': {
                         'workbook_id': workbook_id,
                         'filename': filename,
