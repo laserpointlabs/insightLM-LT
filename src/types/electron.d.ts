@@ -64,6 +64,7 @@ export interface ElectronAPI {
   events?: {
     onWorkbooksChanged: (cb: (payload: any) => void) => () => void;
     onWorkbookFilesChanged: (cb: (payload: { workbookId?: string }) => void) => () => void;
+    onLLMConfigChanged: (cb: (payload: any) => void) => () => void;
   };
   archive: {
     workbook: (workbookId: string) => Promise<void>;

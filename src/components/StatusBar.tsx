@@ -5,10 +5,11 @@ export function StatusBar(props: {
   projectDataDir: string;
   scopeMode: "all" | "context";
   activeContextName: string | null;
+  llmLabel?: string | null;
   onToggleScope: () => void;
   onJumpToContexts: () => void;
 }) {
-  const { projectLabel, projectDataDir, scopeMode, activeContextName, onToggleScope, onJumpToContexts } = props;
+  const { projectLabel, projectDataDir, scopeMode, activeContextName, llmLabel, onToggleScope, onJumpToContexts } = props;
   const scopeText =
     scopeMode === "all" ? "All workbooks (Project)" : activeContextName ? activeContextName : "Active context";
 
@@ -57,7 +58,14 @@ export function StatusBar(props: {
       </div>
 
       <div className="min-w-0" data-testid={testIds.statusBar.scope}>
-        {/* Right-side reserved for later (file-scoped indicators, etc.) */}
+        <div
+          className="flex min-w-0 items-center justify-end gap-2 truncate text-right"
+          data-testid={testIds.statusBar.llm}
+          title={llmLabel ? `Active LLM:\n${llmLabel}` : "Active LLM: unknown"}
+        >
+          <span className="text-gray-500">LLM:</span>
+          <span className="truncate font-medium">{llmLabel || "unknown"}</span>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { BrowserWindow } from "electron";
 import { LLMConfig } from "./configService";
 import { WorkbookService } from "./workbookService";
 import { FileService } from "./fileService";
@@ -447,11 +448,23 @@ export class LLMService {
 
       // Add file references if any files were read
       if (this.filesReadInCurrentChat.length > 0) {
-        const references = this.filesReadInCurrentChat.map(f => {
-          // URL-encode the file path to handle spaces and special characters
-          const encodedPath = f.filePath.split('/').map(part => encodeURIComponent(part)).join('/');
-          return `📄 [${f.filename}](workbook://${f.workbookId}/${encodedPath})`;
-        }).join('\n\n');
+        const seen = new Set<string>();
+        const unique = this.filesReadInCurrentChat.filter((f) => {
+          const key = `${String(f.workbookId || "").trim()}::${String(f.filePath || "").trim()}`;
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        const references = unique
+          .map((f) => {
+            // URL-encode the file path to handle spaces and special characters
+            const encodedPath = String(f.filePath || "")
+              .split("/")
+              .map((part) => encodeURIComponent(part))
+              .join("/");
+            return `📄 [${f.filename}](workbook://${f.workbookId}/${encodedPath})`;
+          })
+          .join("\n\n");
         response += `\n\n---\n\n**Sources:**\n\n${references}`;
       }
 
@@ -485,6 +498,20 @@ export class LLMService {
       out.push({ workbookId, filePath, raw });
     }
     return out;
+  }
+
+  private broadcast(channel: string, payload?: any) {
+    try {
+      for (const w of BrowserWindow.getAllWindows()) {
+        try {
+          w.webContents.send(channel, payload);
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
 
   private async buildExplicitWorkbookRefsSystemMessage(messages: LLMMessage[]): Promise<LLMMessage | null> {
@@ -636,10 +663,16 @@ export class LLMService {
     return `You are an AI assistant helping users manage and analyze their workbooks and documents.
 
 CRITICAL: When users ask questions about document content, you MUST:
-1. ALWAYS use rag_search_content FIRST when users mention filenames or ask about document content (e.g., "what is in spreadsheet-2025-12-12T19-46-01.is", "what is cell C1 in test-spreadsheet")
-2. rag_search_content searches INSIDE files (PDFs, Word docs, spreadsheets, text files) and will find files by filename or content
-3. After rag_search_content returns results, use read_workbook_file with the exact Workbook ID and Path from the search results to read the full file
-4. Answer based on what you READ from the files
+1. If the user is asking for an **exact match** (or gives a regex/pattern) across many files, use **rag_grep** FIRST.
+   - Use rag_grep for: identifiers, error codes, exact phrases, config keys, file paths, "where does X appear?", and regex patterns.
+   - Examples:
+     - "Find all places we reference insightlm:workbooks:filesChanged" → rag_grep(pattern="insightlm:workbooks:filesChanged")
+     - "Search for ERROR_\\d+ in docs" → rag_grep(pattern="ERROR_\\\\d+", regex=true)
+     - "Where is function openDocument used?" → rag_grep(pattern="openDocument", regex=false)
+2. Otherwise, for **semantic questions** (summaries/explanations) or when the user mentions a filename but you need to find the right file, use **rag_search_content** FIRST.
+   - rag_search_content searches INSIDE files (PDFs, Word docs, spreadsheets, text files) and can find files by filename or by meaning/terms.
+3. After rag_search_content returns results, use read_workbook_file with the exact Workbook ID and Path from the search results to read the full file.
+4. Answer based on what you READ from the files.
 
 IMPORTANT: Use rag_search_content when users ask about:
 - Filenames (e.g., "spreadsheet-2025-12-12T19-46-01.is", "test-spreadsheet.is")
@@ -649,7 +682,7 @@ IMPORTANT: Use rag_search_content when users ask about:
 - Cell values or formulas in spreadsheets (e.g., "what is cell C1")
 
 DO NOT try to answer questions about document content without searching or reading the files first.
-DO NOT use list_all_workbook_files or read_workbook_file directly without first using rag_search_content to find the file.
+DO NOT use list_all_workbook_files or read_workbook_file directly without first using rag_search_content (or rag_grep when appropriate) to find the right file(s).
 
 IMPORTANT: Do NOT include a "Sources:" section in your response. The system will automatically add source references at the end.
 
@@ -955,6 +988,12 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     }
   }
 
+  // Debug-only helper (used by deterministic smoke tests): run a tool by name.
+  // This intentionally uses the same execution pipeline as normal tool calls.
+  public async debugExecuteTool(toolName: string, args: Record<string, any>) {
+    return await this.executeTool(toolName, args);
+  }
+
   /**
    * Execute core tools (non-MCP tools)
    */
@@ -1110,6 +1149,11 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
             metadata.updated = new Date().toISOString();
             fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
           }
+
+          // Notify renderer(s) so open tabs refresh without requiring close/reopen.
+          // Mirrors the canonical behavior from `electron/ipc/files.ts`.
+          this.broadcast("insightlm:workbooks:changed", {});
+          this.broadcast("insightlm:workbooks:filesChanged", { workbookId: String(args.workbookId || "") });
 
           return `File "${args.fileName}" created successfully in workbook.`;
 

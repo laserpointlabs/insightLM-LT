@@ -21,6 +21,10 @@
 - [ ] **Unsaved close protection**:
   - [x] Closing a dirty tab prompts deterministically: **Save / Don’t Save / Cancel**
   - [ ] Bulk closes (Close All / Close Others / Close Saved) handle dirty tabs deterministically
+- [ ] **Live refresh on external writes (“file changed on disk”)**:
+  - [ ] If an **open tab’s underlying file changes on disk** (including changes made by **Chat/tools/LLM**), the tab **auto-refreshes** if it is **not dirty**.
+  - [ ] If the tab **is dirty**, we **never stomp user edits**; instead we keep the current content and show a **non-blocking info toast** indicating reload was skipped.
+  - [ ] This behavior is **deterministic** and does not require closing/reopening the tab.
 
 #### Explicit non‑goals (for this pass)
 - Full command palette parity
@@ -31,6 +35,10 @@
 - `src/store/layoutStore.ts` + tab/document store (groups + docking persistence)
 - `src/components/DocumentViewer/*` (tabs per group)
 - Tab close confirm UI: `src/components/ConfirmDialog.tsx` (or existing dialog primitives) + `src/components/DocumentViewer/DocumentViewer.tsx`
+- Live-refresh plumbing:
+  - `electron/ipc/files.ts` + `electron/ipc/workbooks.ts` (canonical broadcaster of `insightlm:workbooks:filesChanged`)
+  - `electron/services/llmService.ts` (ensure tool-driven writes emit the same broadcast)
+  - `src/App.tsx` + `src/store/documentStore.ts` (refresh open documents on event; skip dirty)
 - `tests/automation-smoke-ui.mjs` (deterministic smoke: split groups + move tab + dock Chat)
 
 #### Proof (deterministic smoke)
@@ -38,6 +46,8 @@
 - [x] Move a tab to the other group → assert it appears there. (`tests/automation-smoke-ui.mjs`)
 - [ ] Dock Chat to panel/sidecar → assert Chat stays visible while tabs remain navigable.
 - [x] Dirty tab close → prompt appears → Cancel keeps tab open, Don’t Save closes, Save persists then closes. (`tests/automation-smoke-ui.mjs`)
+- [ ] Open a document tab → trigger a **main-process tool-style write** to that same file → assert the **open tab refreshes without closing**.
+- [ ] Make the tab dirty (edit without saving) → trigger the same write → assert tab content does **not** auto-reload and an **info toast** appears.
 
 ---
 

@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
 import { ConfigService, type AppConfig, type LLMConfig, type LLMConfigStore, type LLMProvider } from "../services/configService";
 import { LLMService } from "../services/llmService";
 
@@ -7,6 +7,20 @@ function isProvider(x: any): x is "openai" | "claude" | "ollama" {
 }
 
 export function setupConfigIPC(configService: ConfigService, llmService: LLMService) {
+  const broadcast = (channel: string, payload?: any) => {
+    try {
+      for (const w of BrowserWindow.getAllWindows()) {
+        try {
+          w.webContents.send(channel, payload);
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   ipcMain.handle("config:get", async () => {
     const llmStore = configService.loadLLMConfigStore();
     return {
@@ -26,6 +40,7 @@ export function setupConfigIPC(configService: ConfigService, llmService: LLMServ
     const llmStore = configService.loadLLMConfigStore();
     const llm = configService.loadLLMConfig();
     llmService.setConfig(llm);
+    broadcast("insightlm:config:llmChanged", { llm, llmStore });
     return { ...saved, llmStore, llm };
   });
 
@@ -85,6 +100,7 @@ export function setupConfigIPC(configService: ConfigService, llmService: LLMServ
       // ignore
     }
 
+    broadcast("insightlm:config:llmChanged", { llm: activeCfg, llmStore: configService.loadLLMConfigStore() });
     return { llm: activeCfg, llmStore: configService.loadLLMConfigStore() };
   });
 }

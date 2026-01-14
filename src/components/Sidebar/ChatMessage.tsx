@@ -4,10 +4,19 @@ import remarkGfm from "remark-gfm";
 import mermaid from "mermaid";
 import { useDocumentStore } from "../../store/documentStore";
 import { notifyError } from "../../utils/notify";
+import { testIds } from "../../testing/testIds";
 
 interface ChatMessageProps {
   role: "user" | "assistant";
   content: string;
+  meta?: {
+    thinking?: {
+      durationMs?: number;
+      provider?: string;
+      model?: string;
+      requestId?: string;
+    };
+  };
 }
 
 // Initialize Mermaid once (module-level)
@@ -101,8 +110,56 @@ function MermaidDiagram({ chart }: { chart: string }) {
   );
 }
 
-export function ChatMessage({ role, content }: ChatMessageProps) {
+export function ChatMessage({ role, content, meta }: ChatMessageProps) {
   const { openDocument } = useDocumentStore();
+
+  const thinking = meta?.thinking;
+  const [thinkingOpen, setThinkingOpen] = React.useState(false);
+  const thinkingLabel = React.useMemo(() => {
+    if (!thinking) return null;
+    const durMs = typeof thinking.durationMs === "number" ? thinking.durationMs : null;
+    if (durMs === null) return "Thought for…";
+    const s = Math.max(0, durMs) / 1000;
+    return `Thought for ${s.toFixed(s < 10 ? 1 : 0)}s`;
+  }, [thinking]);
+
+  const { bodyContent, sources } = React.useMemo(() => {
+    if (role !== "assistant") return { bodyContent: content, sources: [] as Array<{ workbookId: string; filePath: string; label: string }> };
+
+    const raw = String(content || "");
+    const marker = "\n\n---\n\n**Sources:**\n\n";
+    const idx = raw.lastIndexOf(marker);
+    if (idx < 0) return { bodyContent: raw, sources: [] as Array<{ workbookId: string; filePath: string; label: string }> };
+
+    const body = raw.slice(0, idx).trimEnd();
+    const srcPart = raw.slice(idx + marker.length);
+
+    const out: Array<{ workbookId: string; filePath: string; label: string }> = [];
+    const seen = new Set<string>();
+    const re = /\[([^\]]+)\]\(workbook:\/\/([^\s/]+)\/([^)]+)\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(srcPart)) !== null) {
+      const label = String(m[1] || "").trim();
+      const workbookId = String(m[2] || "").trim();
+      const encodedPath = String(m[3] || "").trim().replace(/[)\],.]+$/g, "");
+      if (!workbookId || !encodedPath) continue;
+      const filePath = encodedPath
+        .split("/")
+        .map((p) => {
+          try {
+            return decodeURIComponent(p);
+          } catch {
+            return p;
+          }
+        })
+        .join("/");
+      const key = `${workbookId}::${filePath}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ workbookId, filePath, label: label || (filePath.split("/").pop() || filePath) });
+    }
+    return { bodyContent: body, sources: out };
+  }, [content, role]);
 
   // Replace workbook:// links with a special marker before ReactMarkdown processes them
   // This prevents ReactMarkdown from creating <a> tags that Electron intercepts
@@ -110,11 +167,11 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
     if (role !== "assistant") return content;
 
     // Replace workbook:// links with a special format that we'll handle manually
-    return content.replace(/\[([^\]]+)\]\(workbook:\/\/([^\)]+)\)/g, (_match, linkText, workbookPath) => {
+    return String(bodyContent || "").replace(/\[([^\]]+)\]\(workbook:\/\/([^\)]+)\)/g, (_match, linkText, workbookPath) => {
       // Store the workbook path in a data attribute format we can parse
       return `[${linkText}](__workbook_link__${workbookPath}__)`;
     });
-  }, [content, role]);
+  }, [bodyContent, role]);
 
   // Global click handler to catch any workbook:// links that might slip through
   React.useEffect(() => {
@@ -193,6 +250,43 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
   // Render assistant messages as markdown
   return (
     <div className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-900 shadow-sm">
+      {thinking && (
+        <div className="mb-2">
+          <div
+            className="rounded-lg border border-gray-200 bg-white px-2 py-1"
+            data-testid={testIds.chat.thinking.container}
+            data-open={thinkingOpen ? "true" : "false"}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-2 text-left text-[11px] text-gray-600"
+              onClick={() => setThinkingOpen((v) => !v)}
+              data-testid={testIds.chat.thinking.toggle}
+              aria-expanded={thinkingOpen ? "true" : "false"}
+            >
+              <span className="font-semibold" data-testid={testIds.chat.thinking.summary}>
+                {thinkingLabel}
+              </span>
+              <span className="text-gray-500">{thinkingOpen ? "Hide" : "Show"}</span>
+            </button>
+            {thinkingOpen && (
+              <div className="mt-1 text-[11px] text-gray-600" data-testid={testIds.chat.thinking.details}>
+                {(thinking.provider || thinking.model) && (
+                  <div className="truncate">
+                    <span className="text-gray-500">LLM:</span>{" "}
+                    <span className="font-medium">{`${thinking.provider || ""}${thinking.model ? ` ${thinking.model}` : ""}`.trim()}</span>
+                  </div>
+                )}
+                {thinking.requestId && (
+                  <div className="truncate">
+                    <span className="text-gray-500">Request:</span> {thinking.requestId}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div className="prose prose-sm max-w-none [&_small]:not-prose">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
@@ -424,6 +518,46 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
           {processedContent}
         </ReactMarkdown>
       </div>
+
+      {sources.length > 0 && (
+        <div
+          className="mt-3 rounded-lg border border-gray-200 bg-white px-2 py-1"
+          data-testid={testIds.chat.sources.container}
+        >
+          <div className="flex items-center justify-between gap-2 text-[11px] text-gray-600">
+            <span className="font-semibold">Sources</span>
+            <span className="text-gray-400">{sources.length}</span>
+          </div>
+          <div className="mt-1 space-y-1">
+            {sources.map((s) => {
+              const key = `${s.workbookId}::${s.filePath}`;
+              const filename = s.filePath.split("/").pop() || s.filePath;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className="flex w-full items-center gap-2 truncate rounded px-1 py-0.5 text-left text-[11px] text-gray-700 hover:bg-gray-50"
+                  title={`${filename}\n${s.filePath}\n${s.workbookId}`}
+                  data-testid={testIds.chat.sources.item(key)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    openDocument({
+                      workbookId: s.workbookId,
+                      path: s.filePath,
+                      filename,
+                    }).catch((error) => {
+                      notifyError(error instanceof Error ? error.message : "Failed to open document", "Chat");
+                    });
+                  }}
+                >
+                  <span className="text-gray-400">📄</span>
+                  <span className="truncate">{s.label || filename}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

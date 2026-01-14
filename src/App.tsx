@@ -17,7 +17,7 @@ import { ToastCenter } from "./components/Notifications/ToastCenter";
 import { initAutomationUI } from "./testing/automationUi";
 import { testIds } from "./testing/testIds";
 import { notifyError, notifyInfo, notifySuccess } from "./utils/notify";
-import { SearchIcon } from "./components/Icons";
+import { PopOutIcon, SearchIcon } from "./components/Icons";
 import { StatusBar } from "./components/StatusBar";
 import { ExtensionsWorkbench } from "./components/Extensions/ExtensionsWorkbench";
 
@@ -30,6 +30,7 @@ function App() {
   const [contextScopeMode, setContextScopeMode] = useState<"all" | "context">("context");
   const [projectLabel, setProjectLabel] = useState<string>("Project");
   const [projectDataDir, setProjectDataDir] = useState<string>("");
+  const [llmLabel, setLlmLabel] = useState<string>("unknown");
   const { openDocuments, closeDocument, openDocument, refreshOpenDocumentsForWorkbook } = useDocumentStore();
   const {
     sidebarWidth,
@@ -289,6 +290,56 @@ function App() {
     load();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  // Active LLM indicator (provider + model) – keep in App so Status Bar is always accurate.
+  useEffect(() => {
+    let cancelled = false;
+
+    const toLabel = (payload: any) => {
+      const llm = payload?.llm || {};
+      const store = payload?.llmStore;
+      const provider =
+        String(store?.activeProvider || llm?.provider || "").trim() ||
+        String(llm?.provider || "").trim() ||
+        "unknown";
+      const model =
+        String(llm?.model || "").trim() ||
+        (provider && store?.profiles?.[provider]?.model ? String(store.profiles[provider].model).trim() : "") ||
+        "";
+      const prettyProvider =
+        provider === "openai" ? "OpenAI" : provider === "claude" ? "Claude" : provider === "ollama" ? "Ollama" : provider;
+      return `${prettyProvider}${model ? ` ${model}` : ""}`.trim();
+    };
+
+    const load = async () => {
+      try {
+        if (!window.electronAPI?.config?.get) return;
+        const res = await window.electronAPI.config.get();
+        const label = toLabel(res);
+        if (!cancelled && label) setLlmLabel(label);
+      } catch {
+        if (!cancelled) setLlmLabel("unknown");
+      }
+    };
+
+    load();
+    const off = window.electronAPI?.events?.onLLMConfigChanged?.((payload: any) => {
+      try {
+        const label = toLabel(payload);
+        if (label) setLlmLabel(label);
+      } catch {
+        // ignore
+      }
+    });
+    return () => {
+      cancelled = true;
+      try {
+        off?.();
+      } catch {
+        // ignore
+      }
     };
   }, []);
 
@@ -577,6 +628,21 @@ function App() {
                     isCollapsed={isChatCollapsed}
                     onToggleCollapse={() => toggleViewCollapse("chat")}
                     actionButton={chatActionButton}
+                    collapsedActionButton={
+                      <button
+                        type="button"
+                        className="flex items-center justify-center rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                        title="Open Chat tab"
+                        data-testid={testIds.chat.openTabCollapsed}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openDocument({ type: "chat", chatKey: "main", filename: "Chat" } as any);
+                        }}
+                      >
+                        <PopOutIcon className="h-4 w-4" />
+                      </button>
+                    }
                     testId={testIds.sidebar.headers.chat}
                     contentTestId={testIds.sidebar.viewBody.chat}
                   >
@@ -660,6 +726,7 @@ function App() {
         projectDataDir={projectDataDir}
         scopeMode={contextScopeMode}
         activeContextName={activeContextName}
+        llmLabel={llmLabel}
         onToggleScope={() => {
           toggleContextScoping().catch((e) => {
             notifyError(e instanceof Error ? e.message : "Failed to toggle scope", "Scope");

@@ -648,7 +648,18 @@ async function run() {
     // even when Contexts is collapsed.
     await waitForSelector(evaluate, 'button[data-testid="statusbar-scope-toggle"]', 20000);
     await waitForSelector(evaluate, '[data-testid="statusbar-scope-text"]', 20000);
+    await waitForSelector(evaluate, '[data-testid="statusbar-llm"]', 20000);
     await waitForSelector(evaluate, 'button[data-testid="contexts-scope-toggle"]', 20000);
+
+    const llmOk = await evaluate(`
+      (() => {
+        const el = document.querySelector('[data-testid="statusbar-llm"]');
+        if (!el) return false;
+        const t = (el.innerText || "").trim().toLowerCase();
+        return t.includes("llm:");
+      })()
+    `);
+    if (!llmOk) fail("Status Bar LLM indicator not present");
 
     // Collapse Contexts to prove the header accessory stays visible.
     const isContextsExpanded = await evaluate(
@@ -1414,6 +1425,44 @@ async function run() {
     if (!liveOk) fail("Open document did not live-update after file.write (expected UI to reflect new content)");
     console.log("✅ Open document live-updates after file.write (no manual refresh)");
 
+    // Regression proof (tool-path): create_file_in_workbook (LLM/core tool) must also live-refresh open tabs.
+    // This exercises the exact main-process path that previously bypassed the filesChanged broadcast.
+    const toolLiveToken = `tool-live-update-${Date.now()}`;
+    const toolWrite = await evaluate(`
+      (async () => {
+        try {
+          if (!window.electronAPI?.debug?.llmExecuteTool) return { ok: false, why: "electronAPI.debug.llmExecuteTool unavailable" };
+          const res = await window.electronAPI.debug.llmExecuteTool(
+            "create_file_in_workbook",
+            { workbookId: ${jsString(workbookId)}, fileName: "auto-smoke.md", content: ${jsString(`Tool update token: ${toolLiveToken}\n`)} }
+          );
+          return res;
+        } catch (e) {
+          return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      })()
+    `);
+    if (!toolWrite?.ok) fail(`Tool-path write failed: ${JSON.stringify(toolWrite)}`);
+
+    const toolLiveOk = await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 10000) {
+        const ok = await evaluate(`
+          (() => {
+            const el = document.querySelector('div[data-testid="document-viewer-content"]');
+            if (!el) return false;
+            const snip = String(el.getAttribute("data-active-content-snippet") || "");
+            return snip.includes(${jsString(toolLiveToken)});
+          })()
+        `);
+        if (ok) return true;
+        await sleep(150);
+      }
+      return false;
+    })();
+    if (!toolLiveOk) fail("Open document did not live-update after create_file_in_workbook (expected UI to reflect new content)");
+    console.log("✅ Open document live-updates after create_file_in_workbook (tool path)");
+
     const probeGrep = await (async () => {
       const start = Date.now();
       while (Date.now() - start < 10000) {
@@ -1655,6 +1704,69 @@ async function run() {
     await ensureExpanded(evaluate, "sidebar-chat-header");
     await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]', 20000);
 
+    // Collapsed Chat view header should still provide a one-click way to open/focus the Chat tab.
+    {
+      // Collapse Chat view.
+      const chatExpanded = await evaluate(
+        `document.querySelector('button[data-testid="sidebar-chat-header"]')?.getAttribute("aria-expanded") === "true"`,
+      );
+      if (chatExpanded) await clickSelector(evaluate, 'button[data-testid="sidebar-chat-header"]');
+      const openTabBtn = 'button[data-testid="chat-open-tab-collapsed"]';
+      const openBtnOk = await waitForSelector(evaluate, openTabBtn, 20000);
+      if (!openBtnOk) fail("Collapsed Chat header did not render the Open Chat Tab button");
+      await clickSelector(evaluate, openTabBtn);
+      await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="chat"]', 20000);
+      console.log("✅ Collapsed Chat header can open/focus the Chat tab (one-click)");
+
+      // Re-expand Chat so subsequent steps that interact with sidebar Chat remain deterministic.
+      const expandedNow = await evaluate(
+        `document.querySelector('button[data-testid="sidebar-chat-header"]')?.getAttribute("aria-expanded") === "true"`,
+      );
+      if (!expandedNow) await clickSelector(evaluate, 'button[data-testid="sidebar-chat-header"]');
+      await waitForSelector(evaluate, 'textarea[data-testid="chat-input"]', 20000);
+    }
+
+    // Ensure the active provider is OpenAI for local smoke (tools are not reliable under Ollama currently).
+    // IMPORTANT: this must run while Chat is still in the sidebar (header action buttons are injected via onActionButton).
+    {
+      const settingsBtn = 'button[data-testid="chat-settings"]';
+      const settingsOk = await waitForSelector(evaluate, settingsBtn, 20000);
+      if (!settingsOk) fail("Chat Settings button not found in sidebar header");
+
+      await clickSelector(evaluate, settingsBtn);
+      await waitForSelector(evaluate, 'select[data-testid="chat-llm-provider"]', 20000);
+      await evaluate(`
+        (() => {
+          const sel = document.querySelector('select[data-testid="chat-llm-provider"]');
+          if (!sel) return false;
+          sel.value = "openai";
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        })()
+      `);
+      await clickSelector(evaluate, 'button[data-testid="chat-llm-save"]');
+      // Wait for status bar label to flip.
+      const openAiOk = await (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 20000) {
+          const ok = await evaluate(`
+            (() => {
+              const el = document.querySelector('[data-testid="statusbar-llm"]');
+              const t = (el?.innerText || "").toLowerCase();
+              return t.includes("openai");
+            })()
+          `);
+          if (ok) return true;
+          await sleep(150);
+        }
+        return false;
+      })();
+      if (!openAiOk) fail("Could not switch active LLM provider to OpenAI via Chat settings");
+      // Return to Chat tab for subsequent UX tests.
+      await clickSelector(evaluate, 'button[data-testid="chat-new"]');
+      console.log("✅ Forced active LLM provider to OpenAI for local smoke");
+    }
+
     // Pop Chat out into a tab, then verify draft persists across tab switches.
     // (This is the high-frequency UX: users keep typed text while switching tabs.)
     const popoutBtn = 'button[data-testid="chat-popout"]';
@@ -1674,13 +1786,190 @@ async function run() {
         try {
           if (!window.electronAPI?.llm?.chat) return false;
           if (!window.__SMOKE_ORIG_LLM_CHAT) window.__SMOKE_ORIG_LLM_CHAT = window.electronAPI.llm.chat;
-          window.electronAPI.llm.chat = async () => "smoke-ok";
+          window.electronAPI.llm.chat = async () => {
+            // Ensure the UI has time to render the Thinking peek deterministically.
+            await new Promise((r) => setTimeout(r, 350));
+            return "smoke-ok";
+          };
           return true;
         } catch {
           return false;
         }
       })()
     `);
+
+    // --- Chat response UX: Sources dedupe + Activity auto-collapse/expand (deterministic, no provider dependency) ---
+    {
+      // Inject a persisted assistant message that contains duplicated Sources links.
+      const injectOk = await evaluate(`
+        (async () => {
+          try {
+            const ctxId = ${jsString(contextId)};
+            const wbId = ${jsString(workbookId)};
+            const rel = "documents/smoke_chat_source.md";
+            const url = "workbook://" + wbId + "/" + rel;
+            const dup = [
+              "",
+              "",
+              "---",
+              "",
+              "**Sources:**",
+              "",
+              "- [smoke_chat_source.md](" + url + ")",
+              "- [smoke_chat_source.md](" + url + ")",
+              ""
+            ].join("\\n");
+            await window.electronAPI.file.write(wbId, rel, "hello from smoke\\n");
+            const activity = [{ stepId: "a1", text: "Using read_workbook_file ✓", status: "ok", ts: Date.now() }];
+            const res = await window.electronAPI.chat.append({
+              contextId: ctxId,
+              role: "assistant",
+              content: "Injected assistant message." + dup,
+              meta: { activity }
+            });
+            try { window.dispatchEvent(new CustomEvent("chat:threadChanged", { detail: { contextId: ctxId } })); } catch {}
+            return { ok: !!res?.message?.id, messageId: res?.message?.id || null };
+          } catch (e) {
+            return { ok: false, error: e instanceof Error ? e.message : String(e) };
+          }
+        })()
+      `);
+      if (!injectOk?.ok) fail("Chat injection failed: " + JSON.stringify(injectOk));
+
+      // Sources panel should exist and be deduped to exactly 1 item.
+      const sourcesOk = await (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 20000) {
+          const res = await evaluate(`
+            (() => {
+              const s = document.querySelector('div[data-testid="chat-sources"]');
+              if (!s) return { ok: false, why: "no sources container" };
+              const items = Array.from(s.querySelectorAll('[data-testid^="chat-source-"]'));
+              return { ok: items.length === 1, count: items.length };
+            })()
+          `);
+          if (res?.ok) return true;
+          await sleep(150);
+        }
+        return false;
+      })();
+      if (!sourcesOk) fail("Chat Sources panel did not dedupe duplicated source links to 1 item");
+      console.log("✅ Chat: Sources panel renders and dedupes");
+
+      // Thinking indicator should appear exactly once when send begins, and have collapsible details.
+      await clickSelector(evaluate, 'textarea[data-testid="chat-input"]');
+      await typeText(evaluate, 'textarea[data-testid="chat-input"]', "smoke thinking check");
+      await clickSelector(evaluate, 'button[data-testid="chat-send"]');
+
+      const thinkingPeekOk = await (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 20000) {
+          const res = await evaluate(`
+            (() => {
+              const t = document.querySelectorAll('[data-testid="chat-thinking"]');
+              const tog = document.querySelectorAll('button[data-testid="chat-thinking-toggle"]');
+              return { t: t.length, tog: tog.length };
+            })()
+          `);
+          if (res && res.t === 1 && res.tog === 1) return true;
+          await sleep(100);
+        }
+        return false;
+      })();
+      if (!thinkingPeekOk) fail("Thinking peek did not appear exactly once during send");
+
+      // No duplicate controls in the active response region (streaming container):
+      // exactly one thinking toggle and one activity toggle.
+      const noDupControls = await (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 20000) {
+          const res = await evaluate(`
+            (() => {
+              const s = document.querySelector('div[data-testid="chat-streaming"]');
+              if (!s) return { ok: false, why: "no streaming container" };
+              const thinking = s.querySelectorAll('button[data-testid="chat-thinking-toggle"]').length;
+              const activity = s.querySelectorAll('button[data-testid="chat-activity-toggle"]').length;
+              return { ok: thinking === 1 && activity === 1, thinking, activity };
+            })()
+          `);
+          if (res?.ok) return true;
+          await sleep(100);
+        }
+        return false;
+      })();
+      if (!noDupControls) fail("Active response region had duplicate thinking/activity controls");
+
+      await clickSelector(evaluate, 'button[data-testid="chat-thinking-toggle"]');
+      const detailsOk = await waitForSelector(evaluate, '[data-testid="chat-thinking-details"]', 10000);
+      if (!detailsOk) fail("Thinking details did not expand");
+      await clickSelector(evaluate, 'button[data-testid="chat-thinking-toggle"]');
+      const detailsGone = await evaluate(`!document.querySelector('[data-testid="chat-thinking-details"]')`);
+      if (!detailsGone) fail("Thinking details did not collapse");
+      console.log("✅ Chat: Thinking peek appears once and is collapsible");
+
+      // After completion, the final assistant message should include "Thought for Xs" block.
+      const thoughtForOk = await (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 20000) {
+          const ok = await evaluate(`
+            (() => {
+              const els = Array.from(document.querySelectorAll('[data-testid="chat-thinking-summary"]'));
+              return els.some((el) => (el.innerText || "").toLowerCase().includes("thought for"));
+            })()
+          `);
+          if (ok) return true;
+          await sleep(150);
+        }
+        return false;
+      })();
+      if (!thoughtForOk) fail('Final assistant message did not render "Thought for Xs" summary');
+      console.log('✅ Chat: "Thought for Xs" summary persists on final message');
+
+      // Activity should be collapsed by default in HISTORY (persisted messages).
+      const activityCollapsed = await evaluate(`
+        (() => {
+          const a = document.querySelector('div[data-testid="chat-activity"][data-activity-kind="message"]');
+          if (!a) return { ok: false, why: "no activity container" };
+          const open = a.getAttribute("data-open");
+          const items = Array.from(a.querySelectorAll('[data-testid^="chat-activity-item-"]'));
+          return { ok: open === "false" && items.length === 0, open, itemCount: items.length };
+        })()
+      `);
+      if (!activityCollapsed?.ok) fail(`Chat Activity was not collapsed by default: ${JSON.stringify(activityCollapsed)}`);
+
+      // Expand then collapse via the toggle.
+      await clickSelector(evaluate, 'div[data-testid="chat-activity"][data-activity-kind="message"] button[data-testid="chat-activity-toggle"]');
+      const activityExpanded = await (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 10000) {
+          const res = await evaluate(`
+            (() => {
+              const a = document.querySelector('div[data-testid="chat-activity"][data-activity-kind="message"]');
+              if (!a) return { ok: false };
+              const open = a.getAttribute("data-open");
+              const items = Array.from(a.querySelectorAll('[data-testid^="chat-activity-item-"]'));
+              return { ok: open === "true" && items.length >= 1, open, itemCount: items.length };
+            })()
+          `);
+          if (res?.ok) return true;
+          await sleep(150);
+        }
+        return false;
+      })();
+      if (!activityExpanded) fail("Chat Activity did not expand on toggle");
+      await clickSelector(evaluate, 'div[data-testid="chat-activity"][data-activity-kind="message"] button[data-testid="chat-activity-toggle"]');
+      const activityReCollapsed = await evaluate(`
+        (() => {
+          const a = document.querySelector('div[data-testid="chat-activity"][data-activity-kind="message"]');
+          if (!a) return false;
+          const open = a.getAttribute("data-open");
+          const items = Array.from(a.querySelectorAll('[data-testid^="chat-activity-item-"]'));
+          return open === "false" && items.length === 0;
+        })()
+      `);
+      if (!activityReCollapsed) fail("Chat Activity did not collapse back on toggle");
+      console.log("✅ Chat: Activity collapses by default and is user-toggleable");
+    }
 
     // --- Chat composer hardening: autosize + wrapping + keyboard semantics ---
     // 1) Autosize grows with content up to maxRows, then becomes internally scrollable.

@@ -41,6 +41,9 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
   const [draftRefs, setDraftRefs] = useState<ChatDraftRef[]>([]);
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState<null | { status: "waiting" | "streaming"; text: string }>(null);
+  const [thinkingOpenActive, setThinkingOpenActive] = useState(false);
+  const thinkingStartAtRef = useRef<number | null>(null);
+  const [thinkingDurationMsActive, setThinkingDurationMsActive] = useState<number | null>(null);
   const [activity, setActivity] = useState<
     Array<{ stepId: string; text: string; status: "running" | "ok" | "error"; ts: number; detail?: string }>
   >([]);
@@ -657,6 +660,25 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
   }, [loadThread]);
 
   useEffect(() => {
+    // Fail-soft: allow other surfaces (or deterministic smoke) to request a thread refresh.
+    // This intentionally mirrors how we already use window events for context/workbook changes.
+    const onThreadChanged = (e: Event) => {
+      try {
+        const ce = e as CustomEvent<any>;
+        const ctxId = String(ce?.detail?.contextId || "").trim();
+        // If contextId omitted, refresh best-effort for current.
+        if (!ctxId || ctxId === String(contextStatus.activeContextId || "")) {
+          loadThread();
+        }
+      } catch {
+        loadThread();
+      }
+    };
+    window.addEventListener("chat:threadChanged", onThreadChanged as any);
+    return () => window.removeEventListener("chat:threadChanged", onThreadChanged as any);
+  }, [loadThread, contextStatus.activeContextId]);
+
+  useEffect(() => {
     // Mention items should reflect current scoping mode + active context.
     loadMentionItems().catch(() => {});
     const onScope = () => loadMentionItems().catch(() => {});
@@ -682,13 +704,12 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
         if (!rid || !evt || evt.requestId !== rid) return;
 
         if (evt.kind === "thinking") {
-          setActivity((prev) => [
-            ...prev,
-            { stepId: `thinking-${evt.ts || Date.now()}`, text: evt.message || "Thinking…", status: "running", ts: evt.ts || Date.now() },
-          ]);
+          // Avoid duplicate "Thinking…" indicators: the active response already renders a Continue-style
+          // Thinking peek above the streaming bubble. Keep Activity focused on tools/steps.
           return;
         }
         if (evt.kind === "tool_start") {
+          setActivityOpen(true);
           const args = evt.argsSummary ? ` ${evt.argsSummary}` : "";
           setActivity((prev) => [
             ...prev,
@@ -743,20 +764,32 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
     (
       items: Array<{ stepId: string; text: string; status: "running" | "ok" | "error"; ts: number; detail?: string }>,
       defaultOpen: boolean,
+      opts?: { kind?: "message" | "streaming"; messageId?: string },
     ) => {
       if (!items || items.length === 0) return null;
+      const isOpen = activityOpen || defaultOpen;
+      const visible = isOpen ? items : [];
       return (
-        <div className="mt-1 rounded-lg border border-gray-200 bg-white px-2 py-1" data-testid={testIds.chat.activity.container}>
+        <div
+          className="mt-1 rounded-lg border border-gray-200 bg-white px-2 py-1"
+          data-testid={testIds.chat.activity.container}
+          data-open={isOpen ? "true" : "false"}
+          data-count={String(items.length)}
+          data-activity-kind={opts?.kind || ""}
+          data-chat-message-id={opts?.messageId || ""}
+        >
           <button
             type="button"
             className="flex w-full items-center justify-between gap-2 text-left text-[11px] text-gray-600"
-            onClick={() => setActivityOpen((v) => (defaultOpen ? !v : !v))}
+            onClick={() => setActivityOpen((v) => !v)}
             data-testid={testIds.chat.activity.toggle}
           >
             <span className="font-semibold">Activity</span>
-            <span className="text-gray-500">{(activityOpen || defaultOpen) ? "Hide" : "Show"}</span>
+            <span className="text-gray-500">
+              {isOpen ? "Hide" : `Show${items.length ? ` (${items.length})` : ""}`}
+            </span>
           </button>
-          {(activityOpen || defaultOpen ? items : items).map((a) => (
+          {visible.map((a) => (
             <div
               key={a.stepId}
               className="mt-1 text-[11px] text-gray-600"
@@ -814,6 +847,9 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
     setLoading(true);
     setActivity([]);
     setActivityOpen(false);
+    setThinkingOpenActive(false);
+    setThinkingDurationMsActive(null);
+    thinkingStartAtRef.current = Date.now();
 
     try {
       // Persist + render user message first (deterministic ordering via backend seq).
@@ -866,6 +902,11 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
         await new Promise<void>((r) => setTimeout(r, 16));
       }
       setStreaming(null);
+      const durMs =
+        typeof thinkingStartAtRef.current === "number" ? Math.max(0, Date.now() - thinkingStartAtRef.current) : null;
+      setThinkingDurationMsActive(durMs);
+      // Auto-collapse activity after completion (user can expand from History).
+      setActivityOpen(false);
       activeRequestIdRef.current = null;
 
       const appendedAssistant = await window.electronAPI?.chat?.append?.({
@@ -876,6 +917,7 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
         // but DO NOT include it in the LLM prompt history.
         meta: {
           scopeMode: sendScopeMode,
+          ...(durMs !== null ? { thinking: { durationMs: durMs, requestId } } : { thinking: { requestId } }),
           ...(activityRef.current?.length ? { activity: activityRef.current } : {}),
         },
       });
@@ -885,6 +927,8 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
         }
       } catch (error) {
       setStreaming(null);
+      setActivityOpen(false);
+      setThinkingOpenActive(false);
       activeRequestIdRef.current = null;
       const ctxId2 = contextStatus.activeContextId;
       if (ctxId2) {
@@ -1436,11 +1480,12 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
                             </span>
                           </div>
                         )}
-            <ChatMessage role={msg.role} content={msg.content} />
+            <ChatMessage role={msg.role} content={msg.content} meta={msg.meta} />
                         {!isUser &&
                           msg?.meta?.activity &&
                           Array.isArray(msg.meta.activity) &&
-                          renderActivityBlock(msg.meta.activity, true)}
+                          // History: default collapsed; user can expand.
+                          renderActivityBlock(msg.meta.activity, false, { kind: "message", messageId: msg.id })}
           </div>
                     </div>
                   );
@@ -1455,12 +1500,57 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
                   >
                     <div className="w-full max-w-[85%]">
                       <div
-                        className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-900 whitespace-pre-wrap"
-                        data-testid={testIds.chat.streaming.content}
+                        className="mb-1 rounded-lg border border-gray-200 bg-white px-2 py-1"
+                        data-testid={testIds.chat.thinking.container}
+                        data-open={thinkingOpenActive ? "true" : "false"}
                       >
-                        {streaming.status === "waiting" && !streaming.text ? "Thinking…" : streaming.text}
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between gap-2 text-left text-[11px] text-gray-600"
+                          onClick={() => setThinkingOpenActive((v) => !v)}
+                          data-testid={testIds.chat.thinking.toggle}
+                          aria-expanded={thinkingOpenActive ? "true" : "false"}
+                        >
+                          <span
+                            className="flex items-center gap-1 font-semibold"
+                            data-testid={testIds.chat.thinking.summary}
+                            role="status"
+                            aria-live="polite"
+                          >
+                            {streaming.status === "waiting" ? (
+                              <>
+                                <span>Thinking</span>
+                                <span className="inline-flex gap-0.5" aria-hidden="true">
+                                  <span className="animate-pulse">.</span>
+                                  <span className="animate-pulse [animation-delay:150ms]">.</span>
+                                  <span className="animate-pulse [animation-delay:300ms]">.</span>
+                                </span>
+                              </>
+                            ) : (
+                              <span>Thinking…</span>
+                            )}
+                          </span>
+                          <span className="text-gray-500">{thinkingOpenActive ? "Hide" : "Show"}</span>
+                        </button>
+                        {thinkingOpenActive && (
+                          <div className="mt-1 text-[11px] text-gray-600" data-testid={testIds.chat.thinking.details}>
+                            <div className="text-gray-500">
+                              {typeof thinkingStartAtRef.current === "number"
+                                ? `Elapsed: ${Math.max(0, Date.now() - thinkingStartAtRef.current)}ms`
+                                : "Elapsed: …"}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {renderActivityBlock(activity, true)}
+                      {String(streaming.text || "").length > 0 && (
+                        <div
+                          className="rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-900 whitespace-pre-wrap"
+                          data-testid={testIds.chat.streaming.content}
+                        >
+                          {streaming.text}
+                        </div>
+                      )}
+                      {renderActivityBlock(activity, true, { kind: "streaming" })}
                     </div>
                   </div>
                 )}

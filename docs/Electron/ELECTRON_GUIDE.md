@@ -137,6 +137,9 @@ insightLM-LT/
 - Main process: Runs TypeScript directly (`tsc -p electron && electron .`)
 - Renderer: Vite dev server (`http://localhost:5173`)
 - Hot reload for React, manual restart for Electron
+  - **Dev boot note**: Electron will **wait/retry briefly for Vite to become reachable** before loading the renderer URL.
+    This avoids flaky cold-start issues where the window loads before Vite is ready, which can break dynamic imports
+    (e.g., Mermaid diagram modules) until you restart.
 
 **Production Mode:**
 
@@ -777,17 +780,3 @@ A: Use `electron-builder` to include Python runtime, or bundle Python scripts an
 
 **Q: Can plugins be written in languages other than TypeScript?**
 A: Yes, but they need to communicate via IPC or spawn as child processes (like your MCP servers).
-
-
-
-
-
-
-
-
-
-
-
-
-
-

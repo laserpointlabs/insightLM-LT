@@ -128,6 +128,11 @@ try {
       ipcRenderer.on("insightlm:workbooks:filesChanged", handler);
       return () => ipcRenderer.removeListener("insightlm:workbooks:filesChanged", handler);
     },
+    onLLMConfigChanged: (cb: (payload: any) => void) => {
+      const handler = (_evt: any, payload: any) => cb(payload || {});
+      ipcRenderer.on("insightlm:config:llmChanged", handler);
+      return () => ipcRenderer.removeListener("insightlm:config:llmChanged", handler);
+    },
   },
 
   // Archive operations
@@ -247,6 +252,7 @@ try {
     getTools: () => ipcRenderer.invoke("debug:getTools"),
     stopServer: (serverName: string) => ipcRenderer.invoke("debug:stopServer", serverName),
     unregisterTools: (serverName: string) => ipcRenderer.invoke("debug:unregisterTools", serverName),
+    llmExecuteTool: (toolName: string, args: any) => ipcRenderer.invoke("debug:llm:executeTool", toolName, args),
   },
 });
 

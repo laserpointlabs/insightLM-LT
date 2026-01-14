@@ -7,6 +7,7 @@ export const testIds = {
     scopeText: "statusbar-scope-text",
     scopeToggle: "statusbar-scope-toggle",
     jumpToContexts: "statusbar-jump-to-contexts",
+    llm: "statusbar-llm",
   },
   activityBar: {
     item: (workbenchId: "file" | "extensions" | "data" | "analysis" | "event") => `activitybar-item-${workbenchId}`,
@@ -90,6 +91,7 @@ export const testIds = {
     history: "chat-history",
     settings: "chat-settings",
     popout: "chat-popout",
+    openTabCollapsed: "chat-open-tab-collapsed",
     contextChip: "chat-context-chip",
     contextMenu: "chat-context-menu",
     contextMenuGoToContexts: "chat-context-menu-go-to-contexts",
@@ -101,6 +103,16 @@ export const testIds = {
       container: "chat-activity",
       item: (stepId: string) => `chat-activity-item-${encodeURIComponent(String(stepId || ""))}`,
       toggle: "chat-activity-toggle",
+    },
+    thinking: {
+      container: "chat-thinking",
+      toggle: "chat-thinking-toggle",
+      summary: "chat-thinking-summary",
+      details: "chat-thinking-details",
+    },
+    sources: {
+      container: "chat-sources",
+      item: (key: string) => `chat-source-${encodeURIComponent(String(key || ""))}`,
     },
     message: (messageId: string) =>
       `chat-message-${encodeURIComponent(String(messageId || ""))}`,

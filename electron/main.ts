@@ -200,27 +200,53 @@ function checkPort(port: number): Promise<boolean> {
       resolve(res.statusCode === 200 || res.statusCode === 304);
     });
     req.on("error", () => resolve(false));
-    req.setTimeout(500, () => {
+    // Dev machines can be slow to boot Vite; keep this generous but bounded.
+    req.setTimeout(1500, () => {
       req.destroy();
       resolve(false);
     });
   });
 }
 
+async function waitForVitePortReady(
+  port: number,
+  opts?: { timeoutMs?: number; pollMs?: number },
+): Promise<boolean> {
+  const timeoutMs = Math.max(1000, Number(opts?.timeoutMs ?? 20000));
+  const pollMs = Math.max(100, Number(opts?.pollMs ?? 250));
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    // eslint-disable-next-line no-await-in-loop
+    if (await checkPort(port)) return true;
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+  return false;
+}
+
 // Function to find Vite dev server port
-async function findVitePort(): Promise<number> {
-  // Try common Vite ports
+async function findVitePort(opts?: { timeoutMs?: number }): Promise<number> {
+  // Try common Vite ports (Vite can bump if 5173 is taken).
   const portsToTry = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180];
 
-  for (const port of portsToTry) {
-    if (await checkPort(port)) {
-      console.log(`Found Vite dev server on port ${port}`);
-      return port;
+  const timeoutMs = Math.max(2000, Number(opts?.timeoutMs ?? 20000));
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    for (const port of portsToTry) {
+      // eslint-disable-next-line no-await-in-loop
+      if (await checkPort(port)) {
+        console.log(`Found Vite dev server on port ${port}`);
+        return port;
+      }
     }
+    // Vite may still be starting; wait briefly and retry.
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, 250));
   }
 
-  // Default fallback
-  console.warn("Could not find Vite dev server, using default port 5173");
+  // Default fallback (still dev-only); caller should treat it as "best guess" and retry load.
+  console.warn("Could not find Vite dev server within timeout; falling back to port 5173");
   return 5173;
 }
 
@@ -288,9 +314,14 @@ async function createWindow() {
 
   // Load the app
   if (isDev) {
-    // Wait for Vite to be ready, then load
+    // Dev mode: Vite must be reachable for dynamic imports (e.g., Mermaid diagrams) to work reliably.
+    // We wait/retry to avoid race conditions between Electron boot and Vite server startup.
     try {
-      const port = await findVitePort();
+      const port = await findVitePort({ timeoutMs: 20000 });
+      const ready = await waitForVitePortReady(port, { timeoutMs: 20000, pollMs: 250 });
+      if (!ready) {
+        console.warn(`Vite dev server not reachable on port ${port} (yet). Attempting to load anyway...`);
+      }
       const url = `http://localhost:${port}`;
       console.log(`Loading dev server from ${url}`);
       await mainWindow.loadURL(url);
@@ -298,6 +329,10 @@ async function createWindow() {
     } catch (error) {
       console.error("Error finding Vite port:", error);
       // Fallback to default port
+      const ready = await waitForVitePortReady(5173, { timeoutMs: 20000, pollMs: 250 });
+      if (!ready) {
+        console.warn("Vite dev server still not reachable on port 5173; loading anyway (may show blank/error until Vite starts).");
+      }
       await mainWindow.loadURL("http://localhost:5173");
       mainWindow.webContents.openDevTools();
     }
@@ -716,6 +751,19 @@ app.whenReady().then(async () => {
         server: toolRegistry.getToolServer(t.name)
       }))
     };
+  });
+
+  // Debug: Execute an LLM tool through the real LLM tool pipeline (deterministic smoke helper).
+  // This uses the same internal execution path as provider tool-calls.
+  ipcMain.handle("debug:llm:executeTool", async (_evt, toolName: string, args: any) => {
+    try {
+      const name = String(toolName || "").trim();
+      if (!name) return { ok: false, error: "Missing toolName" };
+      const result = await llmService.debugExecuteTool(name, args && typeof args === "object" ? args : {});
+      return { ok: true, result };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   // Debug: Test unregisterTools directly

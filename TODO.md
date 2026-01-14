@@ -35,6 +35,7 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 
 ### App startup UX
 - [ ] **15) Add a loading indicator/progress during app startup**: avoid white screen; show deterministic progress/loader. (Related: “UI / Loading enhancements” below.)
+- [x] **Dev boot reliability: wait for Vite before loading renderer**: avoid `ERR_CONNECTION_REFUSED` + Mermaid dynamic-import failures on cold start (`electron/main.ts`).
 
 ### LLM prompting (system prompt guidance)
 - [ ] **16) Add system prompt instructions for returning Sheets + Notebooks**: document expected formats; keep MCP/tool routing decoupled (fail-soft).
