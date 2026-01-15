@@ -71,12 +71,27 @@ async function runRefresh(
         openDocuments: state.openDocuments.map((d) => (d.id === doc.id ? { ...d, content } : d)),
       }));
       refreshed += 1;
-    } catch {
+    } catch (e) {
+      // Fail-soft: If the file no longer exists, close the tab and drop it from persisted open-tabs
+      // so we don't spam console errors forever after smoke runs / demo resets / file deletes.
+      const msg = e instanceof Error ? e.message : String(e || "");
+      if (msg.includes("File not found")) {
+        try {
+          get().closeDocument(doc.id);
+        } catch {
+          // ignore
+        }
+      }
       // ignore: best-effort refresh
     }
   }
 
   return { refreshed, skippedDirty };
+}
+
+function isFileNotFoundError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err || "");
+  return msg.includes("File not found");
 }
 
 const OPEN_TABS_STORAGE_KEY = "insightlm.openTabs.v1";
@@ -413,7 +428,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             loadingDocuments: newLoadingSet,
           }));
         } catch (error) {
-          console.warn("Failed to reload open document:", error);
+          if (isFileNotFoundError(error)) {
+            // Tab restore / refresh: if the file is gone, close the tab and remove it from persisted tabs.
+            try {
+              get().closeDocument(existing.id);
+            } catch {
+              // ignore
+            }
+          } else {
+            console.warn("Failed to reload open document:", error);
+          }
           const newLoadingSet = new Set(get().loadingDocuments);
           newLoadingSet.delete(docKey);
           set(() => ({
@@ -477,6 +501,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             loadingDocuments: newLoadingSet,
           }));
         } catch (error) {
+          if (isFileNotFoundError(error)) {
+            // The tab was restored but the file no longer exists. Close it and clean persistence.
+            const newLoadingSet = new Set(get().loadingDocuments);
+            newLoadingSet.delete(docKey);
+            set(() => ({
+              loadingDocuments: newLoadingSet,
+            }));
+            try {
+              get().closeDocument(tempDoc.id);
+            } catch {
+              // ignore
+            }
+            return;
+          }
           console.error("Failed to load document:", error);
           const newLoadingSet = new Set(get().loadingDocuments);
           newLoadingSet.delete(docKey);

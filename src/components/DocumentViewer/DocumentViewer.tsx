@@ -905,18 +905,6 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts, uiMode = 
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid={groupTid} onMouseDown={() => setFocusedGroup(group)}>
         {renderTabsRow(group, ids, activeId, setActive)}
-        {doc && doc.type !== "dashboard" && isEditableFileType(getFileExtension(doc.filename)) && isDirty && (
-          <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2" data-testid={testIds.documentViewer.saveBar}>
-            <span className="text-xs text-orange-500">Unsaved changes</span>
-            <button
-              onClick={() => handleSaveFocused()}
-              className="ml-auto rounded bg-green-500 px-3 py-1 text-sm text-white hover:bg-green-600"
-              data-testid={testIds.documentViewer.saveButton}
-            >
-              Save (Ctrl+S)
-            </button>
-          </div>
-        )}
         <div className="min-h-0 flex-1 overflow-auto" data-testid={paneTid}>
           <ViewerErrorBoundary
             key={activeId || `${group}-none`}

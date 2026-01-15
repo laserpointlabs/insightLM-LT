@@ -743,6 +743,26 @@ app.whenReady().then(async () => {
     return lastOpenedWindowInfo;
   });
 
+  // Debug: ensure we can always spawn a normal workbench window (Activity Bar / Sidebar / Status Bar)
+  // even if the user is currently only looking at a detached editor-only window.
+  ipcMain.handle("debug:openMainWorkbenchWindow", async () => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        try {
+          mainWindow.show();
+          mainWindow.focus();
+        } catch {
+          // ignore
+        }
+        return { ok: true, reused: true, windowId: mainWindow.id };
+      }
+      await createWindow();
+      return { ok: true, reused: false, windowId: mainWindow?.id ?? null };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
+    }
+  });
+
   // Workbench parity: open a tab in a new (floating) window.
   ipcMain.handle("window:openTabInNewWindow", async (_evt, payload: any) => {
     try {

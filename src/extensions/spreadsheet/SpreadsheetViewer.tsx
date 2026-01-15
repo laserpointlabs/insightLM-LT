@@ -475,6 +475,24 @@ export function SpreadsheetViewer({
         return false;
       }
     };
+    const installSpectrumShimIfNeeded = () => {
+      // Luckysheet's conditional formatting dialog expects the jQuery Spectrum plugin and will call:
+      //   $(...).spectrum(...)
+      // If Spectrum isn't present, Luckysheet can throw and break the renderer. Provide a minimal
+      // chainable stub so this is fail-soft (UI may be degraded but must not crash).
+      try {
+        syncDollar();
+        if (!w.jQuery || !w.jQuery.fn) return false;
+        if (typeof (w.jQuery.fn as any).spectrum === "function") return true;
+        console.warn("Installing minimal jQuery spectrum shim (plugin not present)");
+        (w.jQuery.fn as any).spectrum = function (_opts: any) {
+          return this;
+        };
+        return true;
+      } catch {
+        return false;
+      }
+    };
     const withAmdDisabled = (fn: () => void) => {
       // jquery-mousewheel uses a UMD wrapper; if define.amd is present (Monaco loader), it will register
       // as AMD and not attach to jQuery.fn. Temporarily disable AMD detection for this load.
@@ -500,6 +518,7 @@ export function SpreadsheetViewer({
 
     // Early exit if already loaded and processed
     if (globalScriptsState.loaded && w.luckysheet && isMousewheelReady()) {
+      installSpectrumShimIfNeeded();
       setScriptsLoaded(true);
       return;
     }
@@ -514,6 +533,7 @@ export function SpreadsheetViewer({
       globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/jquery-mousewheel@3.1.13/jquery.mousewheel.min.js');
       globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/luckysheet.umd.js');
       syncDollar();
+      installSpectrumShimIfNeeded();
       setScriptsLoaded(true);
       return;
     }

@@ -35,6 +35,15 @@ async function connectCDP() {
   const targets = await fetchJson(listUrl);
   // Prefer the actual app page target (avoid attaching to DevTools UI itself).
   const page =
+    // Prefer the main workbench window (NOT the detached editor-only window).
+    targets.find(
+      (t) =>
+        t.type === "page" &&
+        typeof t.webSocketDebuggerUrl === "string" &&
+        typeof t.url === "string" &&
+        t.url.startsWith("http://localhost:5173") &&
+        !t.url.includes("windowMode=editor"),
+    ) ||
     targets.find(
       (t) =>
         t.type === "page" &&
@@ -307,6 +316,43 @@ async function typeText(evaluate, selector, text, delayMs = 15) {
   }
 }
 
+async function waitForTabDirtyIndicator(evaluate, filenameNeedle, timeoutMs = 20000) {
+  const start = Date.now();
+  const needle = String(filenameNeedle || "");
+  while (Date.now() - start < timeoutMs) {
+    const ok = await evaluate(`
+      (() => {
+        const tabs = Array.from(document.querySelectorAll('[data-testid^="document-viewer-tab-"]'));
+        const hit = tabs.find((t) => String(t.innerText || "").includes(${jsString(needle)}));
+        if (!hit) return false;
+        // Dirty indicator is rendered as a dot in the tab label.
+        return String(hit.innerText || "").includes("●");
+      })()
+    `);
+    if (ok) return true;
+    await sleep(150);
+  }
+  return false;
+}
+
+async function waitForTabClean(evaluate, filenameNeedle, timeoutMs = 20000) {
+  const start = Date.now();
+  const needle = String(filenameNeedle || "");
+  while (Date.now() - start < timeoutMs) {
+    const ok = await evaluate(`
+      (() => {
+        const tabs = Array.from(document.querySelectorAll('[data-testid^="document-viewer-tab-"]'));
+        const hit = tabs.find((t) => String(t.innerText || "").includes(${jsString(needle)}));
+        if (!hit) return false;
+        return !String(hit.innerText || "").includes("●");
+      })()
+    `);
+    if (ok) return true;
+    await sleep(150);
+  }
+  return false;
+}
+
 // Append text without clearing first (useful for newline + continued typing assertions).
 async function appendText(evaluate, selector, text, delayMs = 15) {
   for (const ch of String(text || "")) {
@@ -499,7 +545,29 @@ async function run() {
 
     // Extensions workbench: list + toggle + open details tab (manifest-driven, decoupled).
     const extBtn = 'button[data-testid="activitybar-item-extensions"]';
-    const hasExtBtn = await waitForSelector(evaluate, extBtn, 20000);
+    let hasExtBtn = await waitForSelector(evaluate, extBtn, 5000);
+    if (!hasExtBtn) {
+      // If we accidentally attached to a detached editor-only window, it will intentionally NOT have an Activity Bar.
+      const isEditorOnly = await evaluate(`String(location.search || "").includes("windowMode=editor")`);
+      if (isEditorOnly) {
+        try {
+          await evaluate(`window.electronAPI?.debug?.openMainWorkbenchWindow?.()`);
+        } catch {
+          // ignore
+        }
+        // Give Electron a moment to create the new window/target.
+        await sleep(750);
+        // Reconnect: connectCDP prefers the main workbench window when present.
+        try {
+          ws?.close?.();
+        } catch {
+          // ignore
+        }
+        ({ ws, call, evaluate, consoleEvents, exceptionEvents } = await connectCDP());
+        await waitForSelector(evaluate, "body", 20000);
+        hasExtBtn = await waitForSelector(evaluate, extBtn, 20000);
+      }
+    }
     if (!hasExtBtn) fail("Missing Activity Bar Extensions icon");
     await clickSelector(evaluate, extBtn);
     await waitForSelector(evaluate, 'div[data-testid="extensions-workbench"]', 20000);
@@ -507,6 +575,33 @@ async function run() {
     // Expect built-in extensions to be registered (at least Jupyter + Spreadsheet in this repo).
     const hasAnyExt = await waitForSelector(evaluate, 'div[data-testid^="extensions-item-"]', 20000);
     if (!hasAnyExt) fail("Extensions workbench opened but no extensions were listed");
+
+    // Ensure required extensions (Spreadsheet + Jupyter) are enabled so downstream smoke steps can run deterministically.
+    // Users can disable these in the UI and that state persists across runs.
+    const ensureEnabledByNameNeedle = async (needle) => {
+      const n = String(needle || "").toLowerCase();
+      const res = await evaluate(`
+        (() => {
+          const tiles = Array.from(document.querySelectorAll('div[data-testid^="extensions-item-"]'));
+          const hit = tiles.find((t) => String(t.innerText || "").toLowerCase().includes(${jsString(n)}));
+          const tid = hit ? String(hit.getAttribute("data-testid") || "") : null;
+          if (!tid) return { ok: false, why: "missing-tile" };
+          const enc = tid.slice("extensions-item-".length);
+          const toggleTid = "extensions-toggle-" + enc;
+          const input = document.querySelector('input[data-testid="' + toggleTid + '"]');
+          if (!input) return { ok: false, why: "missing-toggle", tid, toggleTid };
+          const before = !!input.checked;
+          if (!before) input.click();
+          return { ok: true, was: before, now: !!input.checked, toggleTid };
+        })()
+      `);
+      // Fail-soft if we can't find the tile by name (extension names may vary).
+      if (res?.ok && res.was === false && res.now !== true) {
+        fail(`Required extension did not enable: ${needle} (${JSON.stringify(res).slice(0, 300)})`);
+      }
+    };
+    await ensureEnabledByNameNeedle("spreadsheet");
+    await ensureEnabledByNameNeedle("jupyter");
 
     // Toggle one extension deterministically (pick the first tile).
     const firstExt = await evaluate(`
@@ -530,6 +625,17 @@ async function run() {
       return false;
     })();
     if (!extToggleFlipped) fail("Extension enable toggle did not flip");
+    // Restore original state so downstream smoke steps don't depend on which extension we happened to toggle first.
+    await clickSelector(evaluate, `input[data-testid="${toggleTid}"]`);
+    await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 15000) {
+        const now = await evaluate(`(() => document.querySelector('input[data-testid="${toggleTid}"]') ? document.querySelector('input[data-testid="${toggleTid}"]').checked : null)()`);
+        if (now === beforeToggle) return;
+        await sleep(150);
+      }
+      fail("Extension enable toggle did not restore to original state");
+    })();
 
     // Open details tab by clicking the tile (button inside tile).
     await clickSelector(evaluate, `div[data-testid="${firstExt}"] button[title="Open extension details"]`);
@@ -1048,8 +1154,13 @@ async function run() {
             console.warn("⚠️ Seeded notebook did not produce output/artifacts in time; skipping seeded-demo assertions");
           } else {
             // Save notebook (ensures outputs persist in file)
-            await waitForSelector(evaluate, 'button[data-testid="document-viewer-save-button"]', 20000);
-            await clickSelector(evaluate, 'button[data-testid="document-viewer-save-button"]');
+            await evaluate(`
+              (() => {
+                window.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }));
+                return true;
+              })()
+            `);
+            await sleep(300);
             console.log("✅ Ran notebook cell + saved notebook");
 
             // Re-open notebook to confirm output persisted (reloads content from disk)
@@ -1343,12 +1454,12 @@ async function run() {
     );
     if (!backTabOk) fail("Could not switch back to notebook1 tab for save-stability check");
 
-    // Make an edit so the save bar appears.
+    // Make an edit so the tab shows the dirty indicator (●).
     const nbTextareaOk = await waitForSelector(evaluate, 'div[data-testid="notebook-cell-0"] textarea', 20000);
     if (!nbTextareaOk) fail("Notebook cell textarea did not appear after switching tabs (notebook viewer not ready)");
     await setInputValue(evaluate, 'div[data-testid="notebook-cell-0"] textarea', "%pwd\\n");
-    const saveBarOk = await waitForSelector(evaluate, 'div[data-testid="document-viewer-save-bar"]', 20000);
-    if (!saveBarOk) fail("Expected save bar to appear after notebook edit");
+    const dirtyTabOk = await waitForTabDirtyIndicator(evaluate, String(nb1.filename || "trade_study.ipynb"), 20000);
+    if (!dirtyTabOk) fail("Expected dirty indicator (●) on notebook tab after edit");
 
     // Trigger Ctrl+S (the exact repro path).
     await evaluate(`
@@ -1357,7 +1468,8 @@ async function run() {
         return true;
       })()
     `);
-    await waitForGone(evaluate, 'div[data-testid="document-viewer-save-bar"]', 20000);
+    const cleanTabOk = await waitForTabClean(evaluate, String(nb1.filename || "trade_study.ipynb"), 20000);
+    if (!cleanTabOk) fail("Expected dirty indicator (●) to clear after Ctrl+S");
 
     // Assert the active tab did NOT change to notebook2 after saving notebook1.
     const afterSave = await evaluate(`
@@ -1409,10 +1521,10 @@ async function run() {
   await clickSelector(evaluate, dirtyNotebookTid);
   await waitForSelector(evaluate, 'div[data-testid="document-viewer-content"][data-active-ext="ipynb"]', 20000);
   await waitForSelector(evaluate, 'div[data-testid="notebook-viewer"]', 20000);
-  // Make it dirty (ensure save bar appears)
+  // Make it dirty (ensure dirty indicator appears on the tab)
   await setInputValue(evaluate, 'div[data-testid="notebook-cell-0"] textarea', `%pwd\n# ${dirtyToken}\n# edit\n`);
-  const dirtySaveBarOk = await waitForSelector(evaluate, 'div[data-testid="document-viewer-save-bar"]', 20000);
-  if (!dirtySaveBarOk) fail("Expected save bar to appear after dirty-close notebook edit");
+  const dirtyCloseTabOk = await waitForTabDirtyIndicator(evaluate, String(dirtyNotebookRelPath.split("/").pop() || "ipynb"), 20000);
+  if (!dirtyCloseTabOk) fail("Expected dirty indicator (●) to appear after dirty-close notebook edit");
 
   const activeTabId = await evaluate(
     `document.querySelector('div[data-testid="document-viewer-content"]')?.getAttribute("data-active-doc-id") || ""`,
@@ -1450,13 +1562,7 @@ async function run() {
 
   console.log("✅ Dirty tab close protection (Save/Don't Save/Cancel) prevents silent data loss");
 
-    // Ctrl+S already performed a save; don't require the save bar/button to still be visible.
-    // If it is visible (e.g. slow persistence), click it as a best-effort extra save.
-    const saveBtn = 'button[data-testid="document-viewer-save-button"]';
-    const saveVisible = await evaluate(`!!document.querySelector(${jsString(saveBtn)})`);
-    if (saveVisible) {
-      await clickSelector(evaluate, saveBtn);
-    }
+    // Ctrl+S already performed a save; no save-bar/button exists.
     console.log("✅ Saved notebook after %pwd execution");
 
     // Create + activate a context that contains this workbook (so Chat is in-scope deterministically).

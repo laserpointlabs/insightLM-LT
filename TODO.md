@@ -70,10 +70,12 @@ These are **requested features + bugs** to prioritize for the next few days to f
 - [ ] **Menu parity audit**: ensure File/Edit/View/Help items and behavior are VS Code-like where applicable (no invented UX).
 - [ ] **Move Demos to Help**: relocate Demos menu to Help (or add a “Demo” entry under Help), while preserving the “demo config” behavior (scoping/context activation).
 - [ ] **File → New Text File…**: allow creating a plain text document easily (not just Markdown/CSV).
+- [ ] **File → New Python File… / New R File…**: add quick create actions for common code files (at least `.py` and `.R`), with a name prompt and correct default extension.
 
 ### Create flows (naming + modals)
 - [ ] **Name-on-create modal**: when creating a **Notebook** or **Insight Sheet**, prompt for a filename (instead of auto timestamp names).
 - [ ] **Name-on-create modal (other)**: unify create flows so “Create file” consistently prompts for name (where safe).
+- [ ] **Workbooks toolbar cleanup**: replace the growing row of tiny “create/import/folder/notebook/sheet” icons with a single **Create…** dropdown (or combo) that contains all create actions (Markdown/Text/Python/R/Notebook/Insight Sheet/Folder/Import), VS Code-style.
 
 ### Tabs / Editor windows
 - [ ] **Close tab when file deleted**: deleting a file from a workbook should close any open tabs for that file (no stale viewer).
@@ -83,6 +85,8 @@ These are **requested features + bugs** to prioritize for the next few days to f
 ### Notebooks (Jupyter)
 - [ ] **ipywidgets support**: enable interactive widgets and richer graphing inside notebooks (verify Electron sandbox/iframes requirements).
 - [ ] **Publish notebook output to Dashboard**: allow pushing notebook outputs (plots/graphs/tables) into a dashboard tile, not just text/JSON.
+- [ ] **Notebook create should auto-refresh Workbooks tree**: when Chat/LLM (or tools) create a new `.ipynb`, the Workbooks view should show it immediately (no manual refresh / View→Reload).
+- [ ] **Open notebook should live-update on external writes**: if an open `.ipynb` is modified by Chat/LLM/tools, the notebook viewer should refresh automatically (if not dirty), like Markdown/Sheets.
 
 ### Authoring UX: inline edits + AI
 - [ ] **Inline edits + AI**: add inline editing and “AI intervene here” for **Markdown**, **Sheets**, and **Notebooks** (design + deterministic UX).
@@ -101,6 +105,7 @@ These are **requested features + bugs** to prioritize for the next few days to f
 - [ ] **Provider parity**: ensure OpenAI / Ollama / Claude all support core chat+tools workflows reliably (consistent tool calling, error handling, model listing, and fallbacks).
 - [ ] **Chat settings: provider switch auto-refreshes models**: when switching provider (OpenAI ↔ Ollama ↔ Claude), automatically refresh the model list (keep manual refresh button as fallback).
 - [ ] **Chat settings UI cleanup**: remove redundant “second line”/raw model text field if not needed; prefer a single, clear model selector with deterministic state.
+- [ ] **Chat settings bug: provider/model requires Save→Refresh loop**: after changing provider, user must click **Save**, then **Refresh**, before the model dropdown is usable. Fix so model selection works immediately (and saving is not required just to populate/select models).
 
 ### Automation / Smoke
 - [ ] **Smoke test speed**: make smoke faster (early-fail, less waiting, fewer redundant steps).
@@ -111,6 +116,10 @@ These are **requested features + bugs** to prioritize for the next few days to f
 
 ### Chat workflow
 - [ ] **Planning mode**: for complex questions, support a deterministic “plan first” workflow (generate/checklist/todos before execution).
+- [ ] **Chat: Edit & Rerun + feedback**:
+  - [ ] Allow editing a previous user message and rerunning from that point (branching history like Cursor/Continue; deterministic).
+  - [ ] Add lightweight feedback controls (thumbs up/down and optional comment) per assistant response.
+  - [ ] Persist feedback with the transcript (and optionally export it) to support future reinforcement-learning workflows.
 
 ### Sheets (LLM authoring contract + MCP tools)
 - [ ] Define “Insight Sheet” authoring contract so LLM never guesses `.is` format: add Spreadsheet MCP tool surface (create/open/read-range/set-cells/view-state) + schema/examples. See `docs/MCP/SPREADSHEET_MCP_CONTRACT.md`.
