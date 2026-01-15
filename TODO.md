@@ -52,6 +52,60 @@ Note: Prior to investing further in Luckysheet long-term, consider evaluating Un
   - Actual: detached window content visibly “flashes”/repaints while typing (even when scrollbars don’t appear).
   - Notes: likely a container/overflow/paint-containment mismatch between detached `windowMode=editor` layout and main workbench; chat composer autosize may be triggering full-window repaints.
 
+---
+
+## Next: Demo hardening backlog (captured Jan 2026)
+
+These are **requested features + bugs** to prioritize for the next few days to finish demo readiness.
+
+### Workbench UX / Theme
+- [ ] **Theme modes**: add **Light / Dark / Midnight** themes and persist per project (or per user).
+- [ ] **Initial sidebar width**: on first launch (or new project), default the views column wider so Chat isn’t cramped.
+- [ ] **Window state persistence**: restore **last window size/position** on startup.
+- [ ] **Startup behavior**: open the **last active project** automatically on launch (instead of starting blank/first project).
+- [ ] **Hide scoping (configurable)**: add a user setting to hide scope UI (“SCOPED/ALL”) for users who don’t need it; default remains visible for power users.
+
+### Menu bar parity (VS Code-like)
+- [ ] **Open Recent cleanup**: add **File → Open Recent → Clear Recently Opened**.
+- [ ] **Menu parity audit**: ensure File/Edit/View/Help items and behavior are VS Code-like where applicable (no invented UX).
+- [ ] **Move Demos to Help**: relocate Demos menu to Help (or add a “Demo” entry under Help), while preserving the “demo config” behavior (scoping/context activation).
+- [ ] **File → New Text File…**: allow creating a plain text document easily (not just Markdown/CSV).
+
+### Create flows (naming + modals)
+- [ ] **Name-on-create modal**: when creating a **Notebook** or **Insight Sheet**, prompt for a filename (instead of auto timestamp names).
+- [ ] **Name-on-create modal (other)**: unify create flows so “Create file” consistently prompts for name (where safe).
+
+### Tabs / Editor windows
+- [ ] **Close tab when file deleted**: deleting a file from a workbook should close any open tabs for that file (no stale viewer).
+- [ ] **Detached window dirty/save UX**: in “Move/Copy into New Window” tabs, show modified/dirty state and provide a visible Save affordance (Ctrl+S already works; UI must reflect unsaved changes).
+
+### Notebooks (Jupyter)
+- [ ] **ipywidgets support**: enable interactive widgets and richer graphing inside notebooks (verify Electron sandbox/iframes requirements).
+- [ ] **Publish notebook output to Dashboard**: allow pushing notebook outputs (plots/graphs/tables) into a dashboard tile, not just text/JSON.
+
+### Authoring UX: inline edits + AI
+- [ ] **Inline edits + AI**: add inline editing and “AI intervene here” for **Markdown**, **Sheets**, and **Notebooks** (design + deterministic UX).
+
+### RAG / Knowledge packs
+- [ ] **RAG preprocessing pipeline**: add an explicit preprocessing step for RAG ingestion (cleaning/normalization/chunking metadata) for better retrieval quality.
+- [ ] **Context7-lite**: add a “docs/reference pack” capability (likely knowledge pack tooling) for offline-ish Context7-style reference.
+
+### Spellcheck
+- [ ] **Spellcheck suggestions**: underline is not enough; add right-click suggestions / accept / ignore (or integrate Monaco spellcheck in supported editors).
+
+### Extensions + workbenches (architecture)
+- [ ] **Full decoupling**: continue hardening “extensions ↔ workbenches” decoupling (fail-soft; no cross-layer coupling).
+
+### Automation / Smoke
+- [ ] **Smoke test speed**: make smoke faster (early-fail, less waiting, fewer redundant steps).
+- [ ] **Smoke test ordering**: move newest/most fragile regressions to the top so failures are caught immediately.
+
+### Workbooks lifecycle
+- [ ] **Archive workbooks + files**: add archive/unarchive flows (UI + storage + search semantics).
+
+### Chat workflow
+- [ ] **Planning mode**: for complex questions, support a deterministic “plan first” workflow (generate/checklist/todos before execution).
+
 ### Sheets (LLM authoring contract + MCP tools)
 - [ ] Define “Insight Sheet” authoring contract so LLM never guesses `.is` format: add Spreadsheet MCP tool surface (create/open/read-range/set-cells/view-state) + schema/examples. See `docs/MCP/SPREADSHEET_MCP_CONTRACT.md`.
 - [ ] Reference parity for Spreadsheet MCP tool surface: use Univer MCP Start Kit “Currently Supported MCP Tools” list as a checklist for coverage. Ref: `https://github.com/dream-num/univer-mcp-start-kit`
@@ -315,7 +369,7 @@ Note: Prior to investing further in Luckysheet long-term, consider evaluating Un
 - [ ] Incorporate a **planning** flow in chat for complex problems (may use a team if needed).
 
 ### Markdown / Docs
-- [ ] Add a **slide show** tool for Markdown documents.
+- [ ] Add a **slide show** tool for Markdown documents. *(also tracked in “Next: Demo hardening backlog” above)*
 - [x] Add **math** rendering to Markdown + Chat composer. *(KaTeX; smoke-covered)*
 
 ### Response quality / Safety
