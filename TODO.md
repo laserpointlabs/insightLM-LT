@@ -78,6 +78,7 @@ These are **requested features + bugs** to prioritize for the next few days to f
 ### Tabs / Editor windows
 - [ ] **Close tab when file deleted**: deleting a file from a workbook should close any open tabs for that file (no stale viewer).
 - [ ] **Detached window dirty/save UX**: in “Move/Copy into New Window” tabs, show modified/dirty state and provide a visible Save affordance (Ctrl+S already works; UI must reflect unsaved changes).
+- [ ] **Provider tool-name validation guardrails (OpenAI)**: ensure providers that require strict tool naming (e.g., OpenAI `^[a-zA-Z0-9_-]+$`) are handled via an adapter/mapping layer so tool calling never hard-fails on naming.
 
 ### Notebooks (Jupyter)
 - [ ] **ipywidgets support**: enable interactive widgets and richer graphing inside notebooks (verify Electron sandbox/iframes requirements).
@@ -96,6 +97,11 @@ These are **requested features + bugs** to prioritize for the next few days to f
 ### Extensions + workbenches (architecture)
 - [ ] **Full decoupling**: continue hardening “extensions ↔ workbenches” decoupling (fail-soft; no cross-layer coupling).
 
+### LLM Providers (parity + UX)
+- [ ] **Provider parity**: ensure OpenAI / Ollama / Claude all support core chat+tools workflows reliably (consistent tool calling, error handling, model listing, and fallbacks).
+- [ ] **Chat settings: provider switch auto-refreshes models**: when switching provider (OpenAI ↔ Ollama ↔ Claude), automatically refresh the model list (keep manual refresh button as fallback).
+- [ ] **Chat settings UI cleanup**: remove redundant “second line”/raw model text field if not needed; prefer a single, clear model selector with deterministic state.
+
 ### Automation / Smoke
 - [ ] **Smoke test speed**: make smoke faster (early-fail, less waiting, fewer redundant steps).
 - [ ] **Smoke test ordering**: move newest/most fragile regressions to the top so failures are caught immediately.
@@ -109,6 +115,7 @@ These are **requested features + bugs** to prioritize for the next few days to f
 ### Sheets (LLM authoring contract + MCP tools)
 - [ ] Define “Insight Sheet” authoring contract so LLM never guesses `.is` format: add Spreadsheet MCP tool surface (create/open/read-range/set-cells/view-state) + schema/examples. See `docs/MCP/SPREADSHEET_MCP_CONTRACT.md`.
 - [ ] Reference parity for Spreadsheet MCP tool surface: use Univer MCP Start Kit “Currently Supported MCP Tools” list as a checklist for coverage. Ref: `https://github.com/dream-num/univer-mcp-start-kit`
+- [ ] **MCP tool discovery reliability (spreadsheet-server)**: ensure spreadsheet-server consistently supports MCP `tools/list` (and tool mapping) so schema tools are always discoverable in-app (avoid “returned no tools”).
 
 ---
 
