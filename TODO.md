@@ -14,45 +14,43 @@ These are captured as numbered items for easy reference. They also appear (group
 
 ### Chat / Tabs / Views
 - [x] **1) Chat draft text is lost when switching tabs**: type in chat input → switch to another tab → return → typed text is gone (persist draft per tab/thread, or warn before losing).
-- [ ] **2) Opening Chat in a tabbed layout collapses/forces-close the left column view**: opening Chat into a tab area collapses/slides the left column/canvas (layout must remain stable).
-- [ ] **3) First-open refresh required for `.is` docs or Sheets**: after launch, opening a `.is` document or a sheet sometimes requires a manual refresh.
+- [x] **2) Opening Chat in a tabbed layout collapses/forces-close the left column view**: opening Chat into a tab area collapses/slides the left column/canvas (layout must remain stable). *(fixed + smoke-covered)*
+- [x] **3) First-open refresh required for `.is` docs or Sheets**: after launch, opening a `.is` document or a sheet sometimes required a manual refresh. *(fixed + smoke-covered)*
 - [ ] **4) `@` mention caret/selection offset after inserting a chip**: after selecting an `@` suggestion and inserting the chip, caret resumes in the wrong place.
 - [x] **5) Duplicate/extra “thinking” indicators in chat**: remove duplicate indicator; keep a single, correct “thinking/streaming” UI. (Related: “Remove initial thinking…” below.)
 - [ ] **6) Streamed chat output should render as Markdown**: streaming responses should progressively render Markdown safely/deterministically.
 - [ ] **7) Chat should support “edit & rerun” + history revert**: Cursor/Continue parity; clear state model.
 - [ ] **8) Add HTML renderer (where applicable)**: safe HTML rendering where appropriate (likely chat output or specific viewers).
-- [ ] **9) Add LaTeX/math rendering in Markdown**: support math rendering in Markdown output.
+- [x] **9) Add LaTeX/math rendering in Markdown**: support math rendering in Markdown output. *(implemented via KaTeX; smoke-covered)*
 
 ### Context / Information Architecture (design question)
 - [ ] **10) Do chats always need a Context?** Consider allowing chat to *be* a context, later attach documents/workbooks. (Design discussion; not a bug.)
 
 ### Sheets / Workbooks (state + persistence + search)
-Note: Prior to working the current luckysheets (now depreicated) Lets consider Univer and the Univer Platform.
-- [ ] **11) Sheet column widths (and other visual formatting) are not saved**: persist sheet “view state” (column width/row height/fonts/etc). (Related: “Save state of sheet items…” below.)
+Note: Prior to investing further in Luckysheet long-term, consider evaluating Univer/Univer Platform (separate decision).
+- [x] **11) Sheet column widths (and other visual formatting) are not saved**: persist sheet “view state” (column width/row height/fonts/etc). *(column widths/row heights now persist; smoke-covered)*
 - [ ] **12) Unsaved sheet changes are lost when switching tabs**: retain unsaved state and/or prompt to save/discard.
 - [ ] **13) Search results for `.is` sheet files show wrong/missing names**: fix Workbooks search display/name mapping for `.is`.
-- [ ] **14) Sheets should auto-update when data/events change**: refresh sheets/workbooks/dashboards without manual reload; audit global update mechanism.
+- [x] **14) Sheets should auto-update when data/events change**: open `.is` tabs live-refresh on external writes; workbook tree refreshes after tool-driven writes. *(smoke-covered)*
 
 ### App startup UX
 - [ ] **15) Add a loading indicator/progress during app startup**: avoid white screen; show deterministic progress/loader. (Related: “UI / Loading enhancements” below.)
 - [x] **Dev boot reliability: wait for Vite before loading renderer**: avoid `ERR_CONNECTION_REFUSED` + Mermaid dynamic-import failures on cold start (`electron/main.ts`).
 
 ### LLM prompting (system prompt guidance)
-- [ ] **16) Add system prompt instructions for returning Sheets + Notebooks**: document expected formats; keep MCP/tool routing decoupled (fail-soft).
+- [x] **16) Add system prompt instructions for returning Sheets + Notebooks**: document expected formats; keep MCP/tool routing decoupled (fail-soft). *(implemented; includes KaTeX guidance + .is canonical schema/tools)*
 
 ### Chat / Planning / Governance (untriaged)
 - [ ] **17) Flashing chat tab when typing**: tab UI flashes while typing in the chat composer.
+- [ ] **18) App left open overnight goes white + background servers are down and won’t recover**: leave the app open overnight (or long idle) → the main window becomes white/unresponsive; after a refresh/reload the UI may appear again but MCP/local servers are stopped and do not restart.
+  - Repro: open app → ensure servers are running/usable → leave running overnight (screen lock / sleep / network change may occur) → observe white screen → reload/refresh window → attempt to use features that require servers; attempt to “restart” by closing/opening views.
+  - Expected: app remains responsive; services stay running or automatically reconnect/restart.
+  - Actual: renderer shows white screen; after refresh UI returns but servers remain down; UI actions don’t recover servers.
+  - Notes: likely sleep/hibernate/resume or child process lifecycle; capture Electron main logs around failure window.
 - [ ] **19) Detached (New Window) Chat flickers while typing**: open **Chat** in a tab → use tab context menu **Move into New Window** (or **Copy into New Window**) → type in the chat composer in the detached window.
   - Expected: stable rendering while typing (no visible repaint/flicker).
   - Actual: detached window content visibly “flashes”/repaints while typing (even when scrollbars don’t appear).
   - Notes: likely a container/overflow/paint-containment mismatch between detached `windowMode=editor` layout and main workbench; chat composer autosize may be triggering full-window repaints.
-
-### Runtime stability / Services
-- [ ] **18) App left open overnight goes white + background servers are down and won’t recover**: leave the app open overnight (or long idle) → the main window becomes white/unresponsive; after a refresh/reload the UI may appear again but MCP/local “servers” (e.g., Rack Server) are stopped and do not restart even when opening/closing related UI panels.
-  - Repro: open app → ensure servers are running/usable → leave running overnight (screen lock / sleep / network change may occur) → observe white screen → reload/refresh window → attempt to use features that require servers; attempt to “restart” by closing/opening views.
-  - Expected: app remains responsive; services stay running or automatically reconnect/restart; closing/reopening panels should re-establish connections.
-  - Actual: renderer shows white screen; after refresh UI returns but servers remain down; UI actions don’t recover servers.
-  - Notes: likely related to sleep/hibernate/resume, long-lived websocket/IPC disconnect, child process lifecycle, or resource exhaustion; capture logs from Electron main + service manager around the failure window.
 
 ### Sheets (LLM authoring contract + MCP tools)
 - [ ] Define “Insight Sheet” authoring contract so LLM never guesses `.is` format: add Spreadsheet MCP tool surface (create/open/read-range/set-cells/view-state) + schema/examples. See `docs/MCP/SPREADSHEET_MCP_CONTRACT.md`.
@@ -260,32 +258,9 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 - [ ] Download all necessary CDNs at initial build (offline-friendly)
 
 ### Quick Fixes and Bugs (historical list; some complete)
-- [x] @ context direction
-- [x] Save llm.cfg to user appdata
-  - [x] Allow user to edit llm.config in a new tab (edit entire YAML; add providers)
-- [x] Show tool usage reporting and thinking as small/simple reporting in chat
-- [x] Allow user to move chat area to tab (pop-out icon)
-- [x] Improve scope indicator in chat area
-  - [x] Add a quick switch combo box
-- [x] Show full name of files (no ellipsis) in `@`
-- [ ] Fix startup left trim of the views area (looks like dashboard pushes view left) [may be artifact of automated prod testing]
-- [x] Show selected object as a chip and highlight for clarity
-  - [x] Trim chip to just the object name
-  - [x] Add chip inline in prompt text
-  - [x] Fix blank spaces after inline chip insertion
-- [x] Add toggle on Chat settings button (open/close)
-- [x] Update the context view when we set the context and scoping in chat text area so they match (verify)
-- [x] Remove initial thinking and animate the actual thinking…
-- [x] Render mermaid in the chat text area
-- [x] Store chat tab state
-- [x] When a user selects a new context, auto change to scoped if in “all” state
-- [x] Ensure tabs remain open after refresh
-- [x] Auto close the chat view when we pop-out to the tabbed view
-- [ ] Workbooks listed naturally to context so a user can select without special “single workbook context view” (also in context chip)
-- [x] Add automationState.workbooks mapping (name → id/path) to enable deterministic Workbooks UI automation using existing testIds
-- [x] Improved handling of views open/collapsed state to prevent overlapping/off-screen views (stable order + scroll-first + deterministic sizing)
-- [ ] Remove the words “Context:” and “Scope:” from chat text area chips
-- [ ] Context chip label is showing above the actual chip; should be just above chip
+- This list duplicates many items already captured in the **numbered bug list** at the top of this file.
+- Action: when adding a new bug/feature request, add it to the **numbered list** (or a roadmap section below), not here.
+- TODO: remove this legacy section once any remaining unique items have been migrated.
 
 ### Other fixes and bugs (later)
 - [ ] Change move icon to ↓↑
@@ -341,7 +316,7 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 
 ### Markdown / Docs
 - [ ] Add a **slide show** tool for Markdown documents.
-- [ ] Add **math** rendering to Markdown + Chat composer.
+- [x] Add **math** rendering to Markdown + Chat composer. *(KaTeX; smoke-covered)*
 
 ### Response quality / Safety
 - [ ] Add confidence level (and importance?) to each response; when confidence < 70%, run `team_evaluation`.

@@ -32,19 +32,19 @@ Repo reference points we must preserve:
 ## Must‑match behaviors (demo readiness checklist)
 
 ### A) Demo reliability (all demos)
-- [ ] **A1. One-click load**: each demo is loadable via the existing Demos surface (or equivalent existing command), without manual file copying.
+- [x] **A1. One-click load**: each demo is loadable via the existing Demos surface (or equivalent existing command), without manual file copying.
 - [ ] **A2. Deterministic scoping**: loading a demo forces **SCOPED** mode and activates a deterministic Context (best-effort; fail-soft if context-manager MCP is down).
-- [ ] **A3. Deterministic artifacts**: each demo has a canonical set of artifacts (docs/sheets/notebooks/dashboards) that exist after load and match the script.
+- [x] **A3. Deterministic artifacts**: each demo has a canonical set of artifacts (docs/sheets/notebooks/dashboards) that exist after load and match the script.
 - [ ] **A4. Clear walk-through doc**: each demo workbook contains a `video_walkthrough.md` (or equivalent) that is accurate and can be read verbatim.
 - [ ] **A5. Fail-soft**:
   - If an optional MCP server (context-manager, conceptualizer, etc.) is down, demo still opens and shows an explicit error/empty state with a retry path.
   - No “blank white screen” failure modes for seeded sheets/notebooks.
-- [ ] **A6. Smoke proof**: `tests/automation-smoke-ui.mjs` covers “load → verify artifacts exist → open key artifacts” for each demo.
-- [ ] **A7. Chat context behavior is understood (current capability)**:
+- [x] **A6. Smoke proof**: `tests/automation-smoke-ui.mjs` covers “load → verify artifacts exist → open key artifacts” for each demo.
+- [x] **A7. Chat context behavior is understood (current capability)**:
   - The LLM receives the **active chat thread transcript** as message history for the current request (context-scoped thread).
   - Chat history is **not currently RAG-searchable** across prior sessions/contexts (no “search past chats” tool/index yet).
   - Demo scripts must not rely on “search my old chats” unless/until we implement chat indexing/retrieval.
-- [ ] **A8. Thinking/progress indicator is visibly animating during RAG/tool execution (demo-critical)**:
+- [x] **A8. Thinking/progress indicator is visibly animating during RAG/tool execution (demo-critical)**:
   - When long-running work happens (especially `rag_search_content` / RAG reads, or other tool bursts), the UI must show an **actively animating** thinking indicator (not a static ellipsis).
   - Users must be able to tell “it’s working” vs “it froze” while waiting.
   - Reference contract: `docs/Contracts/Chat_Response_UX.md` (Continue/Cursor parity thinking indicator + activity trace).
@@ -60,12 +60,9 @@ Repo reference points we must preserve:
 
 ### Current state (what exists today)
 - Demo load is implemented: `DemoService.loadDemo("ac1000")`
-- Seeded workbooks:
-  - `ac1000-main-project` (“AC-1000 Aircraft”)
-  - `test-schedule-ac1000`
-  - `supplier-agreements`
-  - `project-budget`
-  (see `electron/services/demoService.ts`)
+- Seeded workbooks (current):
+  - `ac1000-main-project` (Vendor Program Workflow / AC1000 main workbook)
+  - (Legacy companion workbooks were removed from seeding for demo clarity; see `electron/services/demoSeedService.ts`.)
 
 ### Demo goal (what Deloitte should understand)
 Show a realistic **program execution workflow** (weapons-integration / vendor risk-reduction style) using the tool as the program’s “operating system”:
@@ -121,10 +118,10 @@ Show a realistic **program execution workflow** (weapons-integration / vendor ri
 ### Current state (what exists today)
 - Demo load is implemented: `DemoService.loadDemo("trade-study")` which loads workbook `uav-trade-study`.
 - Seeded workbook already includes:
-  - Canonical sheet: `trade/decision_matrix.is`
+  - Canonical sheet: `trade/trade-model.is`
+  - Alternatives: `trade/alternatives.csv`
   - Notebook: `trade/trade_study.ipynb` (writes `trade/results/summary.json` + `trade/results/study_report.md`)
   - Dashboard: “UAV Trade Study Dashboard”
-  - Walkthrough: `trade/video_walkthrough.md`
   (see `electron/services/demoSeedService.ts` and `docs/Customer_UseCase/uav_trade_study_video_script.md`)
 
 ### Demo goal (what Deloitte should understand)
@@ -177,8 +174,8 @@ Show “model → analysis → communication” loop:
     - a small constraint block that ties back to the feasibility constraints in the sheet/notebook
 
 ### Proof (deterministic smoke)
-- [ ] Load `trade-study` demo → assert seeded workbook exists → open `decision_matrix.is` → assert spreadsheet viewer mounts.
-- [ ] (Best-effort) run notebook cell → assert derived artifacts exist and persist after save/reopen (already partially covered; keep stable).
+- [x] Load `trade-study` demo → assert seeded workbook exists → open `trade-model.is` → assert spreadsheet viewer mounts.
+- [x] (Best-effort) run notebook cell → assert derived artifacts exist and persist after save/reopen (already covered in smoke; keep stable).
 
 ---
 

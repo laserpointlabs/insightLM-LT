@@ -20,9 +20,9 @@
 - [x] **Persistence (renderer reload)**: split layout persists across `View → Reload` / renderer reload.
 - [ ] **Unsaved close protection**:
   - [x] Closing a dirty tab prompts deterministically: **Save / Don’t Save / Cancel**
-  - [ ] Bulk closes (Close All / Close Others / Close Saved) handle dirty tabs deterministically
+  - [x] Bulk closes (Close All / Close Others / Close Saved) handle dirty tabs deterministically (batch prompt; fail-soft)
 - [ ] **Live refresh on external writes (“file changed on disk”)**:
-  - [ ] If an **open tab’s underlying file changes on disk** (including changes made by **Chat/tools/LLM**), the tab **auto-refreshes** if it is **not dirty**.
+  - [x] If an **open tab’s underlying file changes on disk** (including changes made by **Chat/tools/LLM**), the tab **auto-refreshes** if it is **not dirty**.
   - [ ] If the tab **is dirty**, we **never stomp user edits**; instead we keep the current content and show a **non-blocking info toast** indicating reload was skipped.
   - [ ] This behavior is **deterministic** and does not require closing/reopening the tab.
 
@@ -46,7 +46,7 @@
 - [x] Move a tab to the other group → assert it appears there. (`tests/automation-smoke-ui.mjs`)
 - [ ] Dock Chat to panel/sidecar → assert Chat stays visible while tabs remain navigable.
 - [x] Dirty tab close → prompt appears → Cancel keeps tab open, Don’t Save closes, Save persists then closes. (`tests/automation-smoke-ui.mjs`)
-- [ ] Open a document tab → trigger a **main-process tool-style write** to that same file → assert the **open tab refreshes without closing**.
+- [x] Open a document tab → trigger a **main-process tool-style write** to that same file → assert the **open tab refreshes without closing**.
 - [ ] Make the tab dirty (edit without saving) → trigger the same write → assert tab content does **not** auto-reload and an **info toast** appears.
 
 ---

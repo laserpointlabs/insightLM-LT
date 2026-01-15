@@ -22,7 +22,7 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
 - [x] **A0. View order is stable (no reordering / no “jump to top”)**:
   - The vertical order is always: **Dashboards → Contexts → Workbooks → Chat**.
   - Expanding/collapsing any view must **not** reorder views or cause a view header to “jump” to the top unexpectedly.
-- [ ] **A1. Expanded views never “disappear”**:
+- [x] **A1. Expanded views never “disappear”**:
   - Repro we must fix: open **Dashboards + Contexts + Workbooks**, then expand **Chat** → **Workbooks must remain expanded** (not auto-collapsed, not unmounted, not pushed off-screen without scroll affordance).
 - [x] **A2. VS Code-style height allocation (“SplitView-ish”)**:
   - With **multiple expanded views**, the layout must remain stable and predictable.
@@ -53,7 +53,7 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
 ### B) Tabs / Editor area (VS Code parity)
 - [x] **B1. Tabs never overflow off-screen without controls**:
   - If too many tabs: deterministic overflow handling (scroll buttons / wrapping rules / truncation) per the parity doc.
-- [ ] **B2. Opening “Chat as a tab” does not break layout**:
+- [x] **B2. Opening “Chat as a tab” does not break layout**:
   - Bug in `TODO.md` item **2** must be resolved: opening Chat in a tabbed layout must not collapse/force-close the left column view.
 - [x] **B3. Active tab stability**:
   - Saving a file keeps the current tab active (already fixed; must not regress).
@@ -68,10 +68,10 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
   - VS Code parity: editor groups model (not ad-hoc floating panes).
 
 ### C) Chat UX (Continue/Cursor parity)
-- [ ] **C1. “Thinking/streaming” indicator is single + correct** (no duplicates)
+- [x] **C1. “Thinking/streaming” indicator is single + correct** (no duplicates)
 - [ ] **C2. Streaming output renders as Markdown progressively** (safe + deterministic)
-- [ ] **C3. `@` mention insertion caret stability** (no offset)
-- [ ] **C4. Clear empty/loading/error states** (no silent failures)
+- [x] **C3. `@` mention insertion caret stability** (no offset)
+- [x] **C4. Clear empty/loading/error states** (no silent failures)
 - [x] **C5. Chat context picker is not confusing / no duplicate lists**:
   - Chat “Context” dropdown must not show the same workbook twice (e.g., Quick Workbooks plus `[WB] ...` contexts in the contexts list).
   - “Go to Contexts…” in the picker must reliably jump/expand the Contexts view (no “does nothing”).
@@ -120,7 +120,7 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
 ## Proof (deterministic smoke)
 
 ### 1) Sidebar “no disappearing / stable split sizing”
-- [ ] In `tests/automation-smoke-ui.mjs`:
+- [x] In `tests/automation-smoke-ui.mjs`:
   - Set constrained viewport.
   - Expand **Dashboards**, **Contexts**, **Workbooks** (ensure all `aria-expanded=true`).
   - Expand **Chat**.
@@ -128,7 +128,7 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
   - Assert vertical scroll region is used when needed (no off-screen loss without scroll).
 
 ### 2) Multi-view sizing invariant
-- [ ] With Dashboards + Contexts expanded:
+- [x] With Dashboards + Contexts expanded:
   - Assert **Contexts grows** (or last-expanded grows) so there is no “dead space”.
   - Assert neither view collapses or becomes inaccessible.
 
@@ -136,14 +136,14 @@ This contract is the **single checklist** for the current “30+ bugs” pass so
 - [x] Assert `scrollWidth <= clientWidth + epsilon` for `sidebar-container`. (`tests/automation-smoke-ui.mjs`)
 
 ### 4) Tabbed Chat does not collapse sidebar
-- [ ] Repro TODO bug (2): open Chat into editor tabs and assert sidebar view(s) remain visible and unchanged.
+- [x] Repro TODO bug (2): open Chat into editor tabs and assert sidebar view(s) remain visible and unchanged.
 
 ---
 
 ## Current known failing reports to include (from you)
-- [ ] “Open Dashboards + Contexts + Workbooks, then open Chat → Workbooks disappears.”
-- [ ] “With Dashboards + Contexts, Context doesn’t fill; layout becomes partial/awkward.”
-- [ ] “View order changes / a view disappears and jumps to the top; order must stay Dashboards → Contexts → Workbooks → Chat.”
-- [ ] “Resizing gets messy: collapsing a middle view can make lower view(s) feel ‘stuck’ / can’t resize as expected; resizing must work between adjacent expanded views.”
-- [ ] “Workbooks view does not auto-update; tree/list can go stale.”
-- [ ] “Contexts view does not auto-update; changes require View → Reload.”
+- [x] “Open Dashboards + Contexts + Workbooks, then open Chat → Workbooks disappears.” *(fixed + smoke-covered)*
+- [x] “With Dashboards + Contexts, Context doesn’t fill; layout becomes partial/awkward.” *(fixed + smoke-covered)*
+- [x] “View order changes / a view disappears and jumps to the top; order must stay Dashboards → Contexts → Workbooks → Chat.” *(fixed + smoke-covered)*
+- [ ] “Resizing gets messy: collapsing a middle view can make lower view(s) feel ‘stuck’ / can’t resize as expected; resizing must work between adjacent expanded views.” *(still needs targeted resizer smoke)*
+- [x] “Workbooks view does not auto-update; tree/list can go stale.” *(fixed + smoke-covered)*
+- [x] “Contexts view does not auto-update; changes require View → Reload.” *(fixed + smoke-covered)*

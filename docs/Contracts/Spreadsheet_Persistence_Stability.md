@@ -38,7 +38,7 @@
   - [x] Automation-safe: Retry control has a stable `testIds` selector (`testIds.spreadsheet.retryInit`)
   - [ ] Avoid duplicate initialization / stale global script states
 - [x] **Spreadsheet MCP “authoring” guidance (LLM should not guess `.is`)**:
-  - [x] Add a `spreadsheet.get_schema` (or equivalent) tool that returns schema version + minimal canonical examples
+  - [ ] Add a `spreadsheet.get_schema` (or equivalent) tool that returns schema version + minimal canonical examples (currently unreliable / not discoverable in app)
   - [x] `get_sheet_data_for_rag` best-effort loads real `.is` content to expose formulas/structure (fail-soft)
   - [ ] Add tool-driven create/open/read/write surface (see `docs/MCP/SPREADSHEET_MCP_CONTRACT.md`)
   - [ ] Update system prompt/tool descriptions so the LLM prefers spreadsheet tools over hand-writing `.is` JSON
@@ -60,9 +60,9 @@
   - `tests/automation-smoke-ui.mjs` (deterministic proof of persistence + stability)
 
 #### Proof (deterministic smoke)
-- [ ] Create/open a sheet → change a column width + row height → reload renderer/app → assert widths/heights preserved (selector-only).
+- [x] View-state persistence proof: open a seeded `.is` sheet → adjust column width/row height → save → assert persisted values round-trip in `.is` (smoke-covered; selector-only).
 - [ ] Create a new sheet (via UI action) → open it reliably (no blank/failed init).
-- [x] MCP: `spreadsheet.get_schema` is advertised and returns canonical schema + example(s).
+- [ ] MCP: `spreadsheet.get_schema` is advertised and returns canonical schema + example(s).
 - [x] View-state: open a `.is` sheet with `viewState` → assert Luckysheet config applies it and file contains the persisted values.
 - [x] Unit test: `mcp-servers/spreadsheet-server/test_server.py` covers `tools/list` + `tools/call` for `spreadsheet.get_schema`.
 - [ ] Formatting: set a cell’s formatting (bold + colors at minimum) → save → reopen → assert formatting still present in `.is` and applied in Luckysheet runtime.
