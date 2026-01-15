@@ -42,6 +42,10 @@ Note: Prior to working the current luckysheets (now depreicated) Lets consider U
 
 ### Chat / Planning / Governance (untriaged)
 - [ ] **17) Flashing chat tab when typing**: tab UI flashes while typing in the chat composer.
+- [ ] **19) Detached (New Window) Chat flickers while typing**: open **Chat** in a tab → use tab context menu **Move into New Window** (or **Copy into New Window**) → type in the chat composer in the detached window.
+  - Expected: stable rendering while typing (no visible repaint/flicker).
+  - Actual: detached window content visibly “flashes”/repaints while typing (even when scrollbars don’t appear).
+  - Notes: likely a container/overflow/paint-containment mismatch between detached `windowMode=editor` layout and main workbench; chat composer autosize may be triggering full-window repaints.
 
 ### Runtime stability / Services
 - [ ] **18) App left open overnight goes white + background servers are down and won’t recover**: leave the app open overnight (or long idle) → the main window becomes white/unresponsive; after a refresh/reload the UI may appear again but MCP/local “servers” (e.g., Rack Server) are stopped and do not restart even when opening/closing related UI panels.
