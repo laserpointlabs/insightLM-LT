@@ -41,7 +41,7 @@ Suggested narration:
 
 ## Step 2 — Show the canonical model (45–60s)
 
-Open: `trade/decision_matrix.is`
+Open: `trade/trade-model.is`
 
 Show these tabs:
 - **Decision Matrix**
@@ -114,7 +114,7 @@ Suggested narration:
 
 ## Step 6 — Iterate (change the decision, re-run, re-brief) (60–120s)
 
-1. Open `trade/decision_matrix.is`
+1. Open `trade/trade-model.is`
 2. Make a change that should affect ranking (examples):
    - Increase **Cost** weight significantly
    - Decrease **Endurance** weight

@@ -33,7 +33,9 @@ interface ChatProps {
 }
 
 export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: ChatProps = {}) {
-  const [activeTab, setActiveTab] = useState<"chat" | "history" | "settings">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "history" | "settings">(
+    () => (chatKey === "settings" ? "settings" : "chat"),
+  );
   const [messages, setMessages] = useState<
     PersistedChatMessage[]
   >([]);
@@ -44,6 +46,7 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
   const [thinkingOpenActive, setThinkingOpenActive] = useState(false);
   const thinkingStartAtRef = useRef<number | null>(null);
   const [thinkingDurationMsActive, setThinkingDurationMsActive] = useState<number | null>(null);
+  const thinkingTickRef = useRef<any>(null);
   const [activity, setActivity] = useState<
     Array<{ stepId: string; text: string; status: "running" | "ok" | "error"; ts: number; detail?: string }>
   >([]);
@@ -161,6 +164,29 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
     scrollToBottom("auto");
   }, [messages.length, streaming?.text, streaming?.status, activity.length, activeTab, scrollToBottom]);
 
+  // Live "thinking" timer so long runs don't look hung.
+  useEffect(() => {
+    try {
+      if (!streaming) {
+        if (thinkingTickRef.current) clearInterval(thinkingTickRef.current);
+        thinkingTickRef.current = null;
+        return;
+      }
+      if (thinkingTickRef.current) return;
+      thinkingTickRef.current = setInterval(() => {
+        const start = thinkingStartAtRef.current;
+        if (typeof start !== "number") return;
+        setThinkingDurationMsActive(Math.max(0, Date.now() - start));
+      }, 250);
+      return () => {
+        if (thinkingTickRef.current) clearInterval(thinkingTickRef.current);
+        thinkingTickRef.current = null;
+      };
+    } catch {
+      // ignore
+    }
+  }, [streaming]);
+
   // Keep synchronous refs for "persist on change" so fast tab switches never lose draft.
   useEffect(() => {
     inputValueRef.current = input;
@@ -211,8 +237,14 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
   }, []);
 
   const handleShowSettings = useCallback(() => {
-    setActiveTab((prev) => (prev === "settings" ? "chat" : "settings"));
-  }, []);
+    // VS Code/Cursor parity: settings should be editable even with no active Context,
+    // and should live as a tab/editor surface rather than in the small sidebar panel.
+    openDocument({
+      type: "chat",
+      chatKey: "settings",
+      filename: "Chat Settings",
+    } as any);
+  }, [openDocument]);
 
   const loadContextStatus = useCallback(async () => {
     setContextStatus((prev) => ({ ...prev, loading: true, error: null }));
@@ -1217,7 +1249,7 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
           </div>
         )}
 
-        {!contextStatus.loading && shouldShowScopedEmpty ? (
+        {!contextStatus.loading && shouldShowScopedEmpty && activeTab !== "settings" ? (
           <div
             className="mt-4 rounded border border-gray-200 bg-white p-3 text-center"
             data-testid={testIds.chat.emptyState.container}
@@ -1517,18 +1549,19 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
                             role="status"
                             aria-live="polite"
                           >
-                            {streaming.status === "waiting" ? (
-                              <>
-                                <span>Thinking</span>
-                                <span className="inline-flex gap-0.5" aria-hidden="true">
-                                  <span className="animate-pulse">.</span>
-                                  <span className="animate-pulse [animation-delay:150ms]">.</span>
-                                  <span className="animate-pulse [animation-delay:300ms]">.</span>
+                            <span data-testid={testIds.chat.thinking.live} data-animating="true">
+                              Thinking
+                              <span className="ml-1 inline-flex gap-0.5" aria-hidden="true">
+                                <span className="animate-pulse">.</span>
+                                <span className="animate-pulse [animation-delay:150ms]">.</span>
+                                <span className="animate-pulse [animation-delay:300ms]">.</span>
+                              </span>
+                              {typeof thinkingDurationMsActive === "number" && (
+                                <span className="ml-2 inline-block w-[3ch] tabular-nums text-[10px] font-normal text-gray-500">
+                                  {Math.max(0, Math.round(thinkingDurationMsActive / 1000))}s
                                 </span>
-                              </>
-                            ) : (
-                              <span>Thinking…</span>
-                            )}
+                              )}
+                            </span>
                           </span>
                           <span className="text-gray-500">{thinkingOpenActive ? "Hide" : "Show"}</span>
                         </button>
@@ -1562,53 +1595,55 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
         )}
       </div>
 
-      <div className="border-t border-gray-200 px-3 py-2">
-        <div className="w-full">
-          <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm focus-within:ring-1 focus-within:ring-blue-500">
-            <div className="relative">
-              <MentionTextInput
-                value={input}
-                onChange={(v) => {
-                  setInput(v);
-                  inputValueRef.current = v;
-                  persistDraft(v, draftRefsRef.current);
-                }}
-                disabled={loading || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"}
-                multiline
-                rows={2}
-                maxRows={8}
-                autosize
-                enterBehavior="send"
-                placeholder="Ask about your workbooks… (type @ to reference) — Enter to send, Shift+Enter for newline"
-                containerClassName="w-full"
-                className="w-full resize-none bg-transparent px-2 py-1 pr-10 text-sm leading-5 text-gray-900 placeholder:text-gray-400 focus:outline-none"
-                inputTestId={testIds.chat.input}
-                menuTestId={testIds.chat.mentions.menu}
-                itemTestId={(it) => testIds.chat.mentions.item(it.kind, it.id)}
-                mentionItems={mentionItems}
-                getMentionReplacementText={() => ""} // chip-only: remove "@query" token without inserting workbook://...
-                onSelectMention={(it) => {
-                  const fullLabel = it.label;
-                  const displayLabel =
-                    it.kind === "file"
-                      ? String(it.label).split("/").pop() || it.label
-                      : it.kind === "folder"
+      {/* Settings tab should behave like an editor surface: no composer/footer. */}
+      {activeTab !== "settings" && (
+        <div className="border-t border-gray-200 px-3 py-2">
+          <div className="w-full">
+            <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm focus-within:ring-1 focus-within:ring-blue-500">
+              <div className="relative">
+                <MentionTextInput
+                  value={input}
+                  onChange={(v) => {
+                    setInput(v);
+                    inputValueRef.current = v;
+                    persistDraft(v, draftRefsRef.current);
+                  }}
+                  disabled={loading || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"}
+                  multiline
+                  rows={2}
+                  maxRows={8}
+                  autosize
+                  enterBehavior="send"
+                  placeholder="Ask about your workbooks… (type @ to reference) — Enter to send, Shift+Enter for newline"
+                  containerClassName="w-full"
+                  className="w-full resize-none bg-transparent px-2 py-1 pr-10 text-sm leading-5 text-gray-900 placeholder:text-gray-400 focus:outline-none"
+                  inputTestId={testIds.chat.input}
+                  menuTestId={testIds.chat.mentions.menu}
+                  itemTestId={(it) => testIds.chat.mentions.item(it.kind, it.id)}
+                  mentionItems={mentionItems}
+                  getMentionReplacementText={() => ""} // chip-only: remove "@query" token without inserting workbook://...
+                  onSelectMention={(it) => {
+                    const fullLabel = it.label;
+                    const displayLabel =
+                      it.kind === "file"
                         ? String(it.label).split("/").pop() || it.label
-                        : it.label;
-                  const id = getOrCreateRefId(it.insertText || `${it.kind}:${it.id}`);
-                  setDraftRefs((prev) => {
-                    const next = Array.isArray(prev) ? [...prev] : [];
-                    if (!next.some((r) => r.key === id)) {
-                      next.push({ key: id, displayLabel, fullLabel, insertText: it.insertText, kind: it.kind });
-                    }
-                    draftRefsRef.current = next;
-                    persistDraft(inputValueRef.current, next);
-                    return next;
-                  });
-                }}
-                onEnterWhenMenuOpen={() => {}}
-                onEnter={() => handleSend()}
-              />
+                        : it.kind === "folder"
+                          ? String(it.label).split("/").pop() || it.label
+                          : it.label;
+                    const id = getOrCreateRefId(it.insertText || `${it.kind}:${it.id}`);
+                    setDraftRefs((prev) => {
+                      const next = Array.isArray(prev) ? [...prev] : [];
+                      if (!next.some((r) => r.key === id)) {
+                        next.push({ key: id, displayLabel, fullLabel, insertText: it.insertText, kind: it.kind });
+                      }
+                      draftRefsRef.current = next;
+                      persistDraft(inputValueRef.current, next);
+                      return next;
+                    });
+                  }}
+                  onEnterWhenMenuOpen={() => {}}
+                  onEnter={() => handleSend()}
+                />
 
               {/* Selected refs (Cursor/Continue-style chip row) */}
               {draftRefs.length > 0 && (
@@ -1718,10 +1753,10 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
                 </div>
               </div>
 
-              {contextPicker.open &&
-                contextMenuPos &&
-                typeof document !== "undefined" &&
-                createPortal(
+                {contextPicker.open &&
+                  contextMenuPos &&
+                  typeof document !== "undefined" &&
+                  createPortal(
                   <div
                     className="max-h-64 overflow-auto rounded border border-gray-200 bg-white shadow-lg"
                     style={{
@@ -1839,25 +1874,26 @@ export function Chat({ onActionButton, onJumpToContexts, chatKey = "main" }: Cha
                   document.body,
                 )}
 
-              <button
-                type="button"
-                onClick={() => handleSend()}
-                disabled={loading || !input.trim() || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"}
-                className={`absolute bottom-1.5 right-1.5 inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                  loading || !input.trim() || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"
-                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
-                }`}
-            aria-label="Send"
-                title="Send (Enter) — Shift+Enter for newline"
-            data-testid={testIds.chat.send}
-          >
-                <SendIcon className="h-4 w-4" />
-          </button>
+                <button
+                  type="button"
+                  onClick={() => handleSend()}
+                  disabled={loading || !input.trim() || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"}
+                  className={`absolute bottom-1.5 right-1.5 inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                    loading || !input.trim() || shouldShowScopedEmpty || contextStatus.loading || activeTab !== "chat"
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                  aria-label="Send"
+                  title="Send (Enter) — Shift+Enter for newline"
+                  data-testid={testIds.chat.send}
+                >
+                  <SendIcon className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

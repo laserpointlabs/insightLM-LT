@@ -250,9 +250,15 @@ try {
   // Debug endpoints
   debug: {
     getTools: () => ipcRenderer.invoke("debug:getTools"),
+    getWindowCount: () => ipcRenderer.invoke("debug:getWindowCount"),
+    getLastOpenedWindowInfo: () => ipcRenderer.invoke("debug:getLastOpenedWindowInfo"),
     stopServer: (serverName: string) => ipcRenderer.invoke("debug:stopServer", serverName),
     unregisterTools: (serverName: string) => ipcRenderer.invoke("debug:unregisterTools", serverName),
     llmExecuteTool: (toolName: string, args: any) => ipcRenderer.invoke("debug:llm:executeTool", toolName, args),
+  },
+
+  window: {
+    openTabInNewWindow: (payload: any) => ipcRenderer.invoke("window:openTabInNewWindow", payload),
   },
 });
 

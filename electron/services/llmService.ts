@@ -332,7 +332,7 @@ export class LLMService {
       {
         name: "create_file_in_workbook",
         description:
-          "Create a new file (like markdown) in a workbook. Use this to create summaries, tables, or any other content.",
+          "Create or overwrite a file in a workbook. Use the correct file extension based on the requested artifact (e.g., .md, .csv, .is).",
         parameters: {
           type: "object",
           properties: {
@@ -351,6 +351,61 @@ export class LLMService {
             },
           },
           required: ["workbookId", "fileName", "content"],
+        },
+      },
+      {
+        name: "create_insight_sheet",
+        description:
+          "Create a new Insight Sheet (.is) JSON file in a workbook using the canonical schema (version/metadata/sheets/cells/formats). Use this whenever the user asks to create a new .is sheet.",
+        parameters: {
+          type: "object",
+          properties: {
+            workbookId: {
+              type: "string",
+              description: "Workbook ID where the .is file will be created",
+            },
+            fileName: {
+              type: "string",
+              description: 'Filename for the sheet (e.g., "trade-model.is" or "documents/trade-model.is")',
+            },
+            sheetName: {
+              type: "string",
+              description: 'Initial visible sheet name (e.g., "Decision Matrix")',
+            },
+            title: {
+              type: "string",
+              description: 'Human-friendly title stored in metadata.name (defaults to fileName)',
+            },
+          },
+          required: ["workbookId", "fileName"],
+        },
+      },
+      {
+        name: "upsert_insight_sheet_cells",
+        description:
+          "Update an Insight Sheet (.is) by setting cell values and/or formulas using the schema the spreadsheet editor expects. Use this to add rows/columns, totals, or formulas instead of guessing JSON keys.",
+        parameters: {
+          type: "object",
+          properties: {
+            workbookId: { type: "string", description: "Workbook ID containing the .is file" },
+            filePath: { type: "string", description: 'Path to the .is file (e.g., "documents/new-sheet.is")' },
+            sheetName: { type: "string", description: "Optional: target sheet name (defaults to first sheet)" },
+            updates: {
+              type: "array",
+              description:
+                "Cell updates. Each item can set a plain value, a formula, or both (value is optional cached value).",
+              items: {
+                type: "object",
+                properties: {
+                  cell: { type: "string", description: 'Cell reference like "A1", "D6"' },
+                  value: { description: "Plain value (string/number/bool) to store in the cell" },
+                  formula: { type: "string", description: 'Formula string like "=B2*C2" or "B2*C2"' },
+                },
+                required: ["cell"],
+              },
+            },
+          },
+          required: ["workbookId", "filePath", "updates"],
         },
       },
       {
@@ -659,7 +714,7 @@ export class LLMService {
     }
   }
 
-  private getSystemPrompt(): string {
+  private getSystemPrompt(toolsForPrompt: Array<{ name: string; description: string }> = this.availableTools): string {
     return `You are an AI assistant helping users manage and analyze their workbooks and documents.
 
 CRITICAL: When users ask questions about document content, you MUST:
@@ -695,13 +750,55 @@ CONTEXT SCOPING:
 - If there is no active Context, tools operate across all workbooks.
 
 Available tools:
-${this.availableTools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
+${toolsForPrompt.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
 
 Example workflow:
 User: "What are the key tests for static structural testing?"
 You: Call list_all_workbook_files() → find test_plan.md → call read_workbook_file(workbookId, "documents/test_plan.md") → read content → answer with actual content from file
 
-When creating summaries/tables/analyses, use create_file_in_workbook to save as markdown.
+ARTIFACT FORMATS (IMPORTANT):
+- Markdown documents: create_file_in_workbook with .md
+- CSV data: create_file_in_workbook with .csv
+- Insight Sheets: use create_insight_sheet (preferred). If you must write the JSON yourself, use create_file_in_workbook with a .is filename and VALID JSON content in the canonical schema below.
+
+MATH + DIAGRAMS (IMPORTANT):
+- Markdown + Chat support LaTeX-style math rendered via KaTeX.
+  - Inline math: $E=mc^2$
+  - Block math: $$\\sum_{i=1}^n i = \\frac{n(n+1)}{2}$$
+  - Prefer KaTeX-compatible LaTeX (avoid obscure packages/macros).
+- Mermaid diagrams are supported via fenced code blocks (language tag: mermaid) in Markdown/Chat.
+  - KaTeX-style math in Mermaid labels can work but is BEST-EFFORT (may be flaky depending on diagram/layout/theme).
+  - Prefer deterministic output: put the equation as Markdown math *outside* the Mermaid block, and keep Mermaid labels as plain text.
+
+INSIGHT SHEETS (.is) CANONICAL SCHEMA:
+- File is JSON (not markdown, not plain text).
+- Minimal valid structure:
+{
+  "version": "1.0",
+  "metadata": {
+    "name": "Title",
+    "created_at": "ISO8601",
+    "modified_at": "ISO8601",
+    "workbook_id": "<workbookId>"
+  },
+  "sheets": [
+    {
+      "id": "sheet-1",
+      "name": "Sheet1",
+      "cells": { "A1": { "value": "hello" } },
+      "formats": {}
+    }
+  ]
+}
+- FORMULAS (IMPORTANT):
+  - Prefer using upsert_insight_sheet_cells to add formulas.
+  - If you must author JSON yourself, formula cells must include a "formula" string (with leading "="), e.g.:
+    "cells": {
+      "B2": { "value": 10 },
+      "C2": { "value": 3 },
+      "D2": { "value": null, "formula": "=B2*C2" }
+    }
+- Always write .is content as JSON exactly in this structure so the spreadsheet editor can open it.
 
 File paths are relative to workbook root (e.g., "documents/filename.ext").`;
   }
@@ -1085,14 +1182,14 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
             .join("\n\n") + "\n\nTo read a file, use the workbook ID (not the name) and the file path shown.";
 
         case "create_file_in_workbook":
-          const fileName = args.fileName.startsWith("documents/")
-            ? args.fileName
-            : `documents/${args.fileName}`;
+          {
+          const fileName = String(args.fileName || "");
+          const canonicalRel = fileName.startsWith("documents/") ? fileName : `documents/${fileName}`;
 
           // Prevent "fake execution": for .ipynb written via create_file_in_workbook,
           // strip execution_count + outputs so the only trusted execution path is execute_cell.
           let contentToWrite = String(args.content ?? "");
-          if (fileName.toLowerCase().endsWith(".ipynb")) {
+          if (canonicalRel.toLowerCase().endsWith(".ipynb")) {
             try {
               const nb = JSON.parse(contentToWrite);
               if (Array.isArray(nb?.cells)) {
@@ -1114,41 +1211,9 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
             }
           }
 
-          // Create file with content
-          const workbookPath = (this.workbookService as any)["workbooksDir"];
-          const filePath = path.join(workbookPath, args.workbookId, fileName);
-          const dir = path.dirname(filePath);
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
-          fs.writeFileSync(filePath, contentToWrite, "utf-8");
-
-          // Update workbook metadata
-          const metadataPath = path.join(
-            workbookPath,
-            args.workbookId,
-            "workbook.json",
-          );
-          if (fs.existsSync(metadataPath)) {
-            const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
-            const finalFileName = fileName.split("/").pop() || args.fileName;
-            const existingIndex = metadata.documents.findIndex(
-              (d: any) => d.filename === finalFileName,
-            );
-
-            if (existingIndex >= 0) {
-              metadata.documents[existingIndex].addedAt =
-                new Date().toISOString();
-            } else {
-              metadata.documents.push({
-                filename: finalFileName,
-                path: fileName,
-                addedAt: new Date().toISOString(),
-              });
-            }
-            metadata.updated = new Date().toISOString();
-            fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
-          }
+          // IMPORTANT: use FileService so workbook.json stays normalized and the UI can refresh immediately.
+          // This also enforces the project data boundary (no traversal/absolute paths).
+          await this.fileService.writeDocument(String(args.workbookId || ""), canonicalRel, contentToWrite);
 
           // Notify renderer(s) so open tabs refresh without requiring close/reopen.
           // Mirrors the canonical behavior from `electron/ipc/files.ts`.
@@ -1156,6 +1221,129 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           this.broadcast("insightlm:workbooks:filesChanged", { workbookId: String(args.workbookId || "") });
 
           return `File "${args.fileName}" created successfully in workbook.`;
+          }
+
+        case "create_insight_sheet": {
+          const workbookId = String(args.workbookId || "").trim();
+          const fileNameRaw = String(args.fileName || "").trim();
+          if (!workbookId || !fileNameRaw) {
+            return `Error executing create_insight_sheet: missing workbookId or fileName`;
+          }
+
+          const canonicalRel = fileNameRaw.startsWith("documents/") ? fileNameRaw : `documents/${fileNameRaw}`;
+          const finalRel = canonicalRel.toLowerCase().endsWith(".is") ? canonicalRel : `${canonicalRel}.is`;
+          const now = new Date().toISOString();
+          const title = String(args.title || "").trim() || finalRel.split("/").pop() || "Insight Sheet";
+          const sheetName = String(args.sheetName || "").trim() || "Sheet1";
+
+          const content = JSON.stringify(
+            {
+              version: "1.0",
+              metadata: {
+                name: title,
+                created_at: now,
+                modified_at: now,
+                workbook_id: workbookId,
+              },
+              sheets: [
+                {
+                  id: "sheet-1",
+                  name: sheetName,
+                  cells: {},
+                  formats: {},
+                },
+              ],
+            },
+            null,
+            2,
+          );
+
+          await this.fileService.writeDocument(workbookId, finalRel, content);
+          this.broadcast("insightlm:workbooks:changed", {});
+          this.broadcast("insightlm:workbooks:filesChanged", { workbookId });
+
+          return `Insight Sheet "${finalRel}" created successfully in workbook.`;
+        }
+
+        case "upsert_insight_sheet_cells": {
+          const workbookId = String(args.workbookId || "").trim();
+          const filePathRaw = String(args.filePath || "").trim();
+          const updates = Array.isArray(args.updates) ? args.updates : [];
+          if (!workbookId || !filePathRaw || updates.length === 0) {
+            return `Error executing upsert_insight_sheet_cells: missing workbookId/filePath/updates`;
+          }
+
+          const canonicalRel = filePathRaw.startsWith("documents/") ? filePathRaw : `documents/${filePathRaw}`;
+          const finalRel = canonicalRel.toLowerCase().endsWith(".is") ? canonicalRel : `${canonicalRel}.is`;
+
+          // Read, patch, write (fail-soft if malformed).
+          let raw = "";
+          try {
+            raw = await this.fileService.readDocument(workbookId, finalRel);
+          } catch (e) {
+            return `Error executing upsert_insight_sheet_cells: could not read ${finalRel}`;
+          }
+
+          let json: any;
+          try {
+            json = JSON.parse(raw);
+          } catch {
+            return `Error executing upsert_insight_sheet_cells: ${finalRel} is not valid JSON`;
+          }
+
+          if (!json || typeof json !== "object" || !Array.isArray(json.sheets)) {
+            return `Error executing upsert_insight_sheet_cells: ${finalRel} is not a valid .is (missing sheets[])`;
+          }
+
+          const sheetName = String(args.sheetName || "").trim();
+          const sheet =
+            (sheetName ? json.sheets.find((s: any) => String(s?.name || "") === sheetName) : null) ||
+            json.sheets[0];
+          if (!sheet || typeof sheet !== "object") {
+            return `Error executing upsert_insight_sheet_cells: could not locate target sheet`;
+          }
+
+          sheet.cells = sheet.cells && typeof sheet.cells === "object" ? sheet.cells : {};
+
+          const normCell = (c: any) => String(c || "").trim().toUpperCase();
+          const isCellRef = (c: string) => /^[A-Z]+[1-9]\d*$/.test(c);
+          let applied = 0;
+
+          for (const u of updates) {
+            const cell = normCell(u?.cell);
+            if (!cell || !isCellRef(cell)) continue;
+
+            const next: any = sheet.cells[cell] && typeof sheet.cells[cell] === "object" ? { ...sheet.cells[cell] } : {};
+            if ("value" in u) {
+              next.value = (u as any).value;
+            } else if (!("value" in next)) {
+              // Keep existing value if present; otherwise default null for formula-only updates.
+              next.value = next.value ?? null;
+            }
+
+            if (typeof u?.formula === "string" && String(u.formula).trim()) {
+              const fRaw = String(u.formula).trim();
+              next.formula = fRaw.startsWith("=") ? fRaw : `=${fRaw}`;
+            }
+
+            sheet.cells[cell] = next;
+            applied += 1;
+          }
+
+          // Touch modified timestamp (best-effort)
+          try {
+            json.metadata = json.metadata && typeof json.metadata === "object" ? json.metadata : {};
+            json.metadata.modified_at = new Date().toISOString();
+          } catch {
+            // ignore
+          }
+
+          await this.fileService.writeDocument(workbookId, finalRel, JSON.stringify(json, null, 2));
+          this.broadcast("insightlm:workbooks:changed", {});
+          this.broadcast("insightlm:workbooks:filesChanged", { workbookId });
+
+          return `Updated ${applied} cell(s) in "${finalRel}".`;
+        }
 
         case "search_workbooks":
           const allWorkbooks = await this.workbookService.getWorkbooks();
@@ -1262,6 +1450,33 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
     console.log(`[LLM] Calling OpenAI with ${this.availableTools.length} tools available`);
     console.log(`[LLM] Tools: ${this.availableTools.map(t => t.name).join(", ")}`);
 
+    // OpenAI requires tool function names to match /^[a-zA-Z0-9_-]+$/
+    // Our internal tool names may include ":", ".", "/" (e.g. ipc channels / MCP tools).
+    // Adapt names for OpenAI only, and map back when executing tools to keep routing decoupled/fail-soft.
+    const openAiToolNameMap = new Map<string, string>(); // openaiSafeName -> originalName
+    const usedOpenAiNames = new Set<string>();
+    const makeOpenAiSafeToolName = (original: string) => {
+      const base = original.replace(/[^a-zA-Z0-9_-]/g, "_");
+      let candidate = base.length > 0 ? base : "tool";
+      let i = 2;
+      while (usedOpenAiNames.has(candidate)) {
+        candidate = `${base}_${i++}`;
+      }
+      usedOpenAiNames.add(candidate);
+      openAiToolNameMap.set(candidate, original);
+      return candidate;
+    };
+
+    const openAiTools = this.availableTools.map((tool) => ({
+      ...tool,
+      name: makeOpenAiSafeToolName(tool.name),
+    }));
+
+    // Ensure system prompt tool names match what OpenAI sees (avoid mismatch with internal names)
+    const openAiMessages: LLMMessage[] = messages.map((m) =>
+      m.role === "system" ? { ...m, content: this.getSystemPrompt(openAiTools) } : m
+    );
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -1270,8 +1485,8 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
       },
       body: JSON.stringify({
         model: this.config.model,
-        messages: this.formatMessagesForOpenAI(messages),
-        tools: this.availableTools.map((tool) => ({
+        messages: this.formatMessagesForOpenAI(openAiMessages),
+        tools: openAiTools.map((tool) => ({
           type: "function",
           function: {
             name: tool.name,
@@ -1299,9 +1514,10 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
       const toolResults: LLMMessage[] = [];
 
       for (const toolCall of choice.message.tool_calls) {
-        const toolName = toolCall.function.name;
+        const openAiToolName = toolCall.function.name;
+        const toolName = openAiToolNameMap.get(openAiToolName) || openAiToolName;
         const toolArgs = JSON.parse(toolCall.function.arguments || "{}");
-        console.log(`[LLM] Executing tool: ${toolName}`, toolArgs);
+        console.log(`[LLM] Executing tool: ${toolName} (OpenAI name: ${openAiToolName})`, toolArgs);
         const result = await this.executeTool(toolName, toolArgs);
         console.log(`[LLM] Tool result length: ${result.length} characters`);
 
@@ -1309,7 +1525,7 @@ File paths are relative to workbook root (e.g., "documents/filename.ext").`;
           role: "tool",
           content: result,
           tool_call_id: toolCall.id,
-          name: toolName,
+          name: openAiToolName,
         });
       }
 

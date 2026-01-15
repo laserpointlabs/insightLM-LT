@@ -106,14 +106,15 @@ function computeScore1to5(value: number, min: number, max: number): number {
 }
 
 function createUavDecisionMatrixSheet(workbookId: string) {
-  // Alternatives from `data/trade_study_example/uas_specifications.md`
-  // We score only criteria we can infer deterministically from the spec sheet and keep others baseline=3.
+  // Note: for a more realistic workflow, alternatives are seeded as `trade/alternatives.csv`
+  // and the notebook reads that CSV. This sheet remains a lightweight *proxy* scoring model.
   const alts = [
     { name: "SkyEagle X500", rangeKm: 150, enduranceHr: 9, payloadKg: 3.5, weatherKnots: 25, costM: 1.2, linkKm: 150 },
-    { name: "WingOne Pro", rangeKm: 75, enduranceHr: 5, payloadKg: 1.8, weatherKnots: 15, costM: 0.45, linkKm: 75 },
+    // Intentionally leave a couple fields unknown to demonstrate "data gaps" handling in the demo.
+    { name: "WingOne Pro", rangeKm: 75, enduranceHr: 5, payloadKg: 1.8, weatherKnots: null as any, costM: 0.45, linkKm: 75 },
     { name: "AeroMapper X8", rangeKm: 200, enduranceHr: 13, payloadKg: 5, weatherKnots: 35, costM: 1.7, linkKm: 200 },
     { name: "QuadCopter T4", rangeKm: 8, enduranceHr: 0.66, payloadKg: 0.8, weatherKnots: 15, costM: 0.12, linkKm: 8 },
-    { name: "HexaCopter H6 Heavy", rangeKm: 15, enduranceHr: 0.9, payloadKg: 4, weatherKnots: 25, costM: 0.45, linkKm: 15 },
+    { name: "HexaCopter H6 Heavy", rangeKm: 15, enduranceHr: 0.9, payloadKg: 4, weatherKnots: 25, costM: null as any, linkKm: 15 },
     { name: "OctoCopter Sentinel", rangeKm: 25, enduranceHr: 1.15, payloadKg: 8, weatherKnots: 35, costM: 0.8, linkKm: 25 },
     { name: "Falcon VTOL-X", rangeKm: 100, enduranceHr: 5.5, payloadKg: 2.5, weatherKnots: 25, costM: 0.85, linkKm: 100 },
     { name: "HoverCruise 700", rangeKm: 120, enduranceHr: 7.5, payloadKg: 3.5, weatherKnots: 25, costM: 0.98, linkKm: 120 },
@@ -123,8 +124,8 @@ function createUavDecisionMatrixSheet(workbookId: string) {
   const ranges = alts.map((a) => a.rangeKm);
   const ends = alts.map((a) => a.enduranceHr);
   const pays = alts.map((a) => a.payloadKg);
-  const winds = alts.map((a) => a.weatherKnots);
-  const costs = alts.map((a) => a.costM);
+  const winds = alts.map((a) => (typeof a.weatherKnots === "number" ? a.weatherKnots : 0));
+  const costs = alts.map((a) => (typeof a.costM === "number" ? a.costM : 0));
   const links = alts.map((a) => a.linkKm);
 
   const minMax = (xs: number[]) => ({ min: Math.min(...xs), max: Math.max(...xs) });
@@ -135,7 +136,6 @@ function createUavDecisionMatrixSheet(workbookId: string) {
   const c = minMax(costs);
   const l = minMax(links);
 
-  // Criteria list mirrors `data/trade_study_example/decision_matrix_template.md`
   // Weights are “starter defaults” (editable by user).
   const criteria = [
     { name: "Operational Range", weight: 8 },
@@ -238,7 +238,7 @@ function createUavDecisionMatrixSheet(workbookId: string) {
   const decisionMatrix = {
     version: "1.0",
     metadata: {
-      name: "UAV Decision Matrix",
+      name: "UAV Trade Model",
       created_at: new Date().toISOString(),
       modified_at: new Date().toISOString(),
       workbook_id: workbookId,
@@ -246,7 +246,7 @@ function createUavDecisionMatrixSheet(workbookId: string) {
     sheets: [
       {
         id: "sheet1",
-        name: "Decision Matrix",
+        name: "Decision Matrix (proxy)",
         cells,
         formats: {},
       },
@@ -336,8 +336,8 @@ function createUavDecisionMatrixSheet(workbookId: string) {
               units: "hours",
               threshold: "3",
               objective: "6",
-              evidence: "workbook://uav-trade-study/documents/trade/uas_specifications.md",
-              notes: "Use spec sheet endurance; for multirotors this is typically not met.",
+              evidence: "workbook://uav-trade-study/documents/trade/alternatives.csv",
+              notes: "Use vendor feed (CSV) endurance; for multirotors this is typically not met.",
             },
             {
               id: "COI-005",
@@ -347,8 +347,8 @@ function createUavDecisionMatrixSheet(workbookId: string) {
               units: "kg",
               threshold: "2",
               objective: "5",
-              evidence: "workbook://uav-trade-study/documents/trade/uas_specifications.md",
-              notes: "Use spec sheet payload capacity.",
+              evidence: "workbook://uav-trade-study/documents/trade/alternatives.csv",
+              notes: "Use vendor feed (CSV) payload capacity.",
             },
             {
               id: "COI-006",
@@ -358,7 +358,7 @@ function createUavDecisionMatrixSheet(workbookId: string) {
               units: "$",
               threshold: "2000000",
               objective: "1000000",
-              evidence: "workbook://uav-trade-study/documents/trade/uas_specifications.md",
+              evidence: "workbook://uav-trade-study/documents/trade/alternatives.csv",
               notes: "Cost is approximate; treat as uncertain later.",
             },
           ];
@@ -391,18 +391,19 @@ function createUavNotebook(): any {
     {
       cell_type: "markdown",
       source:
-        "# UAV Trade Study (in-app)\n\nThis notebook is part of the seeded **UAV Trade Study (Disaster Response)** demo workbook.\n\n- Canonical inputs live in the Insight Sheet (`trade/decision_matrix.is`)\n- This notebook is intended for heavier analysis (DOE/UQ, sensitivity, feasibility)\n\n> Tip: Start by opening the sheet, adjusting weights/scores, then come back here to run sensitivity experiments.",
+        "# UAV Trade Study (in-app)\n\nThis notebook is part of the seeded **UAV Trade Study (Disaster Response)** demo workbook.\n\n- Canonical trade model lives in the Insight Sheet (`trade/trade-model.is`)\n- Alternatives are provided as a vendor-style feed (`trade/alternatives.csv`)\n- This notebook is intended for heavier analysis (feasibility, data gaps, sensitivity, and optional mixes)\n",
       metadata: {},
     },
     {
       cell_type: "code",
       source: [
-        "import json, os, string",
+        "import json, os, string, csv",
         "from pathlib import Path",
         "from datetime import datetime, timezone",
         "",
         "WORKBOOK_ID = 'uav-trade-study'",
-        "REL_SHEET = f'workbooks/{WORKBOOK_ID}/documents/trade/decision_matrix.is'",
+        "REL_SHEET = f'workbooks/{WORKBOOK_ID}/documents/trade/trade-model.is'",
+        "REL_ALTS = f'workbooks/{WORKBOOK_ID}/documents/trade/alternatives.csv'",
         "REL_OUT_DIR = f'workbooks/{WORKBOOK_ID}/documents/trade/results'",
         "",
         "DATA_DIR = os.environ.get('INSIGHTLM_DATA_DIR')",
@@ -410,13 +411,14 @@ function createUavNotebook(): any {
         "    raise RuntimeError('INSIGHTLM_DATA_DIR is not set; cannot locate workbook storage')",
         "",
         "sheet_path = Path(DATA_DIR) / REL_SHEET",
+        "alts_csv_path = Path(DATA_DIR) / REL_ALTS",
         "out_dir = Path(DATA_DIR) / REL_OUT_DIR",
         "out_dir.mkdir(parents=True, exist_ok=True)",
         "",
         "raw = json.loads(sheet_path.read_text(encoding='utf-8'))",
         "",
         "# ---- Extract decision matrix (canonical) ----",
-        "mat = next((s for s in raw.get('sheets', []) if s.get('name') == 'Decision Matrix'), None)",
+        "mat = next((s for s in raw.get('sheets', []) if str(s.get('name','')).strip() in ['Decision Matrix (proxy)', 'Decision Matrix']), None)",
         "if not mat:",
         "    raise RuntimeError('Decision Matrix sheet not found')",
         "",
@@ -568,10 +570,178 @@ function createUavNotebook(): any {
         "",
         "(out_dir / 'study_report.md').write_text('\\n'.join(lines) + '\\n', encoding='utf-8')",
         "",
+        "# ---- Data gaps + feasibility matrix (more realistic trade study artifacts) ----",
+        "# Alternatives are read from a CSV feed (vendor-style) rather than being hand-typed in markdown.",
+        "def parse_float(v):",
+        "    try:",
+        "        if v is None:",
+        "            return None",
+        "        s = str(v).strip()",
+        "        if s == '' or s.lower() in ['na','n/a','unknown','?']:",
+        "            return None",
+        "        return float(s)",
+        "    except Exception:",
+        "        return None",
+        "",
+        "alts_parsed = []",
+        "if not alts_csv_path.exists():",
+        "    raise RuntimeError(f'Missing alternatives CSV: {alts_csv_path}')",
+        "",
+        "with alts_csv_path.open('r', encoding='utf-8') as f:",
+        "    reader = csv.DictReader(f)",
+        "    for row in reader:",
+        "        name = (row.get('name') or row.get('alternative') or '').strip()",
+        "        if not name:",
+        "            continue",
+        "        alts_parsed.append({",
+        "            'name': name,",
+        "            'uas_type': (row.get('uas_type') or row.get('type') or '').strip(),",
+        "            'range_km': parse_float(row.get('range_km')),",
+        "            'endurance_hr': parse_float(row.get('endurance_hr')),",
+        "            'payload_kg': parse_float(row.get('payload_kg')),",
+        "            'wind_knots': parse_float(row.get('wind_knots')),",
+        "            'cost_m': parse_float(row.get('cost_m')),",
+        "            'link_km': parse_float(row.get('link_km')),",
+        "        })",
+        "",
+        "if not alts_parsed:",
+        "    raise RuntimeError('No alternatives found in alternatives.csv')",
+        "",
+        "# Data gaps report",
+        "required_fields = ['range_km','endurance_hr','payload_kg','wind_knots','cost_m','link_km']",
+        "gaps = []",
+        "for a in alts_parsed:",
+        "    missing = [f for f in required_fields if a.get(f) is None]",
+        "    if missing:",
+        "        gaps.append({'alternative': a['name'], 'missing': missing})",
+        "",
+        "dg_lines = []",
+        "dg_lines.append('# Data Gaps (Auto-generated)\\n')",
+        "dg_lines.append(f\"Generated: {datetime.now(timezone.utc).isoformat()}\\n\")",
+        "if not gaps:",
+        "    dg_lines.append('No missing fields detected in the alternatives CSV.')",
+        "else:",
+        "    dg_lines.append('## Missing fields by alternative\\n')",
+        "    for g in gaps:",
+        "        dg_lines.append(f\"- **{g['alternative']}**: {', '.join(g['missing'])}\")",
+        "    dg_lines.append('\\n## Recommended follow-ups\\n')",
+        "    dg_lines.append('- Request vendor test reports for wind tolerance and comms range')",
+        "    dg_lines.append('- Request endurance curves vs payload and weather assumptions')",
+        "    dg_lines.append('- Confirm unit cost + sustainment assumptions (spares/training)')",
+        "",
+        "(out_dir / 'data_gaps.md').write_text('\\n'.join(dg_lines) + '\\n', encoding='utf-8')",
+        "",
+        "# Feasibility matrix (hard constraints)",
+        "constraints = [",
+        "    {'id': 'C-DEPLOY-001', 'name': 'Data link >= 15 km', 'field': 'link_km', 'op': '>=', 'value': 15},",
+        "    {'id': 'C-WIND-001', 'name': 'Wind tolerance >= 25 knots', 'field': 'wind_knots', 'op': '>=', 'value': 25},",
+        "    {'id': 'C-END-001', 'name': 'Endurance >= 3 hours', 'field': 'endurance_hr', 'op': '>=', 'value': 3},",
+        "    {'id': 'C-PAY-001', 'name': 'Payload >= 2 kg', 'field': 'payload_kg', 'op': '>=', 'value': 2},",
+        "    {'id': 'C-COST-001', 'name': 'Unit cost <= $2.0M', 'field': 'cost_m', 'op': '<=', 'value': 2.0},",
+        "]",
+        "",
+        "def eval_constraint(v, op, target):",
+        "    if v is None:",
+        "        return 'UNKNOWN'",
+        "    try:",
+        "        if op == '>=':",
+        "            return 'PASS' if v >= target else 'FAIL'",
+        "        if op == '<=':",
+        "            return 'PASS' if v <= target else 'FAIL'",
+        "    except Exception:",
+        "        return 'UNKNOWN'",
+        "    return 'UNKNOWN'",
+        "",
+        "rows = []",
+        "for a in alts_parsed:",
+        "    r = {'alternative': a['name']}",
+        "    for c in constraints:",
+        "        r[c['id']] = eval_constraint(a.get(c['field']), c['op'], c['value'])",
+        "    rows.append(r)",
+        "",
+        "fm_lines = []",
+        "fm_lines.append('# Feasibility Matrix (Auto-generated)\\n')",
+        "fm_lines.append(f\"Generated: {datetime.now(timezone.utc).isoformat()}\\n\")",
+        "fm_lines.append('Hard constraints are evaluated as PASS / FAIL / UNKNOWN (missing data).\\n')",
+        "fm_lines.append('| Alternative | ' + ' | '.join([c['id'] for c in constraints]) + ' |')",
+        "fm_lines.append('|' + '---|' * (2 + len(constraints)))",
+        "for r in rows:",
+        "    fm_lines.append('| ' + r['alternative'] + ' | ' + ' | '.join([r[c['id']] for c in constraints]) + ' |')",
+        "fm_lines.append('\\n## Constraint definitions\\n')",
+        "for c in constraints:",
+        "    fm_lines.append(f\"- **{c['id']}**: {c['name']}\")",
+        "",
+        "(out_dir / 'feasibility_matrix.md').write_text('\\n'.join(fm_lines) + '\\n', encoding='utf-8')",
+        "(out_dir / 'feasibility_matrix.json').write_text(json.dumps({'constraints': constraints, 'rows': rows}, indent=2), encoding='utf-8')",
+        "",
+        "# Bonus: simple multi-UAV mix (small bounded search) over top feasible options",
+        "def is_fully_feasible(r):",
+        "    return all(r[c['id']] == 'PASS' for c in constraints)",
+        "",
+        "feasible = [r for r in rows if is_fully_feasible(r)]",
+        "spec_by_name = {a['name']: a for a in alts_parsed}",
+        "budget_m = 4.0",
+        "max_each = 5",
+        "",
+        "# Choose top-3 by normalized score (if available) to keep search deterministic and small.",
+        "top_by_norm = [x['alternative'] for x in results_sorted[:3]] if results_sorted else []",
+        "candidates = [n for n in top_by_norm if any(f['alternative'] == n for f in feasible)]",
+        "if len(candidates) < 2:",
+        "    candidates = [f['alternative'] for f in feasible[:3]]",
+        "",
+        "mixes = []",
+        "if candidates:",
+        "    for a in range(0, max_each+1):",
+        "        for b in range(0, max_each+1):",
+        "            for c in range(0, max_each+1):",
+        "                counts = [a, b, c][:len(candidates)]",
+        "                if sum(counts) == 0:",
+        "                    continue",
+        "                cost = 0.0",
+        "                ok = True",
+        "                for name, cnt in zip(candidates, counts):",
+        "                    cm = spec_by_name.get(name, {}).get('cost_m')",
+        "                    if cm is None:",
+        "                        ok = False",
+        "                        break",
+        "                    cost += cm * cnt",
+        "                if not ok or cost > budget_m:",
+        "                    continue",
+        "                # objective: maximize weighted normalized sum (proxy)",
+        "                score = 0.0",
+        "                for name, cnt in zip(candidates, counts):",
+        "                    nr = next((r for r in results_sorted if r['alternative'] == name), None)",
+        "                    score += (nr['normalized'] if nr else 0.0) * cnt",
+        "                mixes.append({'candidates': candidates, 'counts': counts, 'total_cost_m': round(cost,3), 'score': round(score,3)})",
+        "",
+        "mixes_sorted = sorted(mixes, key=lambda x: x['score'], reverse=True)[:10]",
+        "(out_dir / 'mix_candidates.json').write_text(json.dumps({'budget_m': budget_m, 'mixes': mixes_sorted}, indent=2), encoding='utf-8')",
+        "",
+        "mix_lines = []",
+        "mix_lines.append('# Multi-UAV Mix Recommendation (Bonus)\\n')",
+        "mix_lines.append(f\"Budget cap (demo): ${budget_m}M\\n\")",
+        "if not mixes_sorted:",
+        "    mix_lines.append('No feasible mixes found under the demo constraints/budget (or insufficient cost data).')",
+        "else:",
+        "    best = mixes_sorted[0]",
+        "    mix_lines.append('## Top mix (by proxy score)\\n')",
+        "    for name, cnt in zip(best['candidates'], best['counts']):",
+        "        mix_lines.append(f\"- {name}: {cnt}\")",
+        "    mix_lines.append(f\"\\nTotal cost: ${best['total_cost_m']}M\")",
+        "    mix_lines.append('\\n## Next steps\\n')",
+        "    mix_lines.append('- Validate constraints vs mission threads and operational concepts')",
+        "    mix_lines.append('- Replace proxy scoring with scenario simulation (coverage, sorties, risk)')",
+        "",
+        "(out_dir / 'mix_recommendation.md').write_text('\\n'.join(mix_lines) + '\\n', encoding='utf-8')",
+        "",
         "print('Ready: trade study computed')",
         "print('Wrote:')",
         "print(' -', out_dir / 'summary.json')",
         "print(' -', out_dir / 'study_report.md')",
+        "print(' -', out_dir / 'data_gaps.md')",
+        "print(' -', out_dir / 'feasibility_matrix.md')",
+        "print(' -', out_dir / 'mix_candidates.json')",
+        "print(' -', out_dir / 'mix_recommendation.md')",
         "print('Top recommendation:', summary['top_recommendation']['alternative'] if summary['top_recommendation'] else None)",
       ].join("\n"),
       metadata: {},
@@ -597,7 +767,7 @@ function createUavNotebook(): any {
 }
 
 function createUavRecommendationDoc(): string {
-  return `# UAV Trade Study Recommendation (Disaster Response)\n\n## Executive Summary\n\n- **Recommendation**: (to be filled)\n- **Why**: (tie to COIs/COICs)\n- **Residual Risk**: (to be filled)\n\n## Problem / Mission Context\n\nSummarize the mission gap and mission threads.\n\n## COIs (Critical Operational Issues)\n\nList the yes/no operational questions.\n\n## COICs (Criteria) + Measures\n\nMap COIs → COICs → measures (MOE/MOP/MOS).\n\n## Options Considered\n\nUse the A/B/C/D framing:\n- Option A: Accept as-is\n- Option B: Modify/upgrade\n- Option C: Integrate external solution\n- Option D: Defer\n\n## Trade Summary\n\n- Cost / schedule / performance / risk / mission value\n\n## Decision + Rationale\n\n## Evidence\n\nLink to:\n- \`trade/uas_specifications.md\`\n- \`trade/disaster_response_requirements.md\`\n- \`trade/decision_matrix_template.md\`\n- \`trade/decision_matrix.is\`\n- \`trade/trade_study.ipynb\`\n- \`trade/results/summary.json\`\n- \`trade/results/study_report.md\`\n\n## Next Analyses (Planned)\n\n- Pareto frontier exploration\n- Driver identification (Sobol)\n- Feasibility mapping\n- Sensitivity sweeps on weights and thresholds\n`;
+  return `# UAV Trade Study Recommendation (Disaster Response)\n\n## Executive Summary\n\n- **Recommendation**: (to be filled)\n- **Why**: (tie to COIs/COICs)\n- **Residual Risk**: (to be filled)\n\n## Problem / Mission Context\n\nSummarize the mission gap and mission threads.\n\n## COIs (Critical Operational Issues)\n\nList the yes/no operational questions.\n\n## COICs (Criteria) + Measures\n\nMap COIs → COICs → measures (MOE/MOP/MOS).\n\n## Options Considered\n\nUse the A/B/C/D framing:\n- Option A: Accept as-is\n- Option B: Modify/upgrade\n- Option C: Integrate external solution\n- Option D: Defer\n\n## Trade Summary\n\n- Cost / schedule / performance / risk / mission value\n\n## Decision + Rationale\n\n## Evidence\n\nLink to:\n- \`trade/alternatives.csv\`\n- \`trade/disaster_response_requirements.md\`\n- \`trade/trade-model.is\`\n- \`trade/requirements.is\`\n- \`trade/trade_study.ipynb\`\n- \`trade/results/summary.json\`\n- \`trade/results/study_report.md\`\n- \`trade/results/data_gaps.md\`\n- \`trade/results/feasibility_matrix.md\`\n- (bonus) \`trade/results/mix_candidates.json\`\n- (bonus) \`trade/results/mix_recommendation.md\`\n\n## Next Analyses (Planned)\n\n- Pareto frontier exploration\n- Driver identification (Sobol)\n- Feasibility mapping\n- Sensitivity sweeps on weights and thresholds\n`;
 }
 
 export function seedDemoWorkbooksIfNeeded(dataDir: string, opts: SeedOpts = {}) {
@@ -639,116 +809,75 @@ export function seedDemoWorkbooksIfNeeded(dataDir: string, opts: SeedOpts = {}) 
   createWorkbookOnDisk(
     workbooksDir,
     "ac1000-main-project",
-    "AC-1000 Aircraft",
-    [],
+    "Vendor Program Workflow (Disaster Response UAV)",
+    ["notes", "vendors", "requirements", "decisions", "risks", "briefs"],
     [
       {
-        filename: "project_overview.md",
-        relPath: "documents/project_overview.md",
+        filename: "INSTRUCTIONS.md",
+        relPath: "documents/INSTRUCTIONS.md",
         addedAt: "2025-01-01T10:00:00Z",
-        content: `# AC-1000 Aircraft Project Overview\n\n## Project Details\n- **Aircraft Type**: Light Business Jet\n- **Max Takeoff Weight**: 12,500 lbs\n- **Cruise Speed**: 450 knots\n- **Range**: 2,500 nautical miles\n- **Passenger Capacity**: 6-8\n\n## Project Status\n- **Phase**: Detailed Design\n- **Completion**: 65%\n- **Next Milestone**: PDR (Preliminary Design Review)\n- **PDR Date**: 2025-03-15\n\n## Key Systems\n- Wing structure\n- Main landing gear\n- Nose landing gear\n- Fuel system\n- Avionics suite\n`,
+        content: `# Demo 1 — Vendor Program Workflow (Disaster Response UAV)\n\n## What this workspace is\n\nThis workbook is a **program operating system** for a disaster-response UAV acquisition / risk-reduction effort.\n\nIt is intentionally structured so that:\n- **Raw inputs** (meeting notes + vendor info) live in stable folders\n- The assistant produces **repeatable derived deliverables** (vendor summary pack + requirements baseline)\n- Demo 2 (Trade Study) consumes the requirements baseline as the canonical start point\n\n## Folder layout (one level)\n\n- \`notes/\` — pilot + vendor meeting notes (raw)\n- \`vendors/\` — vendor capability packets (raw)\n- \`requirements/\` — requirements baseline and trace notes\n- \`decisions/\` — decision log\n- \`risks/\` — risk register\n- \`briefs/\` — derived briefs (weekly status, vendor summary pack)\n\n## Demo flow (recommended)\n\n### Step 1 — Show raw inputs\n\nOpen:\n- \`notes/pilot_workshop_01.md\`\n- \`notes/vendor_sync_01.md\`\n- \`vendors/\` packets\n\n### Step 2 — Generate the vendor summary pack (deliverable)\n\nPaste into Chat (Demo 1 context):\n\n\"Using the meeting notes in this workbook and the vendor packets in \`vendors/\`, write a **Vendor Summary Pack**.\n\nRequirements:\n- One section per vendor with: strengths, gaps, risks, questions, and recommended next steps\n- Include citations to the specific note/vendor files you used\n\nSave it to: workbook://ac1000-main-project/documents/briefs/vendor_summary_pack.md\"\n\nThen open: \`briefs/vendor_summary_pack.md\`\n\n### Step 3 — Generate the requirements baseline for Demo 2 (handoff)\n\nPaste into Chat (still Demo 1 context):\n\n\"Extract a requirements baseline (10–20 requirements) for a **Disaster Response UAV selection trade study**.\n\n- Use stable IDs: REQ-001, REQ-002, ...\n- Each requirement must cite which note(s) it came from\n- Store the result as an Insight Sheet\n\nWrite to: workbook://uav-trade-study/documents/trade/requirements.is\"\n\nThen open the file in the UAV Trade Study workbook (Demo 2).\n\n## Notes\n- If you need a fresh start, use **Demos → Reset Dev Data…**.\n`,
       },
       {
-        filename: "design_requirements.md",
-        relPath: "documents/design_requirements.md",
+        filename: "pilot_workshop_01.md",
+        relPath: "documents/notes/pilot_workshop_01.md",
         addedAt: "2025-01-02T10:00:00Z",
-        content: `# AC-1000 Design Requirements\n\n## Structural Requirements\n- **Ultimate Load Factor**: 3.75g\n- **Limit Load Factor**: 2.5g\n- **Wing Load**: 50 psf maximum\n\n## Performance Requirements\n- **Takeoff Distance**: < 3,500 ft\n- **Landing Distance**: < 2,800 ft\n- **Service Ceiling**: 45,000 ft\n\n## Safety Requirements\n- **Minimum MOS (Margin of Safety)**: 0.15\n- **Critical Components MOS**: > 0.25\n- **Fatigue Life**: 30,000 flight hours\n`,
+        content: `# Pilot Workshop Notes — Disaster Response UAV (Workshop #1)\n\n**Date**: 2026-01-08\n**Attendees**: Pilot SME (SAR), Ops lead, Program team\n\n## Mission context\n- Typical incident: urban + rural mixed terrain, intermittent comms, high winds in coastal areas\n- Need rapid deployment from a mobile unit (truck)\n\n## Key operational needs (raw)\n- Must deploy on-scene **within 15 minutes** (setup + launch)\n- Must operate in winds up to **25 knots** (objective 35)\n- Must survey **5–10 km² within 2 hours** (coverage rate threshold ~2.5 km²/hr)\n- Mission duration: **≥ 3 hours** (objective 6)\n- Prefer payload capacity **≥ 2 kg** (objective 5)\n- Data: video + stills; need reliable downlink at least **15 km** (objective 25+)\n\n## Constraints / notes\n- Night ops are likely; thermal camera is desirable but not strictly required for phase 1\n- Regulatory: must be operable under local waiver / compliant ops procedures\n\n## Open questions\n- Are we prioritizing fixed-wing endurance or VTOL deployment speed?\n- What is the ceiling budget per air vehicle (rough order)?\n`,
       },
       {
-        filename: "main_gear_analysis.md",
-        relPath: "documents/main_gear_analysis.md",
+        filename: "vendor_sync_01.md",
+        relPath: "documents/notes/vendor_sync_01.md",
         addedAt: "2025-01-03T10:00:00Z",
-        content: `# Main Landing Gear Structural Analysis\n\n## Load Cases\n1. **Landing Impact**: 6.0g vertical\n2. **Braking**: 4.5g longitudinal\n3. **Side Load**: 3.0g lateral\n\n## Component Analysis\n\n### Trunnion\n- **Applied Load**: 45,000 lbs\n- **Allowable Load**: 60,000 lbs\n- **Margin of Safety (MOS)**: **0.33**\n\n### Shock Strut\n- **Applied Load**: 38,000 lbs\n- **Allowable Load**: 50,000 lbs\n- **Margin of Safety (MOS)**: **0.32**\n\n### Axle\n- **Applied Load**: 52,000 lbs\n- **Allowable Load**: 68,000 lbs\n- **Margin of Safety (MOS)**: **0.31**\n\n### Brake Assembly\n- **Applied Load**: 42,000 lbs\n- **Allowable Load**: 52,000 lbs\n- **Margin of Safety (MOS)**: **0.24**\n\n## Design Requirements\n- **Minimum MOS Required**: 0.15\n- **Preferred MOS**: 0.25\n- **Critical Components MOS**: > 0.25\n`,
+        content: `# Vendor Sync Notes — UAV Candidates (Sync #1)\n\n**Date**: 2026-01-10\n**Attendees**: Program team + 3 vendors (info packets follow)\n\n## Agenda\n- Confirm mission needs (from pilot workshop)\n- Ask for missing specs and constraints (wind tolerance, endurance with payload, comms range, pricing)\n\n## Notes by vendor (raw)\n\n### Vendor A — AeroMapper\n- Claims strong endurance and payload capacity\n- Wind tolerance stated as \"up to 35 knots\" (needs test evidence)\n- Pricing: higher; lead times unclear\n\n### Vendor B — SkyEagle\n- Emphasizes range and data link\n- Wind tolerance is \"typical 25 knots\" (needs confirmation for gusts)\n- Offers training + spares package\n\n### Vendor C — WingOne\n- Low cost option; quick deployment\n- Endurance may be insufficient for 3+ hour missions\n- Payload limited\n\n## Decisions / actions\n- Request evidence of wind tolerance and comms range (test reports)\n- Request endurance curves with payload and weather assumptions\n`,
       },
       {
-        filename: "nose_gear_analysis.md",
-        relPath: "documents/nose_gear_analysis.md",
+        filename: "vendor_packet_aeromapper.md",
+        relPath: "documents/vendors/vendor_packet_aeromapper.md",
         addedAt: "2025-01-04T10:00:00Z",
-        content: `# Nose Landing Gear Structural Analysis\n\n## Load Cases\n1. **Landing Impact**: 5.0g vertical\n2. **Steering**: 2.5g lateral\n\n## Component Analysis\n\n### Trunnion\n- **Applied Load**: 18,000 lbs\n- **Allowable Load**: 28,000 lbs\n- **Margin of Safety (MOS)**: **0.56**\n\n### Shock Strut\n- **Applied Load**: 16,500 lbs\n- **Allowable Load**: 24,000 lbs\n- **Margin of Safety (MOS)**: **0.45**\n\n### Steering Actuator\n- **Applied Load**: 12,000 lbs\n- **Allowable Load**: 15,000 lbs\n- **Margin of Safety (MOS)**: **0.25**\n\n## Design Requirements\n- **Minimum MOS Required**: 0.15\n- **Preferred MOS**: 0.25\n`,
+        content: `# Vendor Packet — AeroMapper X8 (Candidate UAV)\n\n## Claimed specs (vendor provided)\n- **Endurance**: 13 hours (no payload); 8 hours (2 kg payload) *(needs evidence)*\n- **Range**: 200 km\n- **Payload**: 5 kg\n- **Wind tolerance**: 35 knots *(needs evidence)*\n- **Data link**: 200 km (LOS)\n- **Cost**: $1.7M (unit), lead time 20–24 weeks\n\n## Notes\n- Strong candidate for long endurance / coverage\n- Risk: pricing + evidence quality\n`,
       },
       {
-        filename: "wing_spar_analysis.md",
-        relPath: "documents/wing_spar_analysis.md",
+        filename: "vendor_packet_skyeagle.md",
+        relPath: "documents/vendors/vendor_packet_skyeagle.md",
         addedAt: "2025-01-05T10:00:00Z",
-        content: `# Wing Main Spar Analysis\n\n## Critical Sections\n\n### Root Section (Station 0)\n- **Bending Moment**: 450,000 in-lbs\n- **Allowable**: 600,000 in-lbs\n- **Margin of Safety (MOS)**: **0.33**\n\n### Mid-Span (Station 100)\n- **Bending Moment**: 280,000 in-lbs\n- **Allowable**: 350,000 in-lbs\n- **Margin of Safety (MOS)**: **0.25**\n\n### Outboard (Station 180)\n- **Bending Moment**: 95,000 in-lbs\n- **Allowable**: 115,000 in-lbs\n- **Margin of Safety (MOS)**: **0.21**\n\n## Design Requirements\n- **Minimum MOS Required**: 0.15\n- **Preferred MOS**: 0.25\n- **Critical Sections MOS**: > 0.25\n`,
+        content: `# Vendor Packet — SkyEagle X500 (Candidate UAV)\n\n## Claimed specs (vendor provided)\n- **Endurance**: 9 hours (no payload); 6 hours (2 kg payload)\n- **Range**: 150 km\n- **Payload**: 3.5 kg\n- **Wind tolerance**: 25 knots\n- **Data link**: 150 km (LOS)\n- **Cost**: $1.2M (unit), lead time 16–20 weeks\n\n## Notes\n- Balanced option\n- Potential gap: wind tolerance objective (35 knots)\n`,
+      },
+      {
+        filename: "vendor_packet_wingone.md",
+        relPath: "documents/vendors/vendor_packet_wingone.md",
+        addedAt: "2025-01-06T10:00:00Z",
+        content: `# Vendor Packet — WingOne Pro (Candidate UAV)\n\n## Claimed specs (vendor provided)\n- **Endurance**: 5 hours (no payload); 3 hours (1 kg payload)\n- **Range**: 75 km\n- **Payload**: 1.8 kg\n- **Wind tolerance**: 15 knots\n- **Data link**: 75 km (LOS)\n- **Cost**: $0.45M (unit), lead time 8–12 weeks\n\n## Notes\n- Low-cost / fast procurement candidate\n- Likely fails wind tolerance and may fail endurance with payload\n`,
+      },
+      {
+        filename: "vendor_summary_pack.md",
+        relPath: "documents/briefs/vendor_summary_pack.md",
+        addedAt: "2025-01-07T10:00:00Z",
+        content: `# Vendor Summary Pack (Template)\n\n> This file is intended to be generated/updated by Chat during Demo 1.\n\n## Executive summary\n\n- (to be generated)\n\n## Vendor comparisons (one section per vendor)\n\n### AeroMapper X8\n- Strengths:\n- Gaps:\n- Risks:\n- Questions to ask:\n- Recommended next steps:\n\n### SkyEagle X500\n- Strengths:\n- Gaps:\n- Risks:\n- Questions to ask:\n- Recommended next steps:\n\n### WingOne Pro\n- Strengths:\n- Gaps:\n- Risks:\n- Questions to ask:\n- Recommended next steps:\n\n## Open actions\n\n- (to be generated)\n`,
+      },
+      {
+        filename: "requirements_baseline.md",
+        relPath: "documents/requirements/requirements_baseline.md",
+        addedAt: "2025-01-07T11:00:00Z",
+        content: `# Requirements Baseline (Template)\n\n> This is a human-readable placeholder. For the trade study handoff, Demo 1 writes an Insight Sheet to:\n>\n> \`workbook://uav-trade-study/documents/trade/requirements.is\`\n+\n+## Intended format\n+\n- REQ-### — requirement text\n- Source: cite meeting note(s)\n- Notes: assumptions / open questions\n`,
+      },
+      {
+        filename: "decision_log.md",
+        relPath: "documents/decisions/decision_log.md",
+        addedAt: "2025-01-07T12:00:00Z",
+        content: `# Decision Log\n\n- DEC-001 — (placeholder)\n  - Date:\n  - Decision:\n  - Rationale:\n  - Evidence:\n`,
+      },
+      {
+        filename: "risk_register.md",
+        relPath: "documents/risks/risk_register.md",
+        addedAt: "2025-01-07T12:30:00Z",
+        content: `# Risk Register\n\n- RISK-001 — Vendor spec evidence quality is incomplete\n  - Impact: Could select a platform that fails wind/endurance in real conditions\n  - Mitigation: Request test reports + validate in pilot trials\n  - Evidence: notes/vendor_sync_01.md\n`,
       },
     ],
   );
 
-  if (!workbookAlreadyExists("test-schedule-ac1000")) {
-    createWorkbookOnDisk(
-      workbooksDir,
-      "test-schedule-ac1000",
-      "Test Schedule",
-      [],
-      [
-      {
-        filename: "test_schedule.md",
-        relPath: "documents/test_schedule.md",
-        addedAt: "2025-01-10T10:00:00Z",
-        content: `# AC-1000 Test Schedule\n\n## Static Testing\n\n### Main Gear Static Test\n- **Test Date**: ${isoDate(45)}\n- **Prerequisites**: Complete\n- **Test Article**: Ready\n\n### Nose Gear Static Test\n- **Test Date**: ${isoDate(85)}\n- **Prerequisites**: 90% complete\n- **Test Article**: In fabrication\n\n### Wing Spar Static Test\n- **Test Date**: ${isoDate(125)}\n- **Prerequisites**: 60% complete\n- **Test Article**: Not started\n\n## Fatigue Testing\n\n### Landing Gear Fatigue\n- **Test Date**: ${isoDate(180)}\n- **Cycles Required**: 30,000\n- **Duration**: 8 weeks\n\n## Milestones\n- **Critical Design Review (CDR)**: ${isoDate(30)}\n- **First Flight**: ${isoDate(365)}\n`,
-      },
-      {
-        filename: "test_readiness.md",
-        relPath: "documents/test_readiness.md",
-        addedAt: "2025-01-11T10:00:00Z",
-        content: `# Test Readiness Status\n\n## Upcoming Tests\n\n### Main Gear Static Test\n- **Action Required**: Final instrumentation checkout\n- **Owner**: Structures Team\n- **Priority**: Critical\n\n### Nose Gear Static Test\n- **Action Required**: Complete test article fabrication\n- **Owner**: Test Lab\n- **Priority**: High\n\n## Risk Items\n- Main gear test fixture requires calibration (15 day lead time)\n- Nose gear test article 2 weeks behind schedule\n`,
-      },
-      ],
-    );
-  }
-
-  if (!workbookAlreadyExists("supplier-agreements")) {
-    createWorkbookOnDisk(
-      workbooksDir,
-      "supplier-agreements",
-      "Supplier Agreements",
-      [],
-      [
-      {
-        filename: "Acme_Aerospace_NDA_Expires_2025-08-15.md",
-        relPath: "documents/Acme_Aerospace_NDA_Expires_2025-08-15.md",
-        addedAt: "2024-08-15T10:00:00Z",
-        content: `# Non-Disclosure Agreement - Acme Aerospace\n\n**Company**: Acme Aerospace Inc.\n**Agreement Type**: Mutual NDA\n**Signed Date**: 2024-08-15\n**Expiration Date**: 2025-08-15\n\n## Scope\n- Landing gear components\n- Hydraulic systems\n- Manufacturing processes\n\n## Contact\n- **Name**: John Smith\n- **Email**: jsmith@acmeaero.com\n- **Phone**: 555-0100\n`,
-      },
-      {
-        filename: "TitaniumWorks_NDA_Expires_2026-03-20.md",
-        relPath: "documents/TitaniumWorks_NDA_Expires_2026-03-20.md",
-        addedAt: "2025-01-10T10:00:00Z",
-        content: `# Non-Disclosure Agreement - TitaniumWorks LLC\n\n**Company**: TitaniumWorks LLC\n**Agreement Type**: Mutual NDA\n**Signed Date**: 2025-01-10\n**Expiration Date**: 2026-03-20\n\n## Scope\n- Wing spar materials\n- Heat treatment processes\n- Quality specifications\n\n## Contact\n- **Name**: Sarah Johnson\n- **Email**: sjohnson@titaniumworks.com\n- **Phone**: 555-0200\n`,
-      },
-      {
-        filename: "GlobalAvionics_NDA_Expires_2025-06-30.md",
-        relPath: "documents/GlobalAvionics_NDA_Expires_2025-06-30.md",
-        addedAt: "2024-06-30T10:00:00Z",
-        content: `# Non-Disclosure Agreement - Global Avionics\n\n**Company**: Global Avionics Corp\n**Agreement Type**: One-way NDA\n**Signed Date**: 2024-06-30\n**Expiration Date**: 2025-06-30\n\n## Scope\n- Flight control systems\n- Autopilot integration\n- Display specifications\n\n## Contact\n- **Name**: Mike Chen\n- **Email**: mchen@globalavionics.com\n- **Phone**: 555-0300\n`,
-      },
-      ],
-    );
-  }
-
-  if (!workbookAlreadyExists("project-budget")) {
-    createWorkbookOnDisk(
-      workbooksDir,
-      "project-budget",
-      "Budget & Costs",
-      [],
-      [
-      {
-        filename: "project_budget_2025.csv",
-        relPath: "documents/project_budget_2025.csv",
-        addedAt: "2025-01-15T10:00:00Z",
-        content: `Category,Budgeted,Actual,Variance,Percent\nEngineering,500000,485000,15000,97.0\nManufacturing,1200000,1350000,-150000,112.5\nTesting,300000,275000,25000,91.7\nMaterials,800000,825000,-25000,103.1\nLabor,600000,580000,20000,96.7\nTotal,3400000,3515000,-115000,103.4\n`,
-      },
-      {
-        filename: "cost_tracking.md",
-        relPath: "documents/cost_tracking.md",
-        addedAt: "2025-01-16T10:00:00Z",
-        content: `# AC-1000 Cost Tracking Summary\n\n## Budget Overview\n- **Total Budget**: $3,400,000\n- **Actual Spend**: $3,515,000\n- **Variance**: -$115,000\n\n## Cost Breakdown\n\n### Engineering\n- **Budgeted**: $500,000\n- **Actual**: $485,000\n- **Variance**: $15,000\n- Design: $280,000\n- Analysis: $125,000\n- CAD/CAM: $80,000\n\n### Manufacturing\n- **Budgeted**: $1,200,000\n- **Actual**: $1,350,000\n- **Variance**: -$150,000\n- Tooling: $450,000\n- Fabrication: $600,000\n- Assembly: $300,000\n\n### Testing\n- **Budgeted**: $300,000\n- **Actual**: $275,000\n- **Variance**: $25,000\n- Test fixtures: $125,000\n- Instrumentation: $85,000\n- Lab time: $65,000\n\n### Materials\n- **Budgeted**: $800,000\n- **Actual**: $825,000\n- **Variance**: -$25,000\n- Aluminum: $300,000\n- Titanium: $225,000\n- Composites: $180,000\n- Hardware: $120,000\n\n## Risk Items\n- Manufacturing costs require review\n- Material costs increased due to titanium price increase\n- Cost reduction measures needed in fabrication\n`,
-      },
-      ],
-    );
-  }
+  // NOTE: We no longer seed the legacy AC-1000 companion workbooks (budget/suppliers/test schedule)
+  // by default, because Demo 1 is now "Vendor Program Workflow" and those old fixtures confuse the demo.
+  // If we want an Agreements monitoring demo, we can seed a dedicated workbook for it explicitly later.
 
   // --- UAV Trade Study workbook (new seeded demo) ---
   const seedRoot =
@@ -757,16 +886,71 @@ export function seedDemoWorkbooksIfNeeded(dataDir: string, opts: SeedOpts = {}) 
   const devSeedRoot = path.join(process.cwd(), "data", "trade_study_example");
   const sourceDir = seedRoot && fs.existsSync(seedRoot) ? seedRoot : devSeedRoot;
 
-  const uas = readIfExists(path.join(sourceDir, "uas_specifications.md")) || "# Missing uas_specifications.md\n";
+  // Requirements can remain as a narrative doc; in many real studies this starts as prose before being structured.
   const reqs =
     readIfExists(path.join(sourceDir, "disaster_response_requirements.md")) ||
     "# Missing disaster_response_requirements.md\n";
-  const matrixTpl =
-    readIfExists(path.join(sourceDir, "decision_matrix_template.md")) || "# Missing decision_matrix_template.md\n";
 
   const uavWorkbookId = "uav-trade-study";
   const decisionMatrix = createUavDecisionMatrixSheet(uavWorkbookId);
   const notebook = createUavNotebook();
+  const alternativesCsv = (() => {
+    // Vendor-style alternatives feed (canonical input for the notebook).
+    // Intentionally leave a couple fields blank to demonstrate "data gaps".
+    const rows = [
+      { name: "SkyEagle X500", uas_type: "Fixed-Wing", range_km: 150, endurance_hr: 9, payload_kg: 3.5, wind_knots: 25, cost_m: 1.2, link_km: 150 },
+      { name: "WingOne Pro", uas_type: "Fixed-Wing", range_km: 75, endurance_hr: 5, payload_kg: 1.8, wind_knots: "", cost_m: 0.45, link_km: 75 },
+      { name: "AeroMapper X8", uas_type: "Fixed-Wing", range_km: 200, endurance_hr: 13, payload_kg: 5, wind_knots: 35, cost_m: 1.7, link_km: 200 },
+      { name: "QuadCopter T4", uas_type: "Multirotor", range_km: 8, endurance_hr: 0.66, payload_kg: 0.8, wind_knots: 15, cost_m: 0.12, link_km: 8 },
+      { name: "HexaCopter H6 Heavy", uas_type: "Multirotor", range_km: 15, endurance_hr: 0.9, payload_kg: 4, wind_knots: 25, cost_m: "", link_km: 15 },
+      { name: "OctoCopter Sentinel", uas_type: "Multirotor", range_km: 25, endurance_hr: 1.15, payload_kg: 8, wind_knots: 35, cost_m: 0.8, link_km: 25 },
+      { name: "Falcon VTOL-X", uas_type: "Hybrid VTOL", range_km: 100, endurance_hr: 5.5, payload_kg: 2.5, wind_knots: 25, cost_m: 0.85, link_km: 100 },
+      { name: "HoverCruise 700", uas_type: "Hybrid VTOL", range_km: 120, endurance_hr: 7.5, payload_kg: 3.5, wind_knots: 25, cost_m: 0.98, link_km: 120 },
+      { name: "TriVector VTOL", uas_type: "Hybrid VTOL", range_km: 180, endurance_hr: 9.5, payload_kg: 7, wind_knots: 35, cost_m: 1.5, link_km: 180 },
+    ];
+    const header = ["name", "uas_type", "range_km", "endurance_hr", "payload_kg", "wind_knots", "cost_m", "link_km"];
+    const esc = (v: any) => {
+      const s = String(v ?? "");
+      if (s.includes(",") || s.includes("\"") || s.includes("\n")) return `"${s.replace(/\"/g, "\"\"")}"`;
+      return s;
+    };
+    const lines = [header.join(",")];
+    for (const r of rows) {
+      lines.push(header.map((h) => esc((r as any)[h])).join(","));
+    }
+    return lines.join("\n") + "\n";
+  })();
+  const requirementsSheet = {
+    version: "1.0",
+    metadata: {
+      name: "Trade Study Requirements",
+      created_at: new Date().toISOString(),
+      modified_at: new Date().toISOString(),
+      workbook_id: uavWorkbookId,
+    },
+    sheets: [
+      {
+        id: "sheet1",
+        name: "Requirements",
+        cells: {
+          A1: { value: "REQ_ID" },
+          B1: { value: "Text" },
+          C1: { value: "Type" },
+          D1: { value: "Priority" },
+          E1: { value: "SourceRef" },
+          F1: { value: "Notes" },
+          A2: { value: "REQ-001" },
+          B2: { value: "(To be generated in Demo 1 from meeting notes)" },
+          C2: { value: "Constraint" },
+          D2: { value: "High" },
+          E2: { value: "workbook://ac1000-main-project/documents/notes/pilot_workshop_01.md" },
+          F2: { value: "" },
+        },
+        formats: {},
+        viewState: { columnWidths: { "0": 120, "1": 520, "2": 120, "3": 110, "4": 420, "5": 260 }, rowHeights: { "0": 26 } },
+      },
+    ],
+  };
 
   // Seed an active Context that scopes to this workbook, so Chat/RAG/Dashboards show "active context".
   try {
@@ -865,25 +1049,25 @@ export function seedDemoWorkbooksIfNeeded(dataDir: string, opts: SeedOpts = {}) 
       "UAV Trade Study (Disaster Response)",
       ["trade"],
       [
-      { filename: "uas_specifications.md", relPath: "documents/trade/uas_specifications.md", content: uas },
       { filename: "disaster_response_requirements.md", relPath: "documents/trade/disaster_response_requirements.md", content: reqs },
-      { filename: "decision_matrix_template.md", relPath: "documents/trade/decision_matrix_template.md", content: matrixTpl },
-      { filename: "decision_matrix.is", relPath: "documents/trade/decision_matrix.is", content: JSON.stringify(decisionMatrix, null, 2) },
+      { filename: "alternatives.csv", relPath: "documents/trade/alternatives.csv", content: alternativesCsv },
+      { filename: "trade-model.is", relPath: "documents/trade/trade-model.is", content: JSON.stringify(decisionMatrix, null, 2) },
+      { filename: "requirements.is", relPath: "documents/trade/requirements.is", content: JSON.stringify(requirementsSheet, null, 2) },
       { filename: "trade_study.ipynb", relPath: "documents/trade/trade_study.ipynb", content: JSON.stringify(notebook, null, 2) },
       { filename: "recommendation.md", relPath: "documents/trade/recommendation.md", content: createUavRecommendationDoc() },
       { filename: "summary.json", relPath: "documents/trade/results/summary.json", content: "{}" },
       { filename: "study_report.md", relPath: "documents/trade/results/study_report.md", content: "# Trade study report will be generated by running the notebook.\n" },
       {
-        filename: "video_walkthrough.md",
-        relPath: "documents/trade/video_walkthrough.md",
+        filename: "model.sysml",
+        relPath: "documents/trade/model.sysml",
         content:
-          "# Video Walkthrough: UAV Trade Study (Disaster Response)\n\n## Goal\n\nDemonstrate a first-order trade study workflow end-to-end in InsightLM-LT:\n- canonical inputs in an Insight Sheet\n- analysis in a notebook\n- results communicated via a dashboard + a recommendation memo\n- **active context** is visible and applied to chat\n\n## Steps to record\n\n1. **Confirm active context**\n   - In the left header, show: `Scope: UAV Trade Study` and `SCOPED`.\n   - (If needed) expand **Contexts** and click the `SCOPED/ALL` toggle until it shows `SCOPED`.\n\n2. **Open the canonical sheet**\n   - Open `trade/decision_matrix.is`.\n   - Show the `Decision Matrix` tab (weights + scores).\n   - Show the `COIC & Measures` tab (COIs → measures).\n   - Make one small change (e.g., weight or score) and save.\n\n3. **Run the notebook**\n   - Open `trade/trade_study.ipynb`.\n   - Run the first code cell.\n   - Confirm it writes:\n     - `trade/results/summary.json`\n     - `trade/results/study_report.md`\n\n4. **Open the results report**\n   - Open `trade/results/study_report.md` and scroll through the ranked list + sensitivity section.\n\n5. **Dashboard**\n   - Open Dashboards and select `UAV Trade Study Dashboard`.\n   - Refresh tiles (if needed) so they render from `trade/results/summary.json`.\n\n6. **Ask Chat to draft the recommendation memo**\n\nPaste this into Chat:\n\n\"Using workbook://uav-trade-study/documents/trade/results/summary.json and workbook://uav-trade-study/documents/trade/results/study_report.md, write a concise recommendation memo and save it to workbook://uav-trade-study/documents/trade/recommendation.md. Include: recommendation, rationale, risks, and next steps.\"\n\nThen open `trade/recommendation.md` to show the generated memo.\n",
+          "// SysML v2 (demo-light) — Trade Study framing model\n+// Note: this is a plain text artifact for EOM; richer modeling/graph UI is a future extension.\n+\n+package uav_trade_study {\n+  // Requirements baseline is stored in: trade/requirements.is\n+  // Example placeholders:\n+  requirement REQ_001 {\n+    doc /* \"Deploy within 15 minutes\" */;\n+  }\n+  requirement REQ_002 {\n+    doc /* \"Wind tolerance >= 25 knots\" */;\n+  }\n+\n+  part UAV;\n+  part GroundStation;\n+  part DataLink;\n+\n+  constraint WindTolerance {\n+    // wind_knots >= 25\n+  }\n+  constraint Endurance {\n+    // endurance_hr >= 3\n+  }\n+}\n",
       },
       {
         filename: "README.md",
         relPath: "documents/trade/README.md",
         content:
-          "# UAV Trade Study Demo\n\nThis workbook is seeded to demonstrate how InsightLM‑LT can support a **first-order trade study** with:\n- a canonical Insight Sheet (`.is`) for the decision matrix + COICs/measures\n- an in-app Jupyter notebook (`.ipynb`) that computes results + writes artifacts\n- Chat + Dashboard to communicate results\n\n## Open in order\n\n1. `decision_matrix.is` (Insight Sheet)\n2. `trade_study.ipynb` (Jupyter notebook) → run the first code cell\n3. `trade/results/study_report.md` (auto-generated)\n4. `recommendation.md` (use Chat to draft/update)\n\n## Video walkthrough\n\nSee: `trade/video_walkthrough.md`\n\n## Suggested Chat prompt (for video)\n\nAfter running the notebook, paste this into Chat:\n\n\"Using workbook://uav-trade-study/documents/trade/results/summary.json and workbook://uav-trade-study/documents/trade/results/study_report.md, write a concise recommendation memo and save it to workbook://uav-trade-study/documents/trade/recommendation.md. Include: recommendation, rationale, risks, and next steps.\"\n",
+          "# UAV Trade Study (Disaster Response)\n\nThis workbook demonstrates a more realistic trade study workflow:\n- **Canonical trade model**: `trade/trade-model.is`\n- **Alternatives feed (vendor-style)**: `trade/alternatives.csv`\n- **Requirements baseline** (hand-off from Demo 1): `trade/requirements.is`\n- **Notebook analysis** (writes derived artifacts): `trade/trade_study.ipynb`\n- **Decision memo**: `trade/recommendation.md`\n\n## Open in order\n\n1. `trade-model.is`\n2. `alternatives.csv`\n3. `requirements.is`\n4. `trade_study.ipynb` (run the first code cell)\n5. `results/data_gaps.md` + `results/feasibility_matrix.md`\n6. `recommendation.md`\n",
       },
       ],
     );
@@ -898,9 +1082,6 @@ export function seedDemoWorkbooksIfNeeded(dataDir: string, opts: SeedOpts = {}) 
         seededAt: new Date().toISOString(),
         workbooks: [
           "ac1000-main-project",
-          "test-schedule-ac1000",
-          "supplier-agreements",
-          "project-budget",
           "uav-trade-study",
         ],
         forceSeed,

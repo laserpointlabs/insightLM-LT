@@ -3,6 +3,7 @@ import * as path from "path";
 import * as yaml from "js-yaml";
 import { app, BrowserWindow, dialog } from "electron";
 import { expandPath } from "./configService";
+import { seedDemoWorkbooksIfNeeded } from "./demoSeedService";
 
 type DemoId = "ac1000" | "trade-study";
 
@@ -93,11 +94,11 @@ export class DemoService {
 
   private demoSpec(demoId: DemoId): { workbookId: string; contextName: string } {
     if (demoId === "ac1000") {
-      // AC-1000 demo includes the core project workbook plus the standard companion workbooks
-      // (budget, test schedule, suppliers) so dashboards/chat have richer, realistic content.
-      return { workbookId: "ac1000-main-project", contextName: "AC-1000 Demo" };
+      // Demo 1: Vendor Program Workflow.
+      // Keep the active Context tight to avoid confusing the user with unrelated legacy demo workbooks.
+      return { workbookId: "ac1000-main-project", contextName: "Demo 1: Vendor Program Workflow" };
     }
-    return { workbookId: "uav-trade-study", contextName: "Trade Study Demo" };
+    return { workbookId: "uav-trade-study", contextName: "Demo 2: Trade Study" };
   }
 
   private async ensureContextActive(contextName: string, workbookIds: string[]): Promise<string | null> {
@@ -146,18 +147,25 @@ export class DemoService {
     const { workbookId, contextName } = this.demoSpec(demoId);
     const workbookIds: string[] =
       demoId === "ac1000"
-        ? ["ac1000-main-project", "test-schedule-ac1000", "supplier-agreements", "project-budget"]
+        ? ["ac1000-main-project"]
         : [workbookId];
 
-    // Copy seed workbook(s) from orgDataDir -> current dataDir
+    // Copy seed workbook(s) from orgDataDir -> current dataDir.
+    //
+    // IMPORTANT (demo iteration workflow):
+    // If the destination workbook already exists in the active dataDir, do NOT overwrite it.
+    // This allows a user to run Demo 1, generate artifacts, then proceed to Demo 2 without
+    // losing those outputs. For a clean slate, use Demos → Reset Dev Data… (which clears).
     for (const wid of workbookIds) {
       const src = path.join(this.getOrgDataDir(), "workbooks", wid);
       const dst = path.join(this.params.dataDir, "workbooks", wid);
       fs.mkdirSync(path.dirname(dst), { recursive: true });
+      // If the destination already exists, preserve it (do not overwrite).
+      if (fs.existsSync(dst)) continue;
+
       // If the "org" demo source is missing but the workbook already exists locally, don't fail.
       // This can happen in dev if demos were seeded directly into the active dataDir.
       if (!fs.existsSync(src)) {
-        if (fs.existsSync(dst)) continue;
         throw new Error(
           `Demo source workbook not found.\n\nExpected:\n${src}\n\nTry: Demos → Reset Dev Data… (re-seeds demos)`,
         );
@@ -215,6 +223,17 @@ export class DemoService {
 
     this.params.setScopeMode?.("context");
     this.params.notifyRenderer?.({ type: "dev_data_reset" });
+
+    // Immediately re-seed demos so the user can click Demos → Demo 1/2 without restarting the app.
+    // This keeps the "Reset to Demo Baseline…" promise true and makes it easy to pick up new demo fixtures.
+    try {
+      seedDemoWorkbooksIfNeeded(this.params.dataDir);
+      this.params.notifyRenderer?.({ type: "demo_seeded" });
+    } catch (e) {
+      // Fail-soft: reset still succeeded; user can restart to seed on boot if needed.
+      console.warn(`[Demos] Failed to re-seed demo workbooks after reset:`, e);
+    }
+
     return { ok: true };
   }
 
@@ -229,8 +248,9 @@ export class DemoService {
       buttons: ["Cancel", "Reset"],
       defaultId: 0,
       cancelId: 0,
-      title: "Reset Dev Data",
-      message: "This will delete ALL dev workbooks, dashboards, contexts, chats, and RAG index for the current dataDir.",
+      title: "Reset to Demo Baseline",
+      message:
+        "This will delete ALL workbooks, dashboards, contexts, chats, and RAG index for the current dataDir, then restore the default demo baseline.",
       detail: `dataDir:\n${this.params.dataDir}`,
     });
     if (res.response !== 1) return;
@@ -239,7 +259,7 @@ export class DemoService {
       type: "info",
       buttons: ["OK"],
       title: "Reset Complete",
-      message: "Dev data was cleared.",
+      message: "Reset to demo baseline complete.",
     });
   }
 }

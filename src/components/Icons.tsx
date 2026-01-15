@@ -334,3 +334,61 @@ export function ExtensionsIcon({ className = "h-4 w-4" }: { className?: string }
     </svg>
   );
 }
+
+export function SplitRightIcon({ className = "h-4 w-4" }: { className?: string }) {
+  // VS Code-style: split editor to the right (vertical divider).
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2.5" y="3" width="11" height="10" rx="1.2" />
+      <path d="M8 3v10" />
+    </svg>
+  );
+}
+
+export function SplitDownIcon({ className = "h-4 w-4" }: { className?: string }) {
+  // VS Code-style: split editor down (horizontal divider).
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2.5" y="3" width="11" height="10" rx="1.2" />
+      <path d="M2.5 8h11" />
+    </svg>
+  );
+}
+
+export function MoveToOtherGroupIcon({ className = "h-4 w-4" }: { className?: string }) {
+  // Simple left-right arrows to indicate moving the active editor between groups.
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      fill="none"
+      viewBox="0 0 16 16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6 5L3.5 7.5 6 10" />
+      <path d="M3.7 7.5h8.6" />
+      <path d="M10 5l2.5 2.5L10 10" />
+    </svg>
+  );
+}

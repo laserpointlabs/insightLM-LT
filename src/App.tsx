@@ -22,6 +22,9 @@ import { StatusBar } from "./components/StatusBar";
 import { ExtensionsWorkbench } from "./components/Extensions/ExtensionsWorkbench";
 
 function App() {
+  const isEditorOnlyWindow =
+    typeof window !== "undefined" &&
+    String(new URLSearchParams(window.location.search).get("windowMode") || "").toLowerCase() === "editor";
   const [dashboardActionButton, setDashboardActionButton] = useState<React.ReactNode>(null);
   const [contextsActionButton, setContextsActionButton] = useState<React.ReactNode>(null);
   const [workbookActionButton, setWorkbookActionButton] = useState<React.ReactNode>(null);
@@ -59,6 +62,7 @@ function App() {
 
   // Restore "popped out" Chat tab after renderer refresh (Vite reload / Ctrl+R).
   useEffect(() => {
+    if (isEditorOnlyWindow) return;
     let cancelled = false;
     const run = async () => {
       try {
@@ -160,6 +164,59 @@ function App() {
   useEffect(() => {
     return initAutomationUI();
   }, []);
+
+  // New window: allow Electron to pass a document payload via ?openDoc=...
+  // We open it once, then strip the param so reloads don't duplicate tabs.
+  useEffect(() => {
+    try {
+      const raw = new URLSearchParams(window.location.search).get("openDoc");
+      if (!raw) return;
+      let decoded = raw;
+      try {
+        decoded = decodeURIComponent(raw);
+      } catch {
+        decoded = raw;
+      }
+      const payload = JSON.parse(decoded);
+      const t = String(payload?.type || "document");
+      if (t === "chat") {
+        openDocument({ type: "chat", chatKey: String(payload?.chatKey || "main"), filename: String(payload?.filename || "Chat") } as any).catch(() => {});
+      } else if (t === "dashboard") {
+        openDocument({ type: "dashboard", dashboardId: String(payload?.dashboardId || ""), filename: String(payload?.filename || "Dashboard") } as any).catch(() => {});
+      } else if (t === "config") {
+        openDocument({ type: "config", configKey: String(payload?.configKey || "llm"), filename: String(payload?.filename || "Settings") } as any).catch(() => {});
+      } else if (t === "extension") {
+        openDocument({ type: "extension", extensionId: String(payload?.extensionId || ""), filename: String(payload?.filename || "Extension") } as any).catch(() => {});
+      } else {
+        const workbookId = String(payload?.workbookId || "");
+        const p = String(payload?.path || "");
+        const filename = String(payload?.filename || p.split("/").pop() || "Document");
+        if (workbookId && p) {
+          openDocument({ workbookId, path: p, filename } as any).catch(() => {});
+        }
+      }
+
+      // Strip param (best-effort) to avoid duplicate open on reload.
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.delete("openDoc");
+        window.history.replaceState({}, "", u.toString());
+      } catch {
+        // ignore
+      }
+    } catch {
+      // ignore
+    }
+  }, [openDocument]);
+
+  // Editor-only detached window: render ONLY the editor surface (no sidebar/activity/status).
+  if (isEditorOnlyWindow) {
+    return (
+      <div className="h-full w-full bg-white">
+        <DocumentViewer documents={openDocuments} onClose={closeDocument} uiMode="detached" />
+      </div>
+    );
+  }
 
   // Bridge main-process workbooks/file change notifications into DOM events (for view auto-refresh),
   // and invalidate workbook-rag cache so new/edited files become queryable immediately.
@@ -683,7 +740,7 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-gray-50">
+    <div className="flex h-full w-full flex-col bg-gray-50">
       <ToastCenter />
       <div className="flex min-h-0 flex-1">
         {/* Activity Bar */}
@@ -691,7 +748,7 @@ function App() {
 
         {/* Sidebar */}
         <div
-          className="flex flex-col border-r border-gray-300 bg-white overflow-x-hidden"
+          className="flex flex-shrink-0 flex-col border-r border-gray-300 bg-white overflow-x-hidden"
           style={{ width: `${sidebarWidth}px` }}
           data-testid={testIds.sidebar.container}
         >
@@ -710,7 +767,7 @@ function App() {
         />
 
         {/* Main Content Area */}
-        <div className="flex-1 bg-white">
+        <div className="flex-1 min-w-0 bg-white overflow-hidden">
           {openDocuments.length > 0 ? (
             <DocumentViewer documents={openDocuments} onClose={closeDocument} onJumpToContexts={jumpToContexts} />
           ) : (

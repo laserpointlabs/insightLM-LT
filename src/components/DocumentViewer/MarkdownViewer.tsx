@@ -1,9 +1,12 @@
 import { useEffect, useState, useRef, Children, isValidElement } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import Editor from "@monaco-editor/react";
 import mermaid from "mermaid";
 import { ResizablePane } from "../ResizablePane";
+import { testIds } from "../../testing/testIds";
 
 type MarkdownViewMode = "edit" | "preview" | "split";
 
@@ -145,10 +148,24 @@ export function MarkdownViewer({
   const [splitPercent, setSplitPercent] = useState(loadSplitPercent);
   const [editorWidthPixels, setEditorWidthPixels] = useState(400); // Default fallback
   const containerRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [mathRendered, setMathRendered] = useState<boolean>(false);
 
   useEffect(() => {
     setEditorContent(content);
   }, [content]);
+
+  // Best-effort detection so automation can assert math rendering without relying on class selectors.
+  useEffect(() => {
+    try {
+      const el = previewRef.current;
+      if (!el) return;
+      const hasKatex = !!el.querySelector(".katex");
+      setMathRendered(hasKatex);
+    } catch {
+      setMathRendered(false);
+    }
+  }, [editorContent, viewMode, isEditing]);
 
   useEffect(() => {
     // When editing is enabled, default to split view; when disabled, show preview only
@@ -193,13 +210,19 @@ export function MarkdownViewer({
   };
 
   const renderPreview = () => (
-    <div className="h-full overflow-auto bg-white p-4">
+    <div
+      ref={previewRef}
+      className="h-full overflow-auto bg-white p-4"
+      data-testid={testIds.markdown.preview}
+      data-math-rendered={mathRendered ? "true" : "false"}
+    >
       {editorContent.trim() === "" ? (
         <div className="text-sm text-gray-400 italic">Empty document</div>
       ) : (
         <ReactMarkdown
           className="prose prose-sm max-w-none"
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeKatex]}
           components={{
             code({ inline, className, children, ...props }) {
               const match = /language-(\w+)/.exec(className || "");

@@ -7,6 +7,13 @@ interface SpreadsheetViewerProps {
   workbookId?: string;
   path?: string;
   onContentChange?: (content: string) => void;
+  /**
+   * Disk-backed content (authoritative when not dirty). This allows the viewer to
+   * distinguish external file changes (LLM/tools) from local unsaved edits.
+   */
+  diskContent?: string;
+  /** True when the tab has unsaved changes (never auto-reload). */
+  isDirty?: boolean;
 }
 
 interface SpreadsheetData {
@@ -410,7 +417,9 @@ export function SpreadsheetViewer({
   filename, 
   workbookId, 
   path,
-  onContentChange 
+  onContentChange,
+  diskContent,
+  isDirty
 }: SpreadsheetViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [spreadsheet, setSpreadsheet] = useState<SpreadsheetData | null>(null);
@@ -422,17 +431,81 @@ export function SpreadsheetViewer({
   const currentFilenameRef = useRef<string | null>(null); // Track which filename is currently initialized
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const saveSpreadsheetRef = useRef<(() => void) | null>(null);
+  const lastAppliedDiskContentRef = useRef<string | null>(null);
 
   // Load Luckysheet CSS and JS
   useEffect(() => {
+    const w: any = window as any;
+    const isMousewheelReady = () => !!(w.jQuery && w.jQuery.fn && w.jQuery.fn.mousewheel);
+    const syncDollar = () => {
+      // Luckysheet uses `$` in a few places; ensure it points at the same jQuery instance.
+      if (w.jQuery && typeof w.jQuery === "function" && w.$ !== w.jQuery) {
+        w.$ = w.jQuery;
+      }
+    };
+    const installMousewheelShimIfNeeded = () => {
+      // Some environments have an AMD loader present (Monaco) which causes jquery-mousewheel to register
+      // as an AMD module instead of attaching to $.fn. Luckysheet expects $.fn.mousewheel to exist.
+      // Provide a minimal, deterministic shim so we never crash on first open.
+      try {
+        syncDollar();
+        if (!w.jQuery || !w.jQuery.fn) return false;
+        if (typeof w.jQuery.fn.mousewheel === "function") return true;
+        console.warn("Installing minimal jQuery mousewheel shim (plugin did not attach)");
+        w.jQuery.fn.mousewheel = function (handler: any) {
+          return this.on("wheel", function (evt: any) {
+            try {
+              // Provide a shape similar to jquery-mousewheel events.
+              const oe = evt?.originalEvent || evt;
+              const deltaY = oe?.deltaY ?? 0;
+              const deltaX = oe?.deltaX ?? 0;
+              (evt as any).deltaY = deltaY;
+              (evt as any).deltaX = deltaX;
+            } catch {
+              // ignore
+            }
+            return handler?.call(this, evt);
+          });
+        };
+        w.jQuery.fn.unmousewheel = function (handler: any) {
+          return handler ? this.off("wheel", handler) : this.off("wheel");
+        };
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const withAmdDisabled = (fn: () => void) => {
+      // jquery-mousewheel uses a UMD wrapper; if define.amd is present (Monaco loader), it will register
+      // as AMD and not attach to jQuery.fn. Temporarily disable AMD detection for this load.
+      const savedDefine = w.define;
+      const savedDefineAmd = savedDefine?.amd;
+      try {
+        if (typeof savedDefine === "function" && savedDefineAmd) {
+          savedDefine.amd = undefined;
+        }
+      } catch {
+        // ignore
+      }
+      try {
+        fn();
+      } finally {
+        try {
+          if (typeof savedDefine === "function") savedDefine.amd = savedDefineAmd;
+        } catch {
+          // ignore
+        }
+      }
+    };
+
     // Early exit if already loaded and processed
-    if (globalScriptsState.loaded && (window as any).luckysheet) {
+    if (globalScriptsState.loaded && w.luckysheet && isMousewheelReady()) {
       setScriptsLoaded(true);
       return;
     }
 
     // Early exit if scripts are already loaded globally (even if not marked in state)
-    if ((window as any).jQuery && (window as any).luckysheet) {
+    if (w.jQuery && w.luckysheet && isMousewheelReady()) {
       console.log('Luckysheet scripts already loaded globally, marking as loaded');
       globalScriptsState.loaded = true;
       globalScriptsState.loading = false;
@@ -440,6 +513,7 @@ export function SpreadsheetViewer({
       globalScriptsState.scripts.add('https://code.jquery.com/jquery-3.6.0.min.js');
       globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/jquery-mousewheel@3.1.13/jquery.mousewheel.min.js');
       globalScriptsState.scripts.add('https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/luckysheet.umd.js');
+      syncDollar();
       setScriptsLoaded(true);
       return;
     }
@@ -520,14 +594,16 @@ export function SpreadsheetViewer({
     
     // Helper to ensure jQuery is ready before loading dependent scripts
     const ensureJQueryReady = (callback: () => void) => {
-      if ((window as any).jQuery && typeof (window as any).jQuery === 'function') {
+      if (w.jQuery && typeof w.jQuery === 'function') {
         // jQuery is loaded and ready
+        syncDollar();
         callback();
       } else {
         // Wait for jQuery to be available
         const checkInterval = setInterval(() => {
-          if ((window as any).jQuery && typeof (window as any).jQuery === 'function') {
+          if (w.jQuery && typeof w.jQuery === 'function') {
             clearInterval(checkInterval);
+            syncDollar();
             callback();
           }
         }, 50);
@@ -535,7 +611,7 @@ export function SpreadsheetViewer({
         // Timeout after 5 seconds
         setTimeout(() => {
           clearInterval(checkInterval);
-          if (!(window as any).jQuery) {
+          if (!w.jQuery) {
             console.error('jQuery failed to load within timeout');
             setError('Failed to load jQuery');
           }
@@ -581,6 +657,10 @@ export function SpreadsheetViewer({
       // CRITICAL: Check if luckysheet global object exists FIRST
       if ((window as any).luckysheet) {
         console.log('Luckysheet already loaded globally, marking as ready');
+        if (!isMousewheelReady()) {
+          console.log('Luckysheet present but mousewheel not ready yet; waiting…');
+          return;
+        }
         globalScriptsState.loaded = true;
         globalScriptsState.loading = false;
         if (!globalScriptsState.scripts.has(mainUrl)) {
@@ -597,7 +677,7 @@ export function SpreadsheetViewer({
       if (globalScriptsState.scripts.has(mainUrl)) {
         console.log('Main script already processed, waiting for luckysheet object...');
         const checkLuckysheet = setInterval(() => {
-          if ((window as any).luckysheet) {
+          if ((window as any).luckysheet && isMousewheelReady()) {
             clearInterval(checkLuckysheet);
             globalScriptsState.loaded = true;
             globalScriptsState.loading = false;
@@ -606,10 +686,11 @@ export function SpreadsheetViewer({
         }, 100);
         setTimeout(() => {
           clearInterval(checkLuckysheet);
-          // Even if luckysheet object doesn't exist, mark as loaded to prevent retries
-          globalScriptsState.loaded = true;
-          globalScriptsState.loading = false;
-          setScriptsLoaded(true);
+          if (!((window as any).luckysheet && isMousewheelReady())) {
+            globalScriptsState.loading = false;
+            console.error('Timed out waiting for Luckysheet to be ready');
+            setError('Failed to load spreadsheet editor');
+          }
         }, 3000);
         return;
       }
@@ -634,8 +715,9 @@ export function SpreadsheetViewer({
         // Script tag exists - wait for it to be processed, but NEVER create a new one
         console.log('Main script tag already exists in DOM, waiting for processing...');
         const checkLoaded = setInterval(() => {
-          if ((window as any).luckysheet || globalScriptsState.scripts.has(mainUrl)) {
+          if (((window as any).luckysheet && isMousewheelReady()) || globalScriptsState.scripts.has(mainUrl)) {
             clearInterval(checkLoaded);
+            if (!((window as any).luckysheet && isMousewheelReady())) return;
             globalScriptsState.loaded = true;
             globalScriptsState.loading = false;
             if (!globalScriptsState.scripts.has(mainUrl)) {
@@ -649,7 +731,12 @@ export function SpreadsheetViewer({
         }, 100);
         setTimeout(() => {
           clearInterval(checkLoaded);
-          // Mark as loaded even if luckysheet object doesn't exist yet
+          if (!((window as any).luckysheet && isMousewheelReady())) {
+            globalScriptsState.loading = false;
+            console.error('Timed out waiting for Luckysheet to be ready');
+            setError('Failed to load spreadsheet editor');
+            return;
+          }
           globalScriptsState.loaded = true;
           globalScriptsState.loading = false;
           if (!globalScriptsState.scripts.has(mainUrl)) {
@@ -663,6 +750,10 @@ export function SpreadsheetViewer({
       // Final check - if script exists in DOM or global state, don't create
       if (isScriptLoaded(mainUrl, 'main') || globalScriptsState.scripts.has(mainUrl) || existingScript) {
         console.log('Main script already exists, skipping creation');
+        if (!((window as any).luckysheet && isMousewheelReady())) {
+          console.log('Main script exists but globals not ready yet; waiting…');
+          return;
+        }
         globalScriptsState.loaded = true;
         globalScriptsState.loading = false;
         if (!globalScriptsState.scripts.has(mainUrl)) {
@@ -683,16 +774,20 @@ export function SpreadsheetViewer({
       // Luckysheet UMD should attach to window. If an AMD loader is present (requirejs),
       // Luckysheet/jQuery bundles may attempt to register anonymous modules and throw
       // ("Can only have one anonymous define call per script file"). To avoid this,
-      // temporarily disable AMD during this script load.
+      // temporarily disable AMD *detection* during this script load.
+      //
+      // IMPORTANT: Do not delete `window.define` entirely — Monaco uses AMD `define(...)` at runtime.
       const w: any = window as any;
       const savedDefine = w.define;
+      const savedDefineAmd = savedDefine?.amd;
       const savedRequire = w.require;
       const savedRequirejs = w.requirejs;
+      const isAmdRequire = (r: any) => typeof r === "function" && typeof (r as any).config === "function";
       try {
-        if (savedDefine && savedDefine.amd) {
-          w.define = undefined;
-          w.require = undefined;
-          w.requirejs = undefined;
+        if (typeof savedDefine === "function" && savedDefineAmd) {
+          // Most UMD wrappers check: (typeof define === 'function' && define.amd)
+          // Keep `define` callable, but make `define.amd` falsy for this load.
+          savedDefine.amd = undefined;
         }
       } catch {
         // ignore
@@ -700,11 +795,12 @@ export function SpreadsheetViewer({
       mainScript.onload = () => {
         // Restore AMD globals (if any) after load.
         try {
-          if (savedDefine && savedDefine.amd) {
-            w.define = savedDefine;
-            w.require = savedRequire;
-            w.requirejs = savedRequirejs;
-          }
+          if (typeof savedDefine === "function") savedDefine.amd = savedDefineAmd;
+          // Some third-party UMD bundles can clobber AMD globals. If that happened,
+          // restore them to keep Monaco (and other AMD users) working.
+          if (typeof savedDefine === "function" && typeof w.define !== "function") w.define = savedDefine;
+          if (isAmdRequire(savedRequire) && !isAmdRequire(w.require)) w.require = savedRequire;
+          if (isAmdRequire(savedRequirejs) && !isAmdRequire(w.requirejs)) w.requirejs = savedRequirejs;
         } catch {
           // ignore
         }
@@ -725,11 +821,10 @@ export function SpreadsheetViewer({
       mainScript.onerror = () => {
         // Restore AMD globals (if any) after error.
         try {
-          if (savedDefine && savedDefine.amd) {
-            w.define = savedDefine;
-            w.require = savedRequire;
-            w.requirejs = savedRequirejs;
-          }
+          if (typeof savedDefine === "function") savedDefine.amd = savedDefineAmd;
+          if (typeof savedDefine === "function" && typeof w.define !== "function") w.define = savedDefine;
+          if (isAmdRequire(savedRequire) && !isAmdRequire(w.require)) w.require = savedRequire;
+          if (isAmdRequire(savedRequirejs) && !isAmdRequire(w.requirejs)) w.requirejs = savedRequirejs;
         } catch {
           // ignore
         }
@@ -822,16 +917,17 @@ export function SpreadsheetViewer({
 
     function loadLuckysheetScripts() {
       // CRITICAL: Ensure jQuery is fully loaded before loading mousewheel
-      if (!(window as any).jQuery || typeof (window as any).jQuery !== 'function') {
+      if (!w.jQuery || typeof w.jQuery !== 'function') {
         console.error('jQuery not available when trying to load mousewheel');
         setError('jQuery not available');
         return;
       }
+      syncDollar();
       
       // Load jQuery mousewheel plugin (required by Luckysheet)
       const mousewheelUrl = 'https://cdn.jsdelivr.net/npm/jquery-mousewheel@3.1.13/jquery.mousewheel.min.js';
       
-      if ((window as any).jQuery && (window as any).jQuery.fn && (window as any).jQuery.fn.mousewheel) {
+      if (isMousewheelReady()) {
         console.log('jQuery mousewheel already loaded');
         // Luckysheet UMD is sufficient for our current needs; avoid plugin.js because it bundles an AMD loader
         // and can cause duplicate module/anonymous define errors in the browser console.
@@ -840,7 +936,8 @@ export function SpreadsheetViewer({
         // Script tag exists, wait for it to load (but jQuery must be ready first)
         console.log('Mousewheel script tag found, waiting for it to load...');
         const checkMousewheel = setInterval(() => {
-          if ((window as any).jQuery && (window as any).jQuery.fn && (window as any).jQuery.fn.mousewheel) {
+          syncDollar();
+          if (isMousewheelReady()) {
             clearInterval(checkMousewheel);
             loadMainScript();
           }
@@ -848,23 +945,30 @@ export function SpreadsheetViewer({
         
         setTimeout(() => {
           clearInterval(checkMousewheel);
-          // If still not loaded, try loading it again
-          if (!((window as any).jQuery && (window as any).jQuery.fn && (window as any).jQuery.fn.mousewheel)) {
-            console.warn('Mousewheel not loaded, attempting to reload...');
-            loadMousewheel();
+          // If still not loaded, fail-soft with a clear error (do not initialize Luckysheet).
+          if (!isMousewheelReady()) {
+            // Try deterministic shim before failing.
+            if (installMousewheelShimIfNeeded()) {
+              loadMainScript();
+              return;
+            }
+            globalScriptsState.loading = false;
+            console.error('Mousewheel plugin did not attach to jQuery (timeout)');
+            setError('Failed to load spreadsheet dependencies (mousewheel)');
           }
-        }, 1000);
+        }, 8000);
       } else {
         loadMousewheel();
       }
 
       function loadMousewheel() {
         // Double-check jQuery is available before appending mousewheel script
-        if (!(window as any).jQuery || typeof (window as any).jQuery !== 'function') {
+        if (!w.jQuery || typeof w.jQuery !== 'function') {
           console.error('jQuery not available when trying to append mousewheel script');
           setError('jQuery not available');
           return;
         }
+        syncDollar();
         
         // Only add script if it doesn't already exist
         if (!isScriptLoaded(mousewheelUrl)) {
@@ -874,19 +978,37 @@ export function SpreadsheetViewer({
           mousewheelScript.onload = () => {
             globalScriptsState.scripts.add(mousewheelUrl);
             console.log('Mousewheel script loaded successfully');
+            syncDollar();
+            if (!isMousewheelReady()) {
+              // Common case with AMD loader: plugin registered as AMD module instead of attaching.
+              if (!installMousewheelShimIfNeeded()) {
+                globalScriptsState.loading = false;
+                console.error('Mousewheel script loaded but plugin is still not attached to jQuery');
+                setError('Failed to load spreadsheet dependencies (mousewheel)');
+                return;
+              }
+            }
             loadMainScript();
           };
           mousewheelScript.onerror = () => {
             globalScriptsState.loading = false;
-            console.warn('Failed to load jQuery mousewheel plugin, continuing anyway');
-            // Continue even if mousewheel fails - some features may not work
-            loadMainScript();
+            console.error('Failed to load jQuery mousewheel plugin');
+            if (installMousewheelShimIfNeeded()) {
+              // If we can shim, proceed with Luckysheet anyway.
+              globalScriptsState.loading = true;
+              loadMainScript();
+              return;
+            }
+            setError('Failed to load spreadsheet dependencies (mousewheel)');
           };
-          document.body.appendChild(mousewheelScript);
+          withAmdDisabled(() => {
+            document.body.appendChild(mousewheelScript);
+          });
           loadedScripts.add(mousewheelUrl);
         } else {
           // Script already exists, proceed
-          loadMainScript();
+          // Don't proceed until the plugin is actually attached.
+          if (isMousewheelReady() || installMousewheelShimIfNeeded()) loadMainScript();
         }
       }
     }
@@ -900,6 +1022,9 @@ export function SpreadsheetViewer({
 
   useEffect(() => {
     try {
+      const effectiveContent =
+        !isDirty && typeof diskContent === "string" ? String(diskContent) : String(content || "");
+
       // CRITICAL: Reset initialization flag when content or filename changes (tab switch)
       // This ensures Luckysheet is reinitialized with new content when switching tabs
       const filenameChanged = currentFilenameRef.current !== null && currentFilenameRef.current !== filename;
@@ -916,14 +1041,37 @@ export function SpreadsheetViewer({
           containerRef.current.innerHTML = '';
         }
       }
+
+      // External reload: if disk content changed and we are not dirty, force a reinit in-place.
+      // Luckysheet doesn't reliably "apply new data" in-place, so destroy+recreate is the safest.
+      const diskChanged =
+        !isDirty &&
+        typeof diskContent === "string" &&
+        lastAppliedDiskContentRef.current !== null &&
+        lastAppliedDiskContentRef.current !== effectiveContent &&
+        currentFilenameRef.current === filename &&
+        luckysheetInitialized.current &&
+        (window as any).luckysheet;
+      if (diskChanged) {
+        console.log(`Disk content changed for "${filename}" - reloading spreadsheet in-place`);
+        try {
+          (window as any).luckysheet.destroy();
+        } catch (err) {
+          console.warn("Error destroying Luckysheet on disk content change:", err);
+        }
+        luckysheetInitialized.current = false;
+        if (containerRef.current) {
+          containerRef.current.innerHTML = "";
+        }
+      }
       
-      if (!content || content.trim() === '') {
+      if (!effectiveContent || effectiveContent.trim() === '') {
         setError('Spreadsheet file is empty');
         setLoading(false);
         return;
       }
       
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(effectiveContent);
       
       // Validate the parsed structure
       if (!parsed.version || !parsed.sheets || !Array.isArray(parsed.sheets)) {
@@ -934,17 +1082,23 @@ export function SpreadsheetViewer({
       
       // Update current filename reference
       currentFilenameRef.current = filename;
+      if (!isDirty && typeof diskContent === "string") {
+        lastAppliedDiskContentRef.current = effectiveContent;
+      } else if (lastAppliedDiskContentRef.current === null && typeof diskContent === "string") {
+        // Initialize baseline so future external changes are detected.
+        lastAppliedDiskContentRef.current = String(diskContent);
+      }
       
       setSpreadsheet(parsed);
       setLoading(false);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error('Failed to parse spreadsheet file:', errorMsg);
-      console.error('Content preview (first 500 chars):', content?.substring(0, 500));
+      console.error('Content preview (first 500 chars):', String((!isDirty && typeof diskContent === "string" ? diskContent : content) || "").substring(0, 500));
       setError(`Failed to parse spreadsheet file: ${errorMsg}`);
       setLoading(false);
     }
-  }, [content, filename]); // Added filename to dependencies to reset on tab switch
+  }, [content, diskContent, isDirty, filename]); // Added filename to dependencies to reset on tab switch
 
   // Save spreadsheet function with debouncing (like notebooks) - MUST be defined before initializeLuckysheet
   const saveSpreadsheet = useCallback(() => {
@@ -1469,7 +1623,8 @@ export function SpreadsheetViewer({
 
     // Wait for luckysheet to be available
     const checkLuckysheet = setInterval(() => {
-      if ((window as any).luckysheet) {
+      const w: any = window as any;
+      if (w.luckysheet && w.jQuery && w.jQuery.fn && w.jQuery.fn.mousewheel) {
         clearInterval(checkLuckysheet);
         initializeLuckysheet();
       }

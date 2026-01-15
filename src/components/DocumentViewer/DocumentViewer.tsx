@@ -13,7 +13,7 @@ import { extensionRegistry } from "../../services/extensionRegistry";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import { testIds } from "../../testing/testIds";
 import { getFileTypeIcon } from "../../utils/fileTypeIcon";
-import { ChatIcon, DashboardIcon, ExtensionsIcon } from "../Icons";
+import { ChatIcon, DashboardIcon, ExtensionsIcon, MoveToOtherGroupIcon, SplitDownIcon, SplitRightIcon } from "../Icons";
 
 class ViewerErrorBoundary extends React.Component<
   { filename?: string; onCloseCurrent?: () => void; children: React.ReactNode },
@@ -112,9 +112,15 @@ interface DocumentViewerProps {
   documents: OpenDocument[];
   onClose: (id: string) => void;
   onJumpToContexts?: () => void;
+  /**
+   * Window UI mode:
+   * - workbench: full editor experience (tabs + split controls)
+   * - detached: editor-only window (NO tab strip/header chrome; renders the active doc only)
+   */
+  uiMode?: "workbench" | "detached";
 }
 
-export function DocumentViewer({ documents, onClose, onJumpToContexts }: DocumentViewerProps) {
+export function DocumentViewer({ documents, onClose, onJumpToContexts, uiMode = "workbench" }: DocumentViewerProps) {
   type GroupId = "a" | "b";
   type PersistedTabIdentity =
     | { type: "chat"; chatKey: string }
@@ -154,6 +160,19 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
   const [splitHydrateNonce, setSplitHydrateNonce] = useState(0);
   const suppressActiveTabPersistRef = useRef(false);
   const splitHydrateAttemptRef = useRef<{ startedAt: number; tries: number }>({ startedAt: 0, tries: 0 });
+
+  // Detached windows should never show split/tabs chrome (single editor surface only).
+  useEffect(() => {
+    if (uiMode !== "detached") return;
+    try {
+      setSplitMode("single");
+      setFocusedGroup("a");
+      setGroupBIds([]);
+      setActiveBId(null);
+    } catch {
+      // ignore
+    }
+  }, [uiMode]);
 
   const allIds = useRef<Set<string>>(new Set());
   allIds.current = new Set(documents.map((d) => d.id));
@@ -219,6 +238,43 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     [hasUnsavedChanges, onClose],
   );
 
+  const openInNewWindow = useCallback(
+    async (docId: string, mode: "move" | "copy") => {
+      const doc = documents.find((d) => d.id === docId);
+      if (!doc) return;
+
+      // Safety: we don't support carrying unsaved state across windows yet.
+      if (hasUnsavedChanges(docId)) {
+        notifyError("Save this tab before moving/copying it into a new window.", "Move into New Window");
+        return;
+      }
+
+      if (!window.electronAPI?.window?.openTabInNewWindow) {
+        notifyError("New window API not available.", "Move into New Window");
+        return;
+      }
+
+      const payload: any =
+        doc.type === "chat"
+          ? { type: "chat", chatKey: (doc as any).chatKey || "main", filename: doc.filename || "Chat" }
+          : doc.type === "dashboard"
+            ? { type: "dashboard", dashboardId: String((doc as any).dashboardId || ""), filename: doc.filename || "Dashboard" }
+            : doc.type === "config"
+              ? { type: "config", configKey: String((doc as any).configKey || ""), filename: doc.filename || "Settings" }
+              : doc.type === "extension"
+                ? { type: "extension", extensionId: String((doc as any).extensionId || ""), filename: doc.filename || "Extension" }
+                : { type: "document", workbookId: String(doc.workbookId || ""), path: String(doc.path || ""), filename: doc.filename || "Document" };
+
+      await window.electronAPI.window.openTabInNewWindow(payload);
+      notifySuccess(mode === "move" ? "Moved tab into a new window." : "Copied tab into a new window.", "New Window");
+
+      if (mode === "move") {
+        onClose(docId);
+      }
+    },
+    [documents, hasUnsavedChanges, onClose],
+  );
+
   const closeManyGuarded = useCallback(
     (docIds: string[]) => {
       const ids = Array.from(new Set(docIds)).filter(Boolean);
@@ -231,6 +287,15 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
       for (const id of ids) onClose(id);
     },
     [hasUnsavedChanges, onClose],
+  );
+
+  const idsForGroup = useCallback(
+    (group: GroupId): string[] => {
+      const ids = group === "a" ? groupAIds : groupBIds;
+      // Only return IDs that still exist to avoid "ghost" tabs.
+      return ids.filter((id) => allIds.current.has(id));
+    },
+    [groupAIds, groupBIds],
   );
 
   const handleContentChangeForDoc = (docId: string, newContent: string) => {
@@ -463,16 +528,47 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     return unsubscribe;
   }, []);
 
-  // Reconcile groups when documents change; if group B empties, collapse back to single.
+  // Reconcile groups when documents change (open/close).
+  // VS Code parity:
+  // - Splitting can create an empty group.
+  // - Closing the last editor in a group closes that group (default).
   useEffect(() => {
     const inSet = (id: string) => allIds.current.has(id);
-    setGroupAIds((prev) => prev.filter(inSet));
-    setGroupBIds((prev) => prev.filter(inSet));
-    setActiveAId((prev) => (prev && inSet(prev) ? prev : null));
-    setActiveBId((prev) => (prev && inSet(prev) ? prev : null));
+
+    const nextA = groupAIds.filter(inSet);
+    const nextB = groupBIds.filter(inSet);
+
+    // Filter invalid IDs and keep actives sane.
+    setGroupAIds(nextA);
+    setGroupBIds(nextB);
+    setActiveAId((prev) => (prev && nextA.includes(prev) ? prev : nextA[nextA.length - 1] || null));
+    setActiveBId((prev) => (prev && nextB.includes(prev) ? prev : nextB[nextB.length - 1] || null));
+
+    // If we're split and a group became empty due to document closure, collapse the empty group.
+    // Note: this effect only runs on document open/close (documents.length change), so it won't
+    // immediately collapse a newly created empty group after a split action.
     if (splitMode !== "single") {
-      const bHasAny = groupBIds.some(inSet);
-      if (!bHasAny) setSplitMode("single");
+      const aHasAny = nextA.length > 0;
+      const bHasAny = nextB.length > 0;
+      if (!aHasAny && bHasAny) {
+        // Promote remaining (B) to single.
+        setSplitMode("single");
+        setFocusedGroup("a");
+        setGroupAIds(nextB);
+        setGroupBIds([]);
+        setActiveAId((prev) => (prev && nextB.includes(prev) ? prev : nextB[nextB.length - 1] || null));
+        setActiveBId(null);
+      } else if (aHasAny && !bHasAny) {
+        setSplitMode("single");
+        setFocusedGroup("a");
+        setGroupBIds([]);
+        setActiveBId(null);
+      } else if (!aHasAny && !bHasAny) {
+        setSplitMode("single");
+        setFocusedGroup("a");
+        setGroupBIds([]);
+        setActiveBId(null);
+      }
     }
   }, [documents.length]);
 
@@ -503,14 +599,14 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
       return;
     }
     if (focusedGroup === "b" && splitMode !== "single") {
-      setGroupBIds((prev) => [...prev, id]);
+      setGroupBIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
       setActiveBId(id);
     } else {
-      setGroupAIds((prev) => [...prev, id]);
+      setGroupAIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
       setActiveAId(id);
       setFocusedGroup("a");
     }
-  }, [lastOpenedDocId, focusedGroup, splitMode, groupAIds, groupBIds]);
+  }, [lastOpenedDocId]);
 
   const ensureGroupsInitialized = useCallback(() => {
     if (!groupAIds.length && documents.length) {
@@ -619,6 +715,8 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
     const ext = getFileExtension(doc.filename);
     const editable = isEditableFileType(ext);
     const currentContent = (unsavedChanges.get(doc.id) ?? doc.content ?? "") as string;
+    const diskContent = (doc.content ?? "") as string;
+    const isDirty = hasUnsavedChanges(doc.id);
 
     const fileHandlers = extensionRegistry.getFileHandlers(ext);
     if (fileHandlers.length > 0) {
@@ -634,6 +732,8 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
                 filename: doc.filename,
                 workbookId: doc.workbookId,
                 path: doc.path,
+                diskContent,
+                isDirty,
                 onContentChange: (c: string) => handleContentChangeForDoc(doc.id, c),
               }}
             />
@@ -645,6 +745,8 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
             filename={doc.filename}
             workbookId={doc.workbookId}
             path={doc.path}
+            diskContent={diskContent}
+            isDirty={isDirty}
             onContentChange={(c: string) => handleContentChangeForDoc(doc.id, c)}
           />
         );
@@ -747,7 +849,7 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
         <div className="flex items-center gap-1 px-2">
           <button
             type="button"
-            className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-100"
+            className="rounded border border-gray-200 bg-white p-1 text-gray-700 hover:bg-gray-100"
             title="Split Right"
             data-testid={testIds.documentViewer.split.splitRight}
             onClick={() => {
@@ -755,11 +857,12 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
               setFocusedGroup(group);
             }}
           >
-            Split ▸
+            <SplitRightIcon className="h-4 w-4" />
+            <span className="sr-only">Split Right</span>
           </button>
           <button
             type="button"
-            className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-100"
+            className="rounded border border-gray-200 bg-white p-1 text-gray-700 hover:bg-gray-100"
             title="Split Down"
             data-testid={testIds.documentViewer.split.splitDown}
             onClick={() => {
@@ -767,12 +870,13 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
               setFocusedGroup(group);
             }}
           >
-            Split ▾
+            <SplitDownIcon className="h-4 w-4" />
+            <span className="sr-only">Split Down</span>
           </button>
           {splitMode !== "single" && (
             <button
               type="button"
-              className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-100"
+              className="rounded border border-gray-200 bg-white p-1 text-gray-700 hover:bg-gray-100"
               title="Move active tab to other group"
               data-testid={testIds.documentViewer.split.moveToOtherGroup}
               onClick={() => {
@@ -780,7 +884,8 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
                 moveActiveToOtherGroup();
               }}
             >
-              Move ⇄
+              <MoveToOtherGroupIcon className="h-4 w-4" />
+              <span className="sr-only">Move to other group</span>
             </button>
           )}
         </div>
@@ -878,6 +983,33 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
           >
             <button
               className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-gray-100"
+              data-testid={testIds.documentViewer.tabContextMoveToNewWindow}
+              onClick={() => {
+                const id = tabContextMenu.docId;
+                setTabContextMenu(null);
+                openInNewWindow(id, "move").catch((e) => {
+                  notifyError(e instanceof Error ? e.message : "Failed to open new window", "New Window");
+                });
+              }}
+            >
+              Move into New Window
+            </button>
+            <button
+              className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-gray-100"
+              data-testid={testIds.documentViewer.tabContextCopyToNewWindow}
+              onClick={() => {
+                const id = tabContextMenu.docId;
+                setTabContextMenu(null);
+                openInNewWindow(id, "copy").catch((e) => {
+                  notifyError(e instanceof Error ? e.message : "Failed to open new window", "New Window");
+                });
+              }}
+            >
+              Copy into New Window
+            </button>
+            <div className="my-1 border-t border-gray-100" />
+            <button
+              className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-gray-100"
               data-testid={testIds.documentViewer.tabContextClose}
               onClick={() => {
                 const id = tabContextMenu.docId;
@@ -892,8 +1024,9 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
               data-testid={testIds.documentViewer.tabContextCloseOthers}
               onClick={() => {
                 const id = tabContextMenu.docId;
+                const group = tabContextMenu.group;
                 setTabContextMenu(null);
-                closeManyGuarded(documents.map((d) => d.id).filter((x) => x !== id));
+                closeManyGuarded(idsForGroup(group).filter((x) => x !== id));
               }}
             >
               Close Others
@@ -902,8 +1035,9 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
               className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-gray-100"
               data-testid={testIds.documentViewer.tabContextCloseSaved}
               onClick={() => {
+                const group = tabContextMenu.group;
                 setTabContextMenu(null);
-                closeManyGuarded(documents.map((d) => d.id).filter((id) => !hasUnsavedChanges(id)));
+                closeManyGuarded(idsForGroup(group).filter((id) => !hasUnsavedChanges(id)));
               }}
             >
               Close Saved
@@ -912,8 +1046,9 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
               className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-gray-100"
               data-testid={testIds.documentViewer.tabContextCloseAll}
               onClick={() => {
+                const group = tabContextMenu.group;
                 setTabContextMenu(null);
-                closeManyGuarded(documents.map((d) => d.id));
+                closeManyGuarded(idsForGroup(group));
               }}
             >
               Close All
@@ -922,69 +1057,80 @@ export function DocumentViewer({ documents, onClose, onJumpToContexts }: Documen
         </>
       )}
 
-      {/* Wrapper keeps "active" metadata for existing automation; panes render inside. */}
-      <div
-        className="flex min-h-0 flex-1 overflow-hidden"
-        data-testid={testIds.documentViewer.content}
-        data-active-doc-id={focusedActiveId || ""}
-        data-active-filename={focusedActiveDoc?.filename || ""}
-        data-active-ext={
-          focusedActiveDoc?.type === "chat"
-            ? "chat"
-            : focusedActiveDoc?.type === "dashboard"
-              ? "dashboard"
-              : focusedActiveDoc?.filename
-                ? getFileExtension(focusedActiveDoc.filename)
-                : ""
-        }
-        data-active-content-snippet={
-          (() => {
-            try {
-              const d = focusedActiveDoc as any;
-              const id = String(focusedActiveId || "");
-              if (!d || !id) return "";
-              const t = String(d?.type || "document");
-              if (t === "chat" || t === "dashboard") return "";
-              const raw = String(unsavedChanges.get(id) ?? d?.content ?? "");
-              return raw.slice(0, 240);
-            } catch {
-              return "";
-            }
-          })()
-        }
-      >
-        {splitMode === "single" ? (
-          <div className="min-h-0 flex-1 overflow-hidden">{renderGroup("a")}</div>
-        ) : splitMode === "right" ? (
-          <div className="flex min-h-0 flex-1 overflow-hidden" data-testid={testIds.documentViewer.split.container}>
-            <div className="min-h-0 overflow-hidden" style={{ flex: `0 0 ${Math.max(240, splitSizePx)}px` }}>
-              {renderGroup("a")}
+      {uiMode === "detached" ? (
+        <div className="flex min-h-0 flex-1 overflow-hidden" data-testid={testIds.documentViewer.content}>
+          <ViewerErrorBoundary
+            filename={focusedActiveDoc?.filename}
+            onCloseCurrent={focusedActiveId ? () => closeDocGuarded(focusedActiveId) : undefined}
+          >
+            {renderDocumentById(activeAId)}
+          </ViewerErrorBoundary>
+        </div>
+      ) : (
+        /* Wrapper keeps "active" metadata for existing automation; panes render inside. */
+        <div
+          className="flex min-h-0 flex-1 overflow-hidden"
+          data-testid={testIds.documentViewer.content}
+          data-active-doc-id={focusedActiveId || ""}
+          data-active-filename={focusedActiveDoc?.filename || ""}
+          data-active-ext={
+            focusedActiveDoc?.type === "chat"
+              ? "chat"
+              : focusedActiveDoc?.type === "dashboard"
+                ? "dashboard"
+                : focusedActiveDoc?.filename
+                  ? getFileExtension(focusedActiveDoc.filename)
+                  : ""
+          }
+          data-active-content-snippet={
+            (() => {
+              try {
+                const d = focusedActiveDoc as any;
+                const id = String(focusedActiveId || "");
+                if (!d || !id) return "";
+                const t = String(d?.type || "document");
+                if (t === "chat" || t === "dashboard") return "";
+                const raw = String(unsavedChanges.get(id) ?? d?.content ?? "");
+                return raw.slice(0, 240);
+              } catch {
+                return "";
+              }
+            })()
+          }
+        >
+          {splitMode === "single" ? (
+            <div className="min-h-0 flex-1 overflow-hidden">{renderGroup("a")}</div>
+          ) : splitMode === "right" ? (
+            <div className="flex min-h-0 flex-1 overflow-hidden" data-testid={testIds.documentViewer.split.container}>
+              <div className="min-h-0 overflow-hidden" style={{ flex: `0 0 ${Math.max(240, splitSizePx)}px` }}>
+                {renderGroup("a")}
+              </div>
+              <ResizablePane
+                direction="horizontal"
+                initialSize={Math.max(240, splitSizePx)}
+                minSize={240}
+                maxSize={1200}
+                onResize={(px) => setSplitSizePx(px)}
+              />
+              <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{renderGroup("b")}</div>
             </div>
-            <ResizablePane
-              direction="horizontal"
-              initialSize={Math.max(240, splitSizePx)}
-              minSize={240}
-              maxSize={1200}
-              onResize={(px) => setSplitSizePx(px)}
-            />
-            <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{renderGroup("b")}</div>
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-testid={testIds.documentViewer.split.container}>
-            <div className="min-h-0 overflow-hidden" style={{ flex: `0 0 ${Math.max(200, splitSizePx)}px` }}>
-              {renderGroup("a")}
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-testid={testIds.documentViewer.split.container}>
+              <div className="min-h-0 overflow-hidden" style={{ flex: `0 0 ${Math.max(200, splitSizePx)}px` }}>
+                {renderGroup("a")}
+              </div>
+              <ResizablePane
+                direction="vertical"
+                initialSize={Math.max(200, splitSizePx)}
+                minSize={200}
+                maxSize={900}
+                onResize={(px) => setSplitSizePx(px)}
+              />
+              <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{renderGroup("b")}</div>
             </div>
-            <ResizablePane
-              direction="vertical"
-              initialSize={Math.max(200, splitSizePx)}
-              minSize={200}
-              maxSize={900}
-              onResize={(px) => setSplitSizePx(px)}
-            />
-            <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{renderGroup("b")}</div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

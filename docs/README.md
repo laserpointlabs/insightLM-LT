@@ -15,6 +15,7 @@ This folder contains all project documentation.
 - **RAG_IMPROVEMENT_PLAN.md** - RAG improvements and future plans
 - **RAG_CAPABILITY_REPORT.md** - RAG capabilities and features
 - **RAG_CONTENT_SEARCH_TEST_RESULTS.md** - Test results for content search
+- **RAG/KNOWLEDGE_PACK_VALIDATION_BINDER.md** - FEA-style “golden problems” validation approach for domain knowledge packs
 
 ## Feature Documentation
 

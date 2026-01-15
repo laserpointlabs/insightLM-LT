@@ -1,6 +1,8 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import mermaid from "mermaid";
 import { useDocumentStore } from "../../store/documentStore";
 import { notifyError } from "../../utils/notify";
@@ -289,7 +291,8 @@ export function ChatMessage({ role, content, meta }: ChatMessageProps) {
       )}
       <div className="prose prose-sm max-w-none [&_small]:not-prose">
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeKatex]}
           components={{
             a: ({ href, children }) => {
               // Handle our special marker format

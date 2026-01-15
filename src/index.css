@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body {
+  height: 100%;
+  overflow: hidden; /* Workbench should not scroll at window-level (VS Code-style) */
+}
+
 body {
   margin: 0;
   font-family:
@@ -12,7 +18,7 @@ body {
 }
 
 #root {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }

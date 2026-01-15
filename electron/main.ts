@@ -25,6 +25,8 @@ import { ProjectService, parseDataDirArg, projectPartitionIdFromDataDir } from "
 import { ProjectStateService } from "./services/projectStateService";
 
 let mainWindow: BrowserWindow | null = null;
+let activeSessionPartition: string | undefined;
+let lastOpenedWindowInfo: { kind: string; windowId: number; url: string } | null = null;
 let mcpService!: MCPService;
 let demoService: DemoService | null = null;
 let projectService: ProjectService | null = null;
@@ -38,40 +40,44 @@ function setAppMenu() {
 
   const demosSubmenu: any[] = [
     {
-      label: "AC-1000",
+      label: "Demo 1: Vendor Program Workflow",
       click: async () => {
         try {
           await ds.loadDemo("ac1000");
         } catch (e) {
           dialog.showErrorBox(
-            "Failed to load AC-1000 demo",
+            "Failed to load Demo 1: Vendor Program Workflow",
             e instanceof Error ? e.message : "Unknown error",
           );
         }
       },
     },
     {
-      label: "Trade Study",
+      label: "Demo 2: Trade Study",
       click: async () => {
         try {
           await ds.loadDemo("trade-study");
         } catch (e) {
           dialog.showErrorBox(
-            "Failed to load Trade Study demo",
+            "Failed to load Demo 2: Trade Study",
             e instanceof Error ? e.message : "Unknown error",
           );
         }
       },
     },
+    {
+      label: "Demo 3: Conceptualization",
+      enabled: false,
+    },
     { type: "separator" },
     {
-      label: "Reset Dev Data…",
+      label: "Reset to Demo Baseline…",
       click: async () => {
         try {
           await ds.confirmAndResetDevData();
         } catch (e) {
           dialog.showErrorBox(
-            "Failed to reset dev data",
+            "Failed to reset to demo baseline",
             e instanceof Error ? e.message : "Unknown error",
           );
         }
@@ -270,6 +276,7 @@ async function createWindow() {
   } catch {
     partition = undefined;
   }
+  activeSessionPartition = partition;
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -720,6 +727,69 @@ app.whenReady().then(async () => {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error"
       };
+    }
+  });
+
+  // Debug: simple multi-window assertions for deterministic automation.
+  ipcMain.handle("debug:getWindowCount", () => {
+    try {
+      return BrowserWindow.getAllWindows().length;
+    } catch {
+      return 0;
+    }
+  });
+
+  ipcMain.handle("debug:getLastOpenedWindowInfo", () => {
+    return lastOpenedWindowInfo;
+  });
+
+  // Workbench parity: open a tab in a new (floating) window.
+  ipcMain.handle("window:openTabInNewWindow", async (_evt, payload: any) => {
+    try {
+      const preloadPath = path.join(__dirname, "preload.js");
+      const win = new BrowserWindow({
+        width: 1100,
+        height: 800,
+        autoHideMenuBar: true,
+        webPreferences: {
+          preload: preloadPath,
+          contextIsolation: true,
+          nodeIntegration: false,
+          ...(activeSessionPartition ? { partition: activeSessionPartition } : {}),
+        },
+        titleBarStyle: "default",
+        show: true,
+      });
+      try {
+        // Hide menu for this window only (do NOT change global app menu).
+        win.setMenuBarVisibility(false);
+      } catch {
+        // ignore
+      }
+
+      // Build URL from the current window URL so dev/prod both work.
+      const base = mainWindow?.webContents?.getURL?.() || "";
+      let target = base;
+      try {
+        const u = new URL(base);
+        u.searchParams.set("windowMode", "editor");
+        u.searchParams.set("openDoc", encodeURIComponent(JSON.stringify(payload || {})));
+        target = u.toString();
+      } catch {
+        // Fallback: append query (best-effort)
+        const sep = base.includes("?") ? "&" : "?";
+        target = `${base}${sep}windowMode=editor&openDoc=${encodeURIComponent(JSON.stringify(payload || {}))}`;
+      }
+
+      await win.loadURL(target);
+      try {
+        lastOpenedWindowInfo = { kind: "editor", windowId: win.id, url: target };
+      } catch {
+        lastOpenedWindowInfo = null;
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
   });
 

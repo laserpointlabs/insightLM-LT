@@ -109,6 +109,7 @@ export const testIds = {
       toggle: "chat-thinking-toggle",
       summary: "chat-thinking-summary",
       details: "chat-thinking-details",
+      live: "chat-thinking-live",
     },
     sources: {
       container: "chat-sources",
@@ -153,6 +154,9 @@ export const testIds = {
       container: "chat-streaming",
       content: "chat-streaming-content",
     },
+  },
+  markdown: {
+    preview: "markdown-preview",
   },
   toast: {
     center: "toast-center",
@@ -230,6 +234,8 @@ export const testIds = {
     tabContextCloseOthers: "document-viewer-tab-context-close-others",
     tabContextCloseSaved: "document-viewer-tab-context-close-saved",
     tabContextCloseAll: "document-viewer-tab-context-close-all",
+    tabContextMoveToNewWindow: "document-viewer-tab-context-move-to-new-window",
+    tabContextCopyToNewWindow: "document-viewer-tab-context-copy-to-new-window",
     split: {
       container: "document-viewer-split-container",
       groupA: "document-viewer-group-a",
@@ -336,6 +342,8 @@ export const testIds = {
   spreadsheet: {
     viewer: "spreadsheet-viewer",
     container: "spreadsheet-container",
+    loading: "spreadsheet-loading",
+    error: "spreadsheet-error",
     retryInit: "spreadsheet-retry-init",
   },
 } as const;

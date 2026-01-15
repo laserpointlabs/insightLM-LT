@@ -71,6 +71,11 @@ class ExtensionRegistry {
       throw new Error('Extension manifest must have id and name');
     }
 
+    // Dev/StrictMode can call registration twice; avoid duplicating contributions (especially fileHandlers).
+    if (this.extensions.has(manifest.id)) {
+      return;
+    }
+
     // Register the extension
     this.extensions.set(manifest.id, manifest);
 
